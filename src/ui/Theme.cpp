@@ -48,6 +48,9 @@ Theme::Theme(QObject *parent) : QObject(parent)
     loadSkins();
     QSettings s;
     QString skin = s.value(QStringLiteral("theme/skin")).toString();
+    // "Studio" was rebuilt as "Vintage".
+    if (skin == QLatin1String("studio"))
+        skin = QStringLiteral("vintage");
     if (!m_skins.contains(skin))
         skin = QStringLiteral("klassik");
     // Before skins existed, "theme/id" was the classic colour scheme.

@@ -1,0 +1,38 @@
+{
+  "id": "soft",
+  "order": 2,
+  "name": "Soft",
+  "tagline": "Neumorphism: Bedienelemente wachsen weich aus der Fläche oder sinken hinein. Ruhig, rund, haptisch.",
+  "qml": "qrc:/qml/skins/Soft.qml",
+  "fonts": { "ui": "Nunito", "display": "Nunito" },
+  "radius": 16,
+  "ambient": 0.0,
+  "dynamicAccent": false,
+  "swatch": ["#E4E9F0", "#C9D1DC", "#5B7CFA"],
+  "style": { "titleSize": 38, "titleUpper": false, "titleSpacing": -0.5, "titleWeight": 800, "controls": "neu", "neuDepth": 6 },
+  "palettes": [
+    { "id": "wolke", "name": "Wolke", "dark": false, "light": "#FFFFFF", "shadow": "#B5BFCC",
+      "colors": { "bg": "#E4E9F0", "panel": "#E4E9F0", "surface": "#E4E9F0", "surfaceHover": "#DCE2EA",
+                  "border": "#CBD3DE", "text": "#343C4B", "textDim": "#687183", "textFaint": "#97A0AF",
+                  "accent": "#5B7CFA", "accent2": "#8EA4FF", "onAccent": "#FFFFFF" } },
+    { "id": "sand", "name": "Sand", "dark": false, "light": "#FFFDF8", "shadow": "#C8BDAD",
+      "colors": { "bg": "#ECE6DD", "panel": "#ECE6DD", "surface": "#ECE6DD", "surfaceHover": "#E4DDD2",
+                  "border": "#D6CDBF", "text": "#433A31", "textDim": "#786C60", "textFaint": "#A49789",
+                  "accent": "#2F9C8C", "accent2": "#7CC9BC", "onAccent": "#FFFFFF" } },
+    { "id": "mint", "name": "Mint", "dark": false, "light": "#F8FFFC", "shadow": "#AFC8BF",
+      "colors": { "bg": "#DDEBE6", "panel": "#DDEBE6", "surface": "#DDEBE6", "surfaceHover": "#D3E3DD",
+                  "border": "#C2D6CF", "text": "#2C443C", "textDim": "#5B766C", "textFaint": "#8AA197",
+                  "accent": "#E0685A", "accent2": "#F2A08F", "onAccent": "#FFFFFF" } },
+    { "id": "nacht", "name": "Nacht", "dark": true, "light": "#3A3F49", "shadow": "#16191D",
+      "colors": { "bg": "#2A2E35", "panel": "#2A2E35", "surface": "#2A2E35", "surfaceHover": "#31363E",
+                  "border": "#363B44", "text": "#E4E8EF", "textDim": "#A2AAB7", "textFaint": "#6E7684",
+                  "accent": "#FF9F5A", "accent2": "#FFCB8F", "onAccent": "#2A1606" } }
+  ],
+  "settings": [
+    { "key": "palette", "type": "palette", "label": "Farbe", "default": "wolke" },
+    { "key": "depth", "type": "range", "label": "Tiefe der Schatten", "min": 2, "max": 12, "step": 1, "default": 6, "unit": "px" },
+    { "key": "corner", "type": "range", "label": "Rundung der Karten", "min": 10, "max": 40, "step": 1, "default": 28, "unit": "px" },
+    { "key": "dynamicAccent", "type": "bool", "label": "Akzentfarbe aus dem Cover übernehmen", "default": false },
+    { "key": "bars", "type": "bool", "label": "Weiche Spektrum-Balken in der Großansicht", "default": true }
+  ]
+}

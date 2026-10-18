@@ -17,11 +17,14 @@ AbstractButton {
     focusPolicy: Qt.TabFocus
     Accessible.name: tip
 
-    background: Rectangle {
+    background: Surface {
         radius: height / 2
-        color: b.pressed ? Theme.alpha(Theme.text, 0.14) : b.hovered ? Theme.alpha(Theme.text, 0.07) : "transparent"
-        border.width: b.visualFocus ? 2 : 0
-        border.color: Theme.accent
+        quiet: true
+        hovered: b.hovered
+        pressed: b.pressed
+        active: b.active && (Theme.style.controls === "neu")
+        focused: b.visualFocus
+        flatColor: b.pressed ? Theme.alpha(Theme.text, 0.14) : b.hovered ? Theme.alpha(Theme.text, 0.07) : "transparent"
     }
     contentItem: Item {
         Icon {

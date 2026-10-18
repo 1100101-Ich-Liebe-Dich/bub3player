@@ -69,12 +69,17 @@ Rectangle {
             width: list.width
             height: 52
             opacity: model.isPast ? 0.5 : 1
-            Rectangle {
+            Surface {
                 anchors.fill: parent
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
+                anchors.topMargin: Theme.style.controls === "neu" ? 4 : 0
+                anchors.bottomMargin: Theme.style.controls === "neu" ? 4 : 0
                 radius: Theme.radius - 2
-                color: model.isCurrent ? Theme.alpha(Theme.accent, 0.13) : mouse.containsMouse ? Theme.alpha(Theme.text, 0.05) : "transparent"
+                quiet: true
+                hovered: mouse.containsMouse && Theme.style.controls !== "neu"
+                active: model.isCurrent
+                flatColor: model.isCurrent ? Theme.alpha(Theme.accent, 0.13) : mouse.containsMouse ? Theme.alpha(Theme.text, 0.05) : "transparent"
             }
             CoverArt {
                 id: art

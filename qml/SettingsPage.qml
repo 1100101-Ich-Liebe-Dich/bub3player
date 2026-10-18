@@ -44,11 +44,14 @@ Item {
                         hoverEnabled: true
                         focusPolicy: Qt.TabFocus
                         onClicked: { window.settingsTab = index; flick.contentY = 0 }
-                        background: Rectangle {
+                        background: Surface {
                             radius: Math.min(20, Theme.radius + 10)
-                            color: tab.on ? Theme.accent : (tab.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
-                            border.width: tab.visualFocus ? 2 : 0
-                            border.color: Theme.text
+                            hovered: tab.hovered
+                            pressed: tab.pressed
+                            active: tab.on
+                            primary: tab.on && Theme.style.controls !== "neu"
+                            focused: tab.visualFocus
+                            flatColor: tab.on ? Theme.accent : (tab.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
                         }
                         contentItem: Text {
                             id: tabText
@@ -58,7 +61,7 @@ Item {
                             font.family: Theme.uiFont
                             font.pixelSize: 14
                             font.weight: Font.Bold
-                            color: tab.on ? Theme.onAccent : Theme.text
+                            color: tab.on ? (Theme.style.controls === "neu" ? Theme.accent : Theme.onAccent) : Theme.text
                         }
                     }
                 }

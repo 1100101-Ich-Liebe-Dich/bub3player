@@ -47,9 +47,19 @@ Rectangle {
             Layout.bottomMargin: 14
             height: 38
             radius: 19
-            color: search.activeFocus ? Theme.surface : Theme.alpha(Theme.text, 0.06)
-            border.width: search.activeFocus ? 1 : 0
-            border.color: Theme.alpha(Theme.accent, 0.7)
+            readonly property string kind: Theme.style.controls || "flat"
+            color: kind === "neu" ? "transparent"
+                 : kind === "glass" ? Qt.rgba(1, 1, 1, search.activeFocus ? 0.18 : 0.1)
+                 : (search.activeFocus ? Theme.surface : Theme.alpha(Theme.text, 0.06))
+            border.width: kind === "glass" ? 1 : (search.activeFocus ? 1 : 0)
+            border.color: kind === "glass" ? Qt.rgba(1, 1, 1, search.activeFocus ? 0.55 : 0.3) : Theme.alpha(Theme.accent, 0.7)
+            NeuBox {
+                visible: parent.kind === "neu"
+                anchors.fill: parent
+                radius: parent.radius
+                mode: "inset"
+                depth: 4
+            }
             Icon {
                 id: searchIcon
                 anchors.left: parent.left
@@ -213,15 +223,20 @@ Rectangle {
         height: 36
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
-        background: Rectangle {
-            x: 12
-            width: nav.width - 24
-            height: nav.height
-            radius: Theme.radius - 2
-            color: nav.current ? Theme.alpha(Theme.accent, Theme.dark ? 0.16 : 0.13)
-                               : nav.hovered ? Theme.alpha(Theme.text, 0.06) : "transparent"
-            border.width: nav.visualFocus ? 1 : 0
-            border.color: Theme.accent
+        background: Item {
+            Surface {
+                x: 12
+                width: nav.width - 24
+                height: nav.height
+                radius: Theme.radius - 2
+                quiet: true
+                hovered: nav.hovered
+                pressed: nav.pressed
+                active: nav.current
+                focused: nav.visualFocus
+                flatColor: nav.current ? Theme.alpha(Theme.accent, Theme.dark ? 0.16 : 0.13)
+                                       : nav.hovered ? Theme.alpha(Theme.text, 0.06) : "transparent"
+            }
         }
         contentItem: Item {
             Icon {

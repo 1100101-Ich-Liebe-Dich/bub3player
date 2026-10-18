@@ -28,12 +28,14 @@ Flow {
             hoverEnabled: true
             focusPolicy: Qt.TabFocus
             onClicked: seg.picked(seg.valueAt(index))
-            background: Rectangle {
+            background: Surface {
                 radius: Math.min(10, Theme.radius)
-                color: sb.on ? Theme.accent : (sb.hovered ? Theme.alpha(Theme.text, 0.12) : Theme.alpha(Theme.text, 0.06))
-                border.width: sb.visualFocus ? 2 : 0
-                border.color: Theme.text
-                Behavior on color { ColorAnimation { duration: 120 } }
+                hovered: sb.hovered
+                pressed: sb.pressed
+                active: sb.on
+                primary: sb.on && Theme.style.controls !== "neu"
+                focused: sb.visualFocus
+                flatColor: sb.on ? Theme.accent : (sb.hovered ? Theme.alpha(Theme.text, 0.12) : Theme.alpha(Theme.text, 0.06))
             }
             contentItem: Text {
                 id: segText
@@ -43,7 +45,7 @@ Flow {
                 font.family: Theme.uiFont
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
-                color: sb.on ? Theme.onAccent : Theme.text
+                color: sb.on ? (Theme.style.controls === "neu" ? Theme.accent : Theme.onAccent) : Theme.text
             }
         }
     }

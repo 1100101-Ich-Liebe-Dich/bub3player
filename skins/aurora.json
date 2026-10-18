@@ -1,6 +1,6 @@
 {
   "id": "aurora",
-  "order": 2,
+  "order": 4,
   "name": "Aurora",
   "tagline": "Fließendes Licht in den Farben deines Covers, echtes Milchglas, Tiefe. Reagiert auf die Musik.",
   "qml": "qrc:/qml/skins/Aurora.qml",

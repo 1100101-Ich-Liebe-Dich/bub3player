@@ -1,6 +1,6 @@
 {
   "id": "synthwave",
-  "order": 3,
+  "order": 6,
   "name": "Synthwave",
   "tagline": "Neon-Raster bis zum Horizont, Retro-Sonne, Scanlines. Das Gitter rast im Takt.",
   "qml": "qrc:/qml/skins/Synthwave.qml",

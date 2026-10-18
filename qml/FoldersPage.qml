@@ -107,16 +107,19 @@ Item {
             height: model.isFolder ? 58 : 50
             readonly property bool isCurrent: !model.isFolder && model.itemId === Player.currentId
 
-            Rectangle {
+            Surface {
                 anchors.fill: parent
                 anchors.leftMargin: 20
                 anchors.rightMargin: 20
-                anchors.topMargin: 1
-                anchors.bottomMargin: 1
+                anchors.topMargin: Theme.style.controls === "neu" ? 4 : 1
+                anchors.bottomMargin: Theme.style.controls === "neu" ? 4 : 1
                 radius: Theme.radius - 2
-                color: row.ListView.isCurrentItem ? Theme.alpha(Theme.text, 0.09)
-                     : row.isCurrent ? Theme.alpha(Theme.accent, 0.09)
-                     : mouse.containsMouse ? Theme.alpha(Theme.text, 0.045) : "transparent"
+                quiet: true
+                hovered: mouse.containsMouse && Theme.style.controls !== "neu"
+                active: row.ListView.isCurrentItem || row.isCurrent
+                flatColor: row.ListView.isCurrentItem ? Theme.alpha(Theme.text, 0.09)
+                         : row.isCurrent ? Theme.alpha(Theme.accent, 0.09)
+                         : mouse.containsMouse ? Theme.alpha(Theme.text, 0.045) : "transparent"
             }
 
             // Folder row

@@ -87,14 +87,19 @@ Item {
             readonly property bool isCurrent: model.trackId === Player.currentId
             readonly property bool selected: ListView.isCurrentItem
 
-            Rectangle {
+            Surface {
                 anchors.fill: parent
                 anchors.leftMargin: 20
                 anchors.rightMargin: 20
+                anchors.topMargin: Theme.style.controls === "neu" ? 4 : 0
+                anchors.bottomMargin: Theme.style.controls === "neu" ? 4 : 0
                 radius: Theme.radius - 2
-                color: row.selected ? Theme.alpha(Theme.text, 0.09)
-                     : row.isCurrent ? Theme.alpha(Theme.accent, 0.09)
-                     : mouse.containsMouse ? Theme.alpha(Theme.text, 0.045) : "transparent"
+                quiet: true
+                hovered: mouse.containsMouse && Theme.style.controls !== "neu"
+                active: row.selected || row.isCurrent
+                flatColor: row.selected ? Theme.alpha(Theme.text, 0.09)
+                         : row.isCurrent ? Theme.alpha(Theme.accent, 0.09)
+                         : mouse.containsMouse ? Theme.alpha(Theme.text, 0.045) : "transparent"
             }
 
             Item {

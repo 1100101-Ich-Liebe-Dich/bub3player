@@ -124,6 +124,15 @@ Item {
                 visible: page.layout === "grid"
                 anchors.fill: parent
                 anchors.margins: 8
+                NeuBox {
+                    visible: Theme.style.controls === "neu"
+                    x: -6; y: -6
+                    width: art.width + 12
+                    height: art.height + 12
+                    radius: art.radius + 6
+                    mode: hover.containsMouse ? "convex" : "raised"
+                    depth: 6
+                }
                 CoverArt {
                     id: art
                     width: parent.width
@@ -181,8 +190,18 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 6
                 radius: Theme.radius
-                color: hover.containsMouse ? Theme.surfaceHover : Theme.alpha(Theme.surface, 0.8)
-                border.color: Theme.alpha(Theme.border, 0.7)
+                readonly property string kind: Theme.style.controls || "flat"
+                color: kind === "neu" ? "transparent"
+                     : kind === "glass" ? Qt.rgba(1, 1, 1, hover.containsMouse ? 0.18 : 0.1)
+                     : (hover.containsMouse ? Theme.surfaceHover : Theme.alpha(Theme.surface, 0.8))
+                border.color: kind === "glass" ? Qt.rgba(1, 1, 1, 0.3) : (kind === "neu" ? "transparent" : Theme.alpha(Theme.border, 0.7))
+                NeuBox {
+                    visible: parent.kind === "neu"
+                    anchors.fill: parent
+                    radius: parent.radius
+                    mode: hover.containsMouse ? "convex" : "raised"
+                    depth: 5
+                }
                 CoverArt {
                     id: tileArt
                     anchors.right: parent.right

@@ -14,13 +14,16 @@ AbstractButton {
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
 
-    background: Rectangle {
-        radius: height / 2
-        color: b.primary ? (b.pressed ? Qt.darker(Theme.accent, 1.15) : b.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent)
-                         : (b.pressed ? Theme.alpha(Theme.text, 0.16) : b.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
-        border.width: b.visualFocus ? 2 : (b.primary ? 0 : 1)
-        border.color: b.visualFocus ? Theme.text : Theme.alpha(Theme.text, 0.12)
-        Behavior on color { ColorAnimation { duration: 120 } }
+    background: Surface {
+        radius: Math.min(height / 2, Theme.style.buttonRadius !== undefined ? Theme.style.buttonRadius : height / 2)
+        hovered: b.hovered
+        pressed: b.pressed
+        primary: b.primary
+        focused: b.visualFocus
+        flatColor: b.primary ? (b.pressed ? Qt.darker(Theme.accent, 1.15) : b.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent)
+                             : (b.pressed ? Theme.alpha(Theme.text, 0.16) : b.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
+        flatBorderWidth: b.primary ? 0 : 1
+        flatBorder: Theme.alpha(Theme.text, 0.12)
     }
     contentItem: Item {
         Row {
