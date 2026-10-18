@@ -4,7 +4,10 @@
 #include "core/Scanner.h"
 #include "library/FolderModel.h"
 #include "library/GroupModel.h"
+#include "jellyfin/Jellyfin.h"
 #include "library/Library.h"
+#include <QSettings>
+#include "library/QueryBuilder.h"
 #include "library/TrackListModel.h"
 #include "player/Mpris.h"
 #include "player/PlayQueue.h"
@@ -74,6 +77,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setApplicationName(QStringLiteral("halcyon"));
     QGuiApplication::setOrganizationName(QStringLiteral("halcyon"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("BuB3Player"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(HALCYON_VERSION));
     QGuiApplication::setDesktopFileName(QStringLiteral("halcyon"));
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-x-generic")));
 
@@ -110,11 +114,17 @@ int main(int argc, char *argv[])
         QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/") + f);
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+    // Before anything counts tracks: hide Jellyfin copies of local tracks?
+    QueryBuilder::setHideDuplicates(QSettings().value(QStringLiteral("jellyfin/preferLocal"), true).toBool());
+
     PlayQueue queue;
     Player player(&queue);
     Library library(&player, &queue);
     Theme theme;
     Memory memory;
+    Jellyfin jellyfin(&player, &library);
+    QObject::connect(&jellyfin, &Jellyfin::message, &library, &Library::message);
+    QObject::connect(library.scanner(), &Scanner::finished, &jellyfin, &Jellyfin::localLibraryChanged);
     if (parser.isSet(QStringLiteral("skin")))
         theme.setSkin(parser.value(QStringLiteral("skin")));
     if (parser.isSet(QStringLiteral("theme")))
@@ -145,6 +155,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Queue", &queue);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Theme", &theme);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Memory", &memory);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Jellyfin", &jellyfin);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
@@ -180,6 +191,7 @@ int main(int argc, char *argv[])
 
     QObject::connect(&app, &QGuiApplication::aboutToQuit, [&] {
         library.scanner()->cancel();
+        jellyfin.shutdown();
         queue.save();
         player.saveSession();
     });

@@ -4,8 +4,8 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Halcyon
 
-// Settings in three tabs: general (library, playback, views), theme (pick a skin,
-// then that skin's own options) and about.
+// Settings in four tabs: general (library, playback, views), theme (pick a skin,
+// then that skin's own options), Jellyfin and about.
 Item {
     id: page
     property string pageId: "settings"
@@ -35,7 +35,7 @@ Item {
             Row {
                 spacing: 6
                 Repeater {
-                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Über")]
+                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Jellyfin"), qsTr("Über")]
                     AbstractButton {
                         id: tab
                         readonly property bool on: window.settingsTab === index
@@ -388,9 +388,17 @@ Item {
                 }
             }
 
+            // =============== Jellyfin ===============
+            Loader {
+                active: window.settingsTab === 2
+                visible: active
+                width: col.width
+                sourceComponent: JellyfinSettings { width: col.width }
+            }
+
             // =============== Über ===============
             Column {
-                visible: window.settingsTab === 2
+                visible: window.settingsTab === 3
                 width: col.width
                 spacing: 24
 
@@ -477,83 +485,8 @@ Item {
         }
     }
 
-    component Section: Column {
-        id: sec
-        property string title
-        property string text
-        default property alias content: body.data
-        width: page.colWidth
-        spacing: 12
-        Text {
-            text: sec.title
-            font.family: Theme.displayFont
-            font.pixelSize: 24
-            font.weight: Font.Bold
-            font.capitalization: Theme.style.titleUpper ? Font.AllUppercase : Font.MixedCase
-            font.letterSpacing: Theme.style.titleUpper ? 1.5 : 0
-            color: Theme.text
-        }
-        Text {
-            visible: sec.text !== ""
-            width: page.colWidth
-            wrapMode: Text.Wrap
-            text: sec.text
-            font.family: Theme.uiFont
-            font.pixelSize: 14
-            lineHeight: 1.25
-            color: Theme.textDim
-        }
-        Column {
-            id: body
-            width: page.colWidth
-            spacing: 14
-            topPadding: 6
-        }
-    }
-
-    // Label (+ current value) above a control.
-    component Option: Column {
-        id: opt
-        property string label
-        property string value
-        property string hint
-        default property alias control: holder.data
-        width: page.colWidth
-        spacing: 8
-        opacity: enabled ? 1 : 0.5
-        Row {
-            spacing: 10
-            Text {
-                text: opt.label
-                font.family: Theme.uiFont
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-                color: Theme.text
-            }
-            Text {
-                visible: opt.value !== ""
-                text: opt.value
-                font.family: Theme.uiFont
-                font.pixelSize: 14
-                color: Theme.accent
-            }
-        }
-        Item {
-            id: holder
-            width: parent.width
-            implicitHeight: childrenRect.height
-            height: childrenRect.height
-        }
-        Text {
-            visible: opt.hint !== ""
-            width: parent.width
-            wrapMode: Text.Wrap
-            text: opt.hint
-            font.family: Theme.uiFont
-            font.pixelSize: 13
-            color: Theme.textFaint
-        }
-    }
+    component Section: SettingsSection { width: page.colWidth }
+    component Option: SettingsOption { width: page.colWidth }
 
     component SkinCard: AbstractButton {
         id: card

@@ -35,6 +35,10 @@ Built groups(const QVariantMap &spec);
 // Filters that select the tracks of one group row (used when opening a group).
 QVariantList groupFilters(const QString &groupBy, const QVariant &key1, const QVariant &key2);
 
+// Hide Jellyfin tracks that also exist in the local library (thread-safe).
+void setHideDuplicates(bool on);
+bool hideDuplicates();
+
 // Field list for building the view editor UI.
 QStringList fields();
 

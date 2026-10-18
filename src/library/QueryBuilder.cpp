@@ -1,5 +1,7 @@
 #include "library/QueryBuilder.h"
 
+#include <atomic>
+
 #include "core/Database.h"
 #include <QDateTime>
 #include <QHash>
@@ -103,8 +105,13 @@ QString likeEscape(QString s)
     return s;
 }
 
+std::atomic<bool> g_hideDuplicates{false};
+
 bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds, QString &error)
 {
+    // Jellyfin copies of tracks that also exist locally (see JellyfinWriter::markDuplicates).
+    if (g_hideDuplicates.load(std::memory_order_relaxed))
+        where << QStringLiteral("t.dup = 0");
     const QVariantList filters = spec.value(QStringLiteral("filters")).toList();
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     for (const QVariant &fv : filters) {
@@ -186,6 +193,16 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
 } // namespace
 
 namespace QueryBuilder {
+
+void setHideDuplicates(bool on)
+{
+    g_hideDuplicates.store(on);
+}
+
+bool hideDuplicates()
+{
+    return g_hideDuplicates.load();
+}
 
 QStringList fields()
 {

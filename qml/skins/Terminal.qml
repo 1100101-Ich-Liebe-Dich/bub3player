@@ -42,7 +42,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 0
             Text { text: "BuB3Player"; font.family: skin.mono; font.pixelSize: skin.fs; font.weight: Font.Bold; color: Theme.accent }
-            Text { text: " v0.4 │ Projekt präsentiert von "; font.family: skin.mono; font.pixelSize: skin.fs; color: Theme.textDim }
+            Text { text: " v" + Qt.application.version.split(".").slice(0, 2).join(".") + " │ Projekt präsentiert von "; font.family: skin.mono; font.pixelSize: skin.fs; color: Theme.textDim }
             Text {
                 text: "www.BAUENUNDBOOTEN.de"
                 font.family: skin.mono; font.pixelSize: skin.fs; font.underline: true

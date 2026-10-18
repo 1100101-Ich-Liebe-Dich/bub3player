@@ -10,7 +10,7 @@ namespace {
 QString g_path;
 bool g_hasFts = false;
 
-const int SchemaVersion = 1;
+const int SchemaVersion = 2;
 
 const char *SchemaV1 = R"SQL(
 CREATE TABLE IF NOT EXISTS sources (
@@ -161,6 +161,30 @@ DbConnection open(int cacheKiB)
     return db;
 }
 
+// V2: Jellyfin. Server settings, server path and cover reference per track,
+// a flag for remote copies of local tracks, and a unique key for upserts.
+void migrateV2(DbConnection &db)
+{
+    auto hasColumn = [&](const char *table, const char *col) {
+        Stmt s(db, QStringLiteral("PRAGMA table_info(%1)").arg(QLatin1String(table)));
+        while (s.step())
+            if (s.str(1) == QLatin1String(col))
+                return true;
+        return false;
+    };
+    if (!hasColumn("sources", "config"))
+        db.exec("ALTER TABLE sources ADD COLUMN config TEXT NOT NULL DEFAULT '{}'");
+    if (!hasColumn("tracks", "remote_path"))
+        db.exec("ALTER TABLE tracks ADD COLUMN remote_path TEXT NOT NULL DEFAULT ''");
+    if (!hasColumn("tracks", "image_ref"))
+        db.exec("ALTER TABLE tracks ADD COLUMN image_ref TEXT NOT NULL DEFAULT ''");
+    if (!hasColumn("tracks", "remote_lib"))
+        db.exec("ALTER TABLE tracks ADD COLUMN remote_lib TEXT NOT NULL DEFAULT ''");
+    if (!hasColumn("tracks", "dup"))
+        db.exec("ALTER TABLE tracks ADD COLUMN dup INTEGER NOT NULL DEFAULT 0");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_remote_u ON tracks(source_id, remote_id) WHERE remote_id IS NOT NULL");
+}
+
 void migrate()
 {
     DbConnection db = open();
@@ -170,6 +194,7 @@ void migrate()
 
     db.exec("BEGIN");
     db.exec(SchemaV1);
+    migrateV2(db);
     db.exec(SortIndexesV1); // also restores them after an interrupted bulk import
     try {
         db.exec(FtsTableV1);
