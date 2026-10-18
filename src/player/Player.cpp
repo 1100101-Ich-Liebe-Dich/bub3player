@@ -88,8 +88,8 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
     g_object_set(m_playbin, "flags", flags, nullptr);
 
     // Two prepared filter chains; ReplayGain "off" swaps in the chain without rgvolume.
-    m_binRg = buildFilterBin(true, &m_rgEl, &m_spectrumRg);
-    m_binPlain = buildFilterBin(false, nullptr, &m_spectrumPlain);
+    m_binRg = buildFilterBin(true, &m_rgEl, &m_spectrumRg, &m_levelRg);
+    m_binPlain = buildFilterBin(false, nullptr, &m_spectrumPlain, &m_levelPlain);
 
     g_signal_connect(m_playbin, "about-to-finish", G_CALLBACK(aboutToFinishTrampoline), this);
     GstBus *bus = gst_element_get_bus(m_playbin);
@@ -111,9 +111,9 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
     m_bars.fill(0.f, Bars);
 }
 
-GstElement *Player::buildFilterBin(bool withRg, GstElement **rgOut, GstElement **spectrumOut)
+GstElement *Player::buildFilterBin(bool withRg, GstElement **rgOut, GstElement **spectrumOut, GstElement **levelOut)
 {
-    // audioconvert ! [rgvolume ! rglimiter] ! audioconvert ! [spectrum]
+    // audioconvert ! [rgvolume ! rglimiter] ! audioconvert ! [spectrum] ! [level]
     GstElement *conv1 = make("audioconvert", nullptr);
     GstElement *conv2 = make("audioconvert", nullptr);
     if (!conv1 || !conv2) {
@@ -128,10 +128,11 @@ GstElement *Player::buildFilterBin(bool withRg, GstElement **rgOut, GstElement *
         rg = nullptr; // never apply gain without the clipping guard
     }
     GstElement *spectrum = make("spectrum", nullptr);
+    GstElement *level = make("level", nullptr);
 
     GstElement *bin = gst_bin_new(nullptr);
     QVector<GstElement *> chain;
-    for (GstElement *e : {conv1, rg, limiter, conv2, spectrum})
+    for (GstElement *e : {conv1, rg, limiter, conv2, spectrum, level})
         if (e) {
             chain << e;
             gst_bin_add(GST_BIN(bin), e);
@@ -153,6 +154,11 @@ GstElement *Player::buildFilterBin(bool withRg, GstElement **rgOut, GstElement *
     if (spectrum)
         g_object_set(spectrum, "bands", guint(SpectrumBands), "threshold", gint(FloorDb), "interval",
                      guint64(33 * GST_MSECOND), "post-messages", FALSE, "message-magnitude", TRUE, nullptr);
+    if (level)
+        g_object_set(level, "interval", guint64(33 * GST_MSECOND), "post-messages", FALSE, "peak-ttl",
+                     guint64(300 * GST_MSECOND), nullptr);
+    if (levelOut)
+        *levelOut = level;
     if (rgOut)
         *rgOut = rg;
     if (spectrumOut)
@@ -168,8 +174,11 @@ void Player::selectFilterBin()
     const bool useRg = m_rgMode != 0 && m_binRg;
     GstElement *bin = useRg ? m_binRg : m_binPlain;
     m_spectrumEl = useRg ? m_spectrumRg : m_spectrumPlain;
+    m_levelEl = useRg ? m_levelRg : m_levelPlain;
     if (m_spectrumEl)
         g_object_set(m_spectrumEl, "post-messages", m_spectrumEnabled ? TRUE : FALSE, nullptr);
+    if (m_levelEl)
+        g_object_set(m_levelEl, "post-messages", m_levelsEnabled ? TRUE : FALSE, nullptr);
     if (bin)
         g_object_set(m_playbin, "audio-filter", bin, nullptr);
 }
@@ -220,6 +229,27 @@ int Player::onBusSync(GstBus *, GstMessage *msg, void *data)
                     mags[int(i)] = g_value_get_float(gst_value_list_get_value(list, i));
                 QMetaObject::invokeMethod(self, [self, mags] { self->handleSpectrum(mags); }, Qt::QueuedConnection);
             }
+        } else if (st && gst_structure_has_name(st, "level")) {
+            // rms / peak: one double per channel, in dB.
+            auto values = [st](const char *field) {
+                QVector<double> out;
+                const GValue *v = gst_structure_get_value(st, field);
+                if (!v)
+                    return out;
+                if (GST_VALUE_HOLDS_LIST(v)) {
+                    for (guint i = 0; i < gst_value_list_get_size(v); ++i)
+                        out << g_value_get_double(gst_value_list_get_value(v, i));
+                } else if (G_VALUE_HOLDS_BOXED(v)) {
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+                    auto *arr = static_cast<GValueArray *>(g_value_get_boxed(v));
+                    for (guint i = 0; arr && i < arr->n_values; ++i)
+                        out << g_value_get_double(g_value_array_get_nth(arr, i));
+G_GNUC_END_IGNORE_DEPRECATIONS
+                }
+                return out;
+            };
+            const QVector<double> rms = values("rms"), peak = values("peak");
+            QMetaObject::invokeMethod(self, [self, rms, peak] { self->handleLevels(rms, peak); }, Qt::QueuedConnection);
         }
         break;
     }
@@ -371,6 +401,52 @@ void Player::handleSpectrum(const QVector<float> &mags)
     emit spectrumChanged();
 }
 
+void Player::handleLevels(const QVector<double> &rms, const QVector<double> &peak)
+{
+    if (!m_levelsEnabled || rms.isEmpty())
+        return;
+    // dB -> 0..1 on a VU-like scale: -40 dB is the floor, 0 dBFS is full scale.
+    auto norm = [](double db) { return std::clamp((db + 40.0) / 40.0, 0.0, 1.0); };
+    const double l = norm(rms.value(0, -100));
+    const double r = norm(rms.value(rms.size() > 1 ? 1 : 0, -100));
+    m_levelL = l;
+    m_levelR = r;
+    m_peakL = norm(peak.value(0, -100));
+    m_peakR = norm(peak.value(peak.size() > 1 ? 1 : 0, -100));
+    const double e = (l + r) / 2;
+    // Simple onset detector: energy clearly above its recent average.
+    m_avgEnergy = m_avgEnergy * 0.92 + e * 0.08;
+    if (e > m_avgEnergy * 1.18 + 0.03 && m_beatCooldown <= 0) {
+        m_beat = 1.0;
+        m_beatCooldown = 7; // ~230 ms
+        emit beatHit();
+    } else {
+        m_beat *= 0.86;
+    }
+    if (m_beatCooldown > 0)
+        --m_beatCooldown;
+    m_energy = m_energy * 0.6 + e * 0.4;
+    emit levelsChanged();
+}
+
+void Player::setLevelsEnabled(bool on)
+{
+    if (on == m_levelsEnabled)
+        return;
+    m_levelsEnabled = on;
+    if (m_levelEl)
+        g_object_set(m_levelEl, "post-messages", on ? TRUE : FALSE, nullptr);
+    if (!on)
+        resetLevels();
+    emit levelsEnabledChanged();
+}
+
+void Player::resetLevels()
+{
+    m_levelL = m_levelR = m_peakL = m_peakR = m_energy = m_beat = 0;
+    emit levelsChanged();
+}
+
 void Player::setState(int s)
 {
     if (s == m_state)
@@ -380,6 +456,8 @@ void Player::setState(int s)
         m_posTimer.start();
     else
         m_posTimer.stop();
+    if (s != 1 && m_levelsEnabled)
+        resetLevels();
     if (s != 1 && m_spectrumEnabled) {
         m_bars.fill(0.f, Bars);
         m_spectrumOut.clear();
@@ -406,10 +484,13 @@ void Player::updateMeta(qint64 id)
 
     QPointer<Player> self(this);
     (void)QtConcurrent::run([self, id] {
-        const QColor c = CoverProvider::dominantColor(CoverProvider::load(id, 64));
-        QMetaObject::invokeMethod(qApp, [self, id, c] {
-            if (self && self->m_playingId == id && c != self->m_coverColor) {
+        const QImage img = CoverProvider::load(id, 64);
+        const QColor c = CoverProvider::dominantColor(img);
+        const QVariantList pal = CoverProvider::palette(img);
+        QMetaObject::invokeMethod(qApp, [self, id, c, pal] {
+            if (self && self->m_playingId == id) {
                 self->m_coverColor = c;
+                self->m_coverPalette = pal;
                 emit self->coverColorChanged();
             }
         }, Qt::QueuedConnection);

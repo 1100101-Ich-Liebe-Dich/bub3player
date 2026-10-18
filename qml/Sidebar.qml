@@ -10,6 +10,7 @@ Rectangle {
     signal open(var view)
     signal searchRequested(string text)
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
+    function clearSearch() { search.text = "" }
 
     color: Theme.alpha(Theme.panel, Theme.ambient > 0 ? 0.78 : 1)
 
@@ -26,33 +27,10 @@ Rectangle {
         anchors.bottomMargin: 12
         spacing: 0
 
-        // Wordmark: three bars of a level meter, then the name.
-        Row {
+        Brand {
             Layout.leftMargin: 22
-            Layout.bottomMargin: 18
-            spacing: 10
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
-                Repeater {
-                    model: [10, 18, 13]
-                    Rectangle {
-                        width: 4
-                        height: modelData
-                        radius: 2
-                        anchors.bottom: parent.bottom
-                        color: Theme.accent
-                    }
-                }
-            }
-            Text {
-                text: "Halcyon"
-                font.family: Theme.displayFont
-                font.pixelSize: 23
-                font.weight: Font.DemiBold
-                font.letterSpacing: -0.3
-                color: Theme.text
-            }
+            Layout.bottomMargin: 16
+            maxWidth: 210
         }
 
         // Search

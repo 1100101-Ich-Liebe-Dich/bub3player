@@ -4,14 +4,17 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Halcyon
 
+// Settings in three tabs: general (library, playback, views), theme (pick a skin,
+// then that skin's own options) and about.
 Item {
     id: page
     property string pageId: "settings"
+    readonly property int colWidth: Math.min(920, flick.width - 72)
 
     Flickable {
         id: flick
         anchors.fill: parent
-        contentHeight: col.height + 60
+        contentHeight: col.height + 80
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: HScrollBar {}
@@ -19,288 +22,360 @@ Item {
         Column {
             id: col
             x: 36
-            width: Math.min(860, flick.width - 72)
-            spacing: 34
+            width: page.colWidth
+            spacing: 30
 
             PageHeader {
                 x: -36
                 width: col.width + 72
-                implicitHeight: 120
                 title: qsTr("Einstellungen")
             }
 
-            // ---------------- Library ----------------
-            Section {
-                title: qsTr("Bibliothek")
-                text: qsTr("Halcyon liest diese Ordner und alle Unterordner. Nur geänderte Dateien werden neu eingelesen, nicht erreichbare Laufwerke werden nie aus der Bibliothek gelöscht.")
-
+            // Tabs
+            Row {
+                spacing: 6
                 Repeater {
-                    model: Library.roots
-                    Rectangle {
-                        width: col.width
-                        height: 52
-                        radius: Theme.radius
-                        color: Theme.alpha(Theme.surface, 0.85)
-                        border.color: Theme.alpha(Theme.border, 0.7)
-                        Icon { x: 16; anchors.verticalCenter: parent.verticalCenter; name: "folder"; size: 20; color: Theme.accent }
-                        Text {
-                            x: 48
-                            width: parent.width - 110
-                            anchors.verticalCenter: parent.verticalCenter
+                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Über")]
+                    AbstractButton {
+                        id: tab
+                        readonly property bool on: window.settingsTab === index
+                        height: 40
+                        width: tabText.implicitWidth + 36
+                        hoverEnabled: true
+                        focusPolicy: Qt.TabFocus
+                        onClicked: { window.settingsTab = index; flick.contentY = 0 }
+                        background: Rectangle {
+                            radius: Math.min(20, Theme.radius + 10)
+                            color: tab.on ? Theme.accent : (tab.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
+                            border.width: tab.visualFocus ? 2 : 0
+                            border.color: Theme.text
+                        }
+                        contentItem: Text {
+                            id: tabText
                             text: modelData
-                            elide: Text.ElideMiddle
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                             font.family: Theme.uiFont
                             font.pixelSize: 14
-                            color: Theme.text
+                            font.weight: Font.Bold
+                            color: tab.on ? Theme.onAccent : Theme.text
                         }
-                        IconButton {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 8
+                    }
+                }
+            }
+
+            // =============== Allgemein ===============
+            Column {
+                visible: window.settingsTab === 0
+                width: col.width
+                spacing: 34
+
+                Section {
+                    title: qsTr("Bibliothek")
+                    text: qsTr("Diese Ordner und alle Unterordner werden gelesen. Nur geänderte Dateien werden neu eingelesen, nicht erreichbare Laufwerke werden nie aus der Bibliothek gelöscht.")
+
+                    Repeater {
+                        model: Library.roots
+                        Rectangle {
+                            width: col.width
+                            height: 52
+                            radius: Theme.radius
+                            color: Theme.alpha(Theme.surface, 0.85)
+                            border.color: Theme.alpha(Theme.border, 0.7)
+                            Icon { x: 16; anchors.verticalCenter: parent.verticalCenter; name: "folder"; size: 20; color: Theme.accent }
+                            Text {
+                                x: 48
+                                width: parent.width - 110
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData
+                                elide: Text.ElideMiddle
+                                font.family: Theme.uiFont
+                                font.pixelSize: 14
+                                color: Theme.text
+                            }
+                            IconButton {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                iconName: "delete"
+                                iconSize: 18
+                                tip: qsTr("Aus der Bibliothek entfernen")
+                                onClicked: Library.removeRoot(modelData)
+                            }
+                        }
+                    }
+
+                    Row {
+                        spacing: 10
+                        PillButton {
+                            primary: Library.roots.length === 0
+                            text: qsTr("Ordner hinzufügen")
+                            iconName: "add"
+                            onClicked: folderDialog.open()
+                        }
+                        PillButton {
+                            text: Library.scanner.running ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
+                            iconName: "refresh"
+                            enabled: Library.roots.length > 0
+                            onClicked: Library.scanner.running ? Library.scanner.cancel() : Library.rescan()
+                        }
+                    }
+
+                    // Path entry for systems where the folder dialog is not available.
+                    Row {
+                        spacing: 8
+                        Rectangle {
+                            width: Math.min(460, col.width - 150)
+                            height: 38
+                            radius: Math.min(19, Theme.radius + 9)
+                            color: Theme.alpha(Theme.text, 0.06)
+                            border.color: pathField.activeFocus ? Theme.accent : "transparent"
+                            TextField {
+                                id: pathField
+                                anchors.fill: parent
+                                leftPadding: 16
+                                placeholderText: qsTr("oder Pfad eingeben, z. B. /mnt/musik")
+                                placeholderTextColor: Theme.textFaint
+                                color: Theme.text
+                                font.family: Theme.uiFont
+                                font.pixelSize: 14
+                                background: null
+                                selectByMouse: true
+                                onAccepted: { Library.addRoot(text); text = "" }
+                            }
+                        }
+                        PillButton {
+                            compact: true
                             anchors.verticalCenter: parent.verticalCenter
-                            iconName: "delete"
-                            iconSize: 18
-                            tip: qsTr("Aus der Bibliothek entfernen")
-                            onClicked: Library.removeRoot(modelData)
+                            text: qsTr("Hinzufügen")
+                            enabled: pathField.text.length > 0
+                            onClicked: { Library.addRoot(pathField.text); pathField.text = "" }
+                        }
+                    }
+
+                    Text {
+                        visible: text !== ""
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: Library.scanner.running ? "" : Library.scanner.summary
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Beim Start nach Änderungen suchen")
+                        checked: Library.scanOnStart
+                        onToggled: Library.scanOnStart = checked
+                    }
+                    Option {
+                        label: qsTr("Lese-Threads beim Scan")
+                        hint: qsTr("Automatisch nimmt 2 Threads für Festplatten (HDD) und mehr für SSDs.")
+                        HSegmented {
+                            width: col.width
+                            options: [qsTr("Automatisch"), "1", "2", "4", "8"]
+                            values: [0, 1, 2, 4, 8]
+                            current: Library.scanThreads
+                            onPicked: (v) => Library.scanThreads = v
                         }
                     }
                 }
 
-                Row {
-                    spacing: 10
-                    PillButton {
-                        primary: Library.roots.length === 0
-                        text: qsTr("Ordner hinzufügen")
-                        iconName: "add"
-                        onClicked: folderDialog.open()
+                Section {
+                    title: qsTr("Wiedergabe")
+                    text: Player.replayGainAvailable
+                          ? qsTr("ReplayGain gleicht die Lautstärke zwischen Titeln an. Ein Limiter verhindert Übersteuerung.")
+                          : qsTr("ReplayGain ist nicht verfügbar: Das GStreamer-Plugin rgvolume fehlt (gst-plugins-good).")
+                    Option {
+                        label: qsTr("ReplayGain")
+                        HSegmented {
+                            width: col.width
+                            enabled: Player.replayGainAvailable
+                            options: [qsTr("Aus"), qsTr("Titel"), qsTr("Album")]
+                            values: [0, 1, 2]
+                            current: Player.replayGain
+                            onPicked: (v) => Player.replayGain = v
+                        }
                     }
-                    PillButton {
-                        text: Library.scanner.running ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
-                        iconName: "refresh"
-                        enabled: Library.roots.length > 0
-                        onClicked: Library.scanner.running ? Library.scanner.cancel() : Library.rescan()
+                    Option {
+                        label: qsTr("Vorverstärkung")
+                        value: Player.preamp.toFixed(1) + " dB"
+                        enabled: Player.replayGainAvailable && Player.replayGain > 0
+                        HSlider {
+                            width: Math.min(420, col.width)
+                            from: -10; to: 10; stepSize: 0.5
+                            value: Player.preamp
+                            onMoved: Player.preamp = value
+                        }
                     }
                 }
 
-                // Path entry for systems where the folder dialog is not available.
-                Row {
-                    spacing: 8
-                    Rectangle {
-                        width: Math.min(460, col.width - 150)
-                        height: 38
-                        radius: 19
-                        color: Theme.alpha(Theme.text, 0.06)
-                        border.color: pathField.activeFocus ? Theme.accent : "transparent"
-                        TextField {
-                            id: pathField
-                            anchors.fill: parent
-                            leftPadding: 16
-                            placeholderText: qsTr("oder Pfad eingeben, z. B. /mnt/musik")
-                            placeholderTextColor: Theme.textFaint
-                            color: Theme.text
-                            font.family: Theme.uiFont
-                            font.pixelSize: 14
-                            background: null
-                            selectByMouse: true
-                            onAccepted: { Library.addRoot(text); text = "" }
+                Section {
+                    title: qsTr("Leistung")
+                    text: qsTr("Für ältere Rechner: Effekte lassen sich hier und in den Theme-Einstellungen zurückfahren.")
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Live-Spektrum und Musik-Analyse")
+                        checked: window.visualizer
+                        enabled: Player.spectrumAvailable
+                        onToggled: window.visualizer = checked
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Animationen anhalten, wenn das Fenster im Hintergrund ist")
+                        checked: window.pauseInactive
+                        onToggled: window.pauseInactive = checked
+                    }
+                }
+
+                Section {
+                    title: qsTr("Eigene Ansichten")
+                    text: qsTr("Ansichten sind gespeicherte Filter, z. B. »Hi-Res Jazz der 70er«. Lege sie in views.json an; ein Beispiel liegt daneben (views.example.json).")
+                    Text {
+                        width: col.width
+                        text: Library.viewsFile
+                        elide: Text.ElideMiddle
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+                    Text {
+                        visible: Library.viewsError !== ""
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: Library.viewsError
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: "#ff8a80"
+                    }
+                    Row {
+                        spacing: 10
+                        PillButton { compact: true; text: qsTr("Ordner öffnen"); iconName: "folder"; onClicked: Library.openViewsFolder() }
+                        PillButton { compact: true; text: qsTr("Neu laden"); iconName: "refresh"; onClicked: Library.reloadViews() }
+                    }
+                }
+
+                Section {
+                    title: qsTr("Tastenkürzel")
+                    Grid {
+                        columns: 2
+                        columnSpacing: 28
+                        rowSpacing: 8
+                        Repeater {
+                            model: [
+                                [qsTr("Leertaste"), qsTr("Abspielen / Pause")],
+                                [qsTr("Strg + →  /  Strg + ←"), qsTr("Nächster / vorheriger Titel")],
+                                [qsTr("Strg + ↑  /  Strg + ↓"), qsTr("Lauter / leiser")],
+                                [qsTr("Strg + F"), qsTr("Suchen")],
+                                [qsTr("Strg + J"), qsTr("Warteschlange")],
+                                [qsTr("Strg + L"), qsTr("Großansicht")],
+                                [qsTr("Strg + T"), qsTr("Theme wechseln")],
+                                [qsTr("Alt + ←"), qsTr("Zurück")],
+                                [qsTr("Esc"), qsTr("Großansicht schließen")],
+                                [qsTr("Strg + Q"), qsTr("Beenden")]
+                            ]
+                            delegate: Row {
+                                spacing: 0
+                                Text {
+                                    width: 210
+                                    text: modelData[0]
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                    color: Theme.text
+                                }
+                                Text {
+                                    text: modelData[1]
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 14
+                                    color: Theme.textDim
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =============== Theme ===============
+            Column {
+                visible: window.settingsTab === 1
+                width: col.width
+                spacing: 34
+
+                Section {
+                    title: qsTr("Theme")
+                    text: qsTr("Jedes Theme ist ein eigener Player-Aufbau mit eigenen Effekten. Inhalte und Funktionen sind überall dieselben, die Einstellungen merkt sich jedes Theme für sich.")
+
+                    Grid {
+                        id: skinGrid
+                        width: col.width
+                        columns: col.width > 640 ? 2 : 1
+                        spacing: 16
+                        Repeater {
+                            model: Theme.skins
+                            SkinCard {
+                                width: (skinGrid.width - (skinGrid.columns - 1) * skinGrid.spacing) / skinGrid.columns
+                                skin: modelData
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    title: qsTr("Einstellungen für %1").arg(Theme.skinName)
+                    text: qsTr("Änderungen wirken sofort.")
+
+                    Repeater {
+                        model: Theme.schema
+                        delegate: Loader {
+                            width: col.width
+                            property var s: modelData
+                            sourceComponent: {
+                                switch (s.type) {
+                                case "palette": return paletteSetting
+                                case "bool": return boolSetting
+                                case "range": return rangeSetting
+                                case "choice": return choiceSetting
+                                }
+                                return null
+                            }
                         }
                     }
                     PillButton {
                         compact: true
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Hinzufügen")
-                        enabled: pathField.text.length > 0
-                        onClicked: { Library.addRoot(pathField.text); pathField.text = "" }
+                        text: qsTr("Auf Standard zurücksetzen")
+                        iconName: "refresh"
+                        onClicked: Theme.resetOptions()
                     }
                 }
+            }
 
+            // =============== Über ===============
+            Column {
+                visible: window.settingsTab === 2
+                width: col.width
+                spacing: 24
+
+                Brand {
+                    nameSize: 44
+                    signatureSize: 15
+                    maxWidth: col.width
+                    oneLine: true
+                }
                 Text {
-                    visible: text !== ""
                     width: col.width
                     wrapMode: Text.Wrap
-                    text: Library.scanner.running ? "" : Library.scanner.summary
+                    textFormat: Text.StyledText
                     font.family: Theme.uiFont
-                    font.pixelSize: 13
+                    font.pixelSize: 14
+                    lineHeight: 1.35
                     color: Theme.textDim
-                }
-
-                Toggle {
-                    label: qsTr("Beim Start nach Änderungen suchen")
-                    checked: Library.scanOnStart
-                    onToggled: Library.scanOnStart = checked
-                }
-                Row {
-                    spacing: 12
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Lese-Threads beim Scan")
-                        font.family: Theme.uiFont
-                        font.pixelSize: 14
-                        color: Theme.text
-                    }
-                    Segmented {
-                        anchors.verticalCenter: parent.verticalCenter
-                        options: [qsTr("Automatisch"), "1", "2", "4", "8"]
-                        values: [0, 1, 2, 4, 8]
-                        current: Library.scanThreads
-                        onPicked: (v) => Library.scanThreads = v
-                    }
-                }
-                Text {
-                    width: col.width
-                    wrapMode: Text.Wrap
-                    text: qsTr("Automatisch nimmt 2 Threads für Festplatten (HDD) und mehr für SSDs.")
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    color: Theme.textFaint
-                }
-            }
-
-            // ---------------- Appearance ----------------
-            Section {
-                title: qsTr("Darstellung")
-                text: qsTr("Eigene Themes: JSON-Datei in %1 ablegen (Vorlage: eines der mitgelieferten Themes).").arg(Theme.userDir)
-
-                Flow {
-                    width: col.width
-                    spacing: 14
-                    Repeater {
-                        model: Theme.themes
-                        ThemeCard { theme: modelData }
-                    }
-                }
-                Toggle {
-                    label: qsTr("Akzentfarbe aus dem Cover übernehmen")
-                    checked: Theme.dynamicAccent
-                    onToggled: Theme.dynamicAccent = checked
-                }
-                Toggle {
-                    label: qsTr("Farbiges Leuchten aus dem Cover im Hintergrund")
-                    checked: Theme.ambientEnabled
-                    onToggled: Theme.ambientEnabled = checked
-                }
-                Toggle {
-                    label: qsTr("Live-Spektrum (abschalten spart auf alter Hardware Leistung)")
-                    checked: window.visualizer
-                    enabled: Player.spectrumAvailable
-                    onToggled: window.visualizer = checked
-                }
-            }
-
-            // ---------------- Playback ----------------
-            Section {
-                title: qsTr("Wiedergabe")
-                text: Player.replayGainAvailable
-                      ? qsTr("ReplayGain gleicht die Lautstärke zwischen Titeln an. Ein Limiter verhindert Übersteuerung.")
-                      : qsTr("ReplayGain ist nicht verfügbar: Das GStreamer-Plugin rgvolume fehlt (gst-plugins-good).")
-                Row {
-                    spacing: 12
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("ReplayGain")
-                        font.family: Theme.uiFont
-                        font.pixelSize: 14
-                        color: Theme.text
-                    }
-                    Segmented {
-                        anchors.verticalCenter: parent.verticalCenter
-                        enabled: Player.replayGainAvailable
-                        options: [qsTr("Aus"), qsTr("Titel"), qsTr("Album")]
-                        values: [0, 1, 2]
-                        current: Player.replayGain
-                        onPicked: (v) => Player.replayGain = v
-                    }
-                }
-                Row {
-                    spacing: 12
-                    enabled: Player.replayGainAvailable && Player.replayGain > 0
-                    opacity: enabled ? 1 : 0.5
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 150
-                        text: qsTr("Vorverstärkung: %1 dB").arg(Player.preamp.toFixed(1))
-                        font.family: Theme.uiFont
-                        font.pixelSize: 14
-                        color: Theme.text
-                    }
-                    Slider {
-                        id: pre
-                        width: 240
-                        from: -10; to: 10; stepSize: 0.5
-                        value: Player.preamp
-                        onMoved: Player.preamp = value
-                        background: Rectangle {
-                            x: pre.leftPadding
-                            y: pre.topPadding + pre.availableHeight / 2 - 2
-                            width: pre.availableWidth
-                            height: 4
-                            radius: 2
-                            color: Theme.alpha(Theme.text, 0.16)
-                            Rectangle { width: pre.visualPosition * parent.width; height: 4; radius: 2; color: Theme.accent }
-                        }
-                        handle: Rectangle {
-                            x: pre.leftPadding + pre.visualPosition * (pre.availableWidth - 14)
-                            y: pre.topPadding + pre.availableHeight / 2 - 7
-                            width: 14; height: 14; radius: 7
-                            color: Theme.text
-                        }
-                    }
-                }
-            }
-
-            // ---------------- Custom views ----------------
-            Section {
-                title: qsTr("Eigene Ansichten")
-                text: qsTr("Ansichten sind gespeicherte Filter, z. B. »Hi-Res Jazz der 70er«. Lege sie in views.json an; ein Beispiel liegt daneben (views.example.json).")
-                Text {
-                    width: col.width
-                    text: Library.viewsFile
-                    elide: Text.ElideMiddle
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    color: Theme.textDim
-                }
-                Text {
-                    visible: Library.viewsError !== ""
-                    width: col.width
-                    wrapMode: Text.Wrap
-                    text: Library.viewsError
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    color: "#ff8a80"
-                }
-                Row {
-                    spacing: 10
-                    PillButton { compact: true; text: qsTr("Ordner öffnen"); iconName: "folder"; onClicked: Library.openViewsFolder() }
-                    PillButton { compact: true; text: qsTr("Neu laden"); iconName: "refresh"; onClicked: Library.reloadViews() }
-                }
-            }
-
-            // ---------------- Shortcuts ----------------
-            Section {
-                title: qsTr("Tastenkürzel")
-                Grid {
-                    columns: 2
-                    columnSpacing: 28
-                    rowSpacing: 8
-                    Repeater {
-                        model: [
-                            ["Leertaste", qsTr("Abspielen / Pause")],
-                            ["Strg + →  /  Strg + ←", qsTr("Nächster / vorheriger Titel")],
-                            ["Strg + ↑  /  Strg + ↓", qsTr("Lauter / leiser")],
-                            ["Strg + F", qsTr("Suchen")],
-                            ["Strg + Q", qsTr("Beenden")],
-                            ["Strg + J", qsTr("Warteschlange")],
-                            ["Strg + L", qsTr("Großansicht")],
-                            ["Esc", qsTr("Großansicht schließen")]
-                        ]
-                        Text {
-                            text: modelData[index % 2]
-                            font.family: Theme.uiFont
-                            font.pixelSize: 14
-                            font.weight: index % 2 === 0 ? Font.DemiBold : Font.Normal
-                            color: index % 2 === 0 ? Theme.text : Theme.textDim
-                        }
-                    }
+                    linkColor: Theme.accent
+                    onLinkActivated: (l) => Qt.openUrlExternally(l)
+                    text: qsTr("Version %1, Projekt „Halcyon“.").arg(Qt.application.version)
+                          + "<br>" + qsTr("Musikplayer für große lokale Bibliotheken. Wiedergabe mit GStreamer, Tags mit TagLib, Bibliothek in SQLite, Oberfläche mit Qt.")
+                          + "<br><br>" + qsTr("Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, VT323 (SIL Open Font License). Symbole: Material Icons (Apache 2.0).")
                 }
             }
         }
@@ -312,23 +387,78 @@ Item {
         onAccepted: Library.addRoot(selectedFolder)
     }
 
+    // ---------- generated theme settings ----------
+    Component {
+        id: paletteSetting
+        Option {
+            label: s.label
+            Flow {
+                width: col.width
+                spacing: 12
+                Repeater {
+                    model: s.options
+                    PaletteCard { pal: modelData; current: Theme.opt[s.key] === modelData.id; onPicked: Theme.setOption(s.key, modelData.id) }
+                }
+            }
+        }
+    }
+    Component {
+        id: boolSetting
+        HToggle {
+            label: s.label
+            checked: Theme.opt[s.key] === true
+            onToggled: Theme.setOption(s.key, checked)
+        }
+    }
+    Component {
+        id: rangeSetting
+        Option {
+            label: s.label
+            value: {
+                var v = Theme.opt[s.key]
+                if (s.percent) return Math.round(v * 100) + " %"
+                return (s.step < 1 ? Number(v).toFixed(1) : Math.round(v)) + (s.unit ? " " + s.unit : "")
+            }
+            HSlider {
+                width: Math.min(420, col.width)
+                from: s.min; to: s.max; stepSize: s.step
+                value: Theme.opt[s.key]
+                onMoved: Theme.setOption(s.key, value)
+            }
+        }
+    }
+    Component {
+        id: choiceSetting
+        Option {
+            label: s.label
+            HSegmented {
+                width: col.width
+                options: s.options
+                current: Theme.opt[s.key]
+                onPicked: (v) => Theme.setOption(s.key, v)
+            }
+        }
+    }
+
     component Section: Column {
         id: sec
         property string title
         property string text
         default property alias content: body.data
-        width: col.width
+        width: page.colWidth
         spacing: 12
         Text {
             text: sec.title
             font.family: Theme.displayFont
             font.pixelSize: 24
-            font.weight: Font.DemiBold
+            font.weight: Font.Bold
+            font.capitalization: Theme.style.titleUpper ? Font.AllUppercase : Font.MixedCase
+            font.letterSpacing: Theme.style.titleUpper ? 1.5 : 0
             color: Theme.text
         }
         Text {
             visible: sec.text !== ""
-            width: col.width
+            width: page.colWidth
             wrapMode: Text.Wrap
             text: sec.text
             font.family: Theme.uiFont
@@ -338,114 +468,170 @@ Item {
         }
         Column {
             id: body
-            width: col.width
-            spacing: 12
-            topPadding: 4
+            width: page.colWidth
+            spacing: 14
+            topPadding: 6
         }
     }
 
-    component Toggle: AbstractButton {
-        id: tg
+    // Label (+ current value) above a control.
+    component Option: Column {
+        id: opt
         property string label
-        checkable: true
-        width: col.width
-        height: 32
-        hoverEnabled: true
-        contentItem: Item {
-            Rectangle {
-                id: track
-                width: 40; height: 22; radius: 11
-                anchors.verticalCenter: parent.verticalCenter
-                color: tg.checked ? Theme.accent : Theme.alpha(Theme.text, 0.18)
-                border.width: tg.visualFocus ? 2 : 0
-                border.color: Theme.text
-                Behavior on color { ColorAnimation { duration: 140 } }
-                Rectangle {
-                    width: 16; height: 16; radius: 8
-                    y: 3
-                    x: tg.checked ? parent.width - width - 3 : 3
-                    color: tg.checked ? Theme.onAccent : Theme.text
-                    Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                }
-            }
+        property string value
+        property string hint
+        default property alias control: holder.data
+        width: page.colWidth
+        spacing: 8
+        opacity: enabled ? 1 : 0.5
+        Row {
+            spacing: 10
             Text {
-                anchors.left: track.right
-                anchors.leftMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                text: tg.label
+                text: opt.label
                 font.family: Theme.uiFont
                 font.pixelSize: 14
-                color: tg.enabled ? Theme.text : Theme.textFaint
+                font.weight: Font.DemiBold
+                color: Theme.text
+            }
+            Text {
+                visible: opt.value !== ""
+                text: opt.value
+                font.family: Theme.uiFont
+                font.pixelSize: 14
+                color: Theme.accent
             }
         }
-        background: null
-    }
-
-    component Segmented: Row {
-        id: seg
-        property var options: []
-        property var values: []
-        property var current
-        signal picked(var value)
-        spacing: 0
-        Repeater {
-            model: seg.options
-            AbstractButton {
-                id: sb
-                readonly property bool on: seg.values[index] === seg.current
-                height: 32
-                width: Math.max(52, segText.implicitWidth + 24)
-                hoverEnabled: true
-                onClicked: seg.picked(seg.values[index])
-                background: Rectangle {
-                    radius: 8
-                    color: sb.on ? Theme.accent : (sb.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.alpha(Theme.text, 0.05))
-                    border.width: sb.visualFocus ? 2 : 0
-                    border.color: Theme.text
-                }
-                contentItem: Text {
-                    id: segText
-                    text: modelData
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.family: Theme.uiFont
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: sb.on ? Theme.onAccent : Theme.text
-                }
-            }
+        Item {
+            id: holder
+            width: parent.width
+            implicitHeight: childrenRect.height
+            height: childrenRect.height
+        }
+        Text {
+            visible: opt.hint !== ""
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: opt.hint
+            font.family: Theme.uiFont
+            font.pixelSize: 13
+            color: Theme.textFaint
         }
     }
 
-    component ThemeCard: AbstractButton {
+    component SkinCard: AbstractButton {
         id: card
-        property var theme
-        readonly property bool current: Theme.id === theme.id
-        width: 190
-        height: 128
+        property var skin
+        readonly property bool current: Theme.skin === skin.id
+        height: preview.height + 96
         hoverEnabled: true
-        onClicked: Theme.setTheme(theme.id)
+        focusPolicy: Qt.TabFocus
+        onClicked: if (!current) Theme.setSkin(skin.id)
         background: Rectangle {
-            radius: 12
-            color: card.theme.bg
+            radius: Theme.radius + 4
+            color: card.hovered ? Theme.alpha(Theme.text, 0.08) : Theme.alpha(Theme.text, 0.04)
             border.width: card.current ? 2 : 1
-            border.color: card.current ? Theme.accent : (card.hovered ? Theme.alpha(Theme.text, 0.4) : Theme.alpha(Theme.text, 0.15))
+            border.color: card.current ? Theme.accent : Theme.alpha(Theme.text, card.hovered || card.visualFocus ? 0.4 : 0.12)
         }
         contentItem: Item {
-            // Miniature of the layout in the theme's own colours.
-            Rectangle { x: 12; y: 12; width: 40; height: 72; radius: 5; color: card.theme.surface }
-            Rectangle { x: 60; y: 14; width: 70; height: 8; radius: 4; color: card.theme.text }
-            Rectangle { x: 60; y: 30; width: 104; height: 5; radius: 2.5; color: card.theme.text; opacity: 0.35 }
-            Rectangle { x: 60; y: 42; width: 90; height: 5; radius: 2.5; color: card.theme.text; opacity: 0.35 }
-            Rectangle { x: 60; y: 62; width: 22; height: 22; radius: 11; color: card.theme.accent }
+            Rectangle {
+                id: preview
+                x: 10; y: 10
+                width: card.width - 20
+                height: Math.round(width * 0.56)
+                radius: Theme.radius
+                clip: true
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: card.skin.swatch.length > 0 ? card.skin.swatch[0] : Theme.surface }
+                    GradientStop { position: 0.6; color: card.skin.swatch.length > 1 ? card.skin.swatch[1] : Theme.surface }
+                    GradientStop { position: 1; color: card.skin.swatch.length > 2 ? card.skin.swatch[2] : Theme.accent }
+                }
+                Image {
+                    anchors.fill: parent
+                    source: card.skin.preview
+                    sourceSize.width: 720
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    visible: source !== ""
+                }
+                Rectangle {
+                    visible: card.current
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 10
+                    height: 26
+                    width: activeText.implicitWidth + 20
+                    radius: 13
+                    color: Theme.accent
+                    Text {
+                        id: activeText
+                        anchors.centerIn: parent
+                        text: qsTr("Aktiv")
+                        font.family: Theme.uiFont
+                        font.pixelSize: 12
+                        font.weight: Font.Bold
+                        color: Theme.onAccent
+                    }
+                }
+            }
+            Text {
+                x: 18
+                anchors.top: preview.bottom
+                anchors.topMargin: 12
+                text: card.skin.name
+                font.family: card.skin.font || Theme.displayFont
+                font.pixelSize: 22
+                font.weight: Font.Bold
+                color: Theme.text
+            }
+            Text {
+                x: 18
+                width: card.width - 36
+                anchors.top: preview.bottom
+                anchors.topMargin: 44
+                text: card.skin.tagline
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                font.family: Theme.uiFont
+                font.pixelSize: 13
+                color: Theme.textDim
+            }
+        }
+    }
+
+    component PaletteCard: AbstractButton {
+        id: pc
+        property var pal
+        property bool current: false
+        signal picked()
+        width: 180
+        height: 118
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        onClicked: pc.picked()
+        background: Rectangle {
+            radius: 12
+            color: pc.pal.bg
+            border.width: pc.current ? 2 : 1
+            border.color: pc.current ? Theme.accent : (pc.hovered || pc.visualFocus ? Theme.alpha(Theme.text, 0.45) : Theme.alpha(Theme.text, 0.15))
+        }
+        contentItem: Item {
+            // Miniature of the layout in the palette's own colours.
+            Rectangle { x: 12; y: 12; width: 38; height: 64; radius: 5; color: pc.pal.surface }
+            Rectangle { x: 58; y: 14; width: 66; height: 8; radius: 4; color: pc.pal.text }
+            Rectangle { x: 58; y: 30; width: 96; height: 5; radius: 2.5; color: pc.pal.text; opacity: 0.35 }
+            Rectangle { x: 58; y: 42; width: 82; height: 5; radius: 2.5; color: pc.pal.text; opacity: 0.35 }
+            Rectangle { x: 58; y: 56; width: 20; height: 20; radius: 10; color: pc.pal.accent }
+            Rectangle { x: 82; y: 56; width: 20; height: 20; radius: 10; color: pc.pal.accent2 || pc.pal.accent; visible: pc.pal.accent2 !== pc.pal.accent }
             Text {
                 x: 12
-                y: 98
-                text: card.theme.name
+                y: 88
+                text: pc.pal.name
                 font.family: Theme.uiFont
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
-                color: card.theme.text
+                color: pc.pal.text
             }
         }
     }

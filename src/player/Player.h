@@ -43,6 +43,16 @@ class Player : public QObject
     Q_PROPERTY(bool spectrumAvailable READ spectrumAvailable CONSTANT)
     Q_PROPERTY(bool replayGainAvailable READ replayGainAvailable CONSTANT)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QVariantList coverPalette READ coverPalette NOTIFY coverColorChanged)
+    // Audio analysis for meters and audio-reactive effects (0..1, ~30 updates/s).
+    Q_PROPERTY(bool levelsEnabled READ levelsEnabled WRITE setLevelsEnabled NOTIFY levelsEnabledChanged)
+    Q_PROPERTY(bool levelsAvailable READ levelsAvailable CONSTANT)
+    Q_PROPERTY(double levelL READ levelL NOTIFY levelsChanged)
+    Q_PROPERTY(double levelR READ levelR NOTIFY levelsChanged)
+    Q_PROPERTY(double peakL READ peakL NOTIFY levelsChanged)
+    Q_PROPERTY(double peakR READ peakR NOTIFY levelsChanged)
+    Q_PROPERTY(double energy READ energy NOTIFY levelsChanged)
+    Q_PROPERTY(double beat READ beat NOTIFY levelsChanged)
 
 public:
     explicit Player(PlayQueue *queue, QObject *parent = nullptr);
@@ -74,6 +84,16 @@ public:
     bool spectrumAvailable() const { return m_spectrumEl != nullptr; }
     bool replayGainAvailable() const { return m_rgEl != nullptr; }
     QString error() const { return m_error; }
+    QVariantList coverPalette() const { return m_coverPalette; }
+    bool levelsEnabled() const { return m_levelsEnabled; }
+    void setLevelsEnabled(bool on);
+    bool levelsAvailable() const { return m_levelRg || m_levelPlain; }
+    double levelL() const { return m_levelL; }
+    double levelR() const { return m_levelR; }
+    double peakL() const { return m_peakL; }
+    double peakR() const { return m_peakR; }
+    double energy() const { return m_energy; }
+    double beat() const { return m_beat; }
 
     Q_INVOKABLE void playCurrent();
     Q_INVOKABLE void playRow(int queueRow);
@@ -101,6 +121,9 @@ signals:
     void spectrumChanged();
     void errorChanged();
     void seeked(qint64 ms);
+    void levelsEnabledChanged();
+    void levelsChanged();
+    void beatHit();
 
 public:
     // GStreamer callbacks (called from streaming threads).
@@ -110,6 +133,8 @@ public:
 private:
     void handleMessage(GstMessage *msg);
     void handleSpectrum(const QVector<float> &mags);
+    void handleLevels(const QVector<double> &rms, const QVector<double> &peak);
+    void resetLevels();
 
     bool load(qint64 id, bool startPlaying, qint64 seekMs = 0);
     void setState(int s);
@@ -117,7 +142,7 @@ private:
     void armNext();
     void applyVolume();
     void applyReplayGain();
-    GstElement *buildFilterBin(bool withRg, GstElement **rgOut, GstElement **spectrumOut);
+    GstElement *buildFilterBin(bool withRg, GstElement **rgOut, GstElement **spectrumOut, GstElement **levelOut);
     void selectFilterBin();
     void pollPosition();
     void finishTrack(bool skipped);
@@ -129,6 +154,11 @@ private:
     GstElement *m_spectrumEl = nullptr; // spectrum of the active chain
     GstElement *m_binRg = nullptr, *m_binPlain = nullptr;
     GstElement *m_spectrumRg = nullptr, *m_spectrumPlain = nullptr;
+    GstElement *m_levelEl = nullptr, *m_levelRg = nullptr, *m_levelPlain = nullptr;
+    bool m_levelsEnabled = false;
+    double m_levelL = 0, m_levelR = 0, m_peakL = 0, m_peakR = 0, m_energy = 0, m_beat = 0, m_avgEnergy = 0;
+    int m_beatCooldown = 0;
+    QVariantList m_coverPalette;
 
     QMutex m_mutex; // guards m_nextUri/m_nextId/m_expectAdvance (streaming thread)
     QByteArray m_nextUri;

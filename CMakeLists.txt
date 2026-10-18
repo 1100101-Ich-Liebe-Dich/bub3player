@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 0.1.0 LANGUAGES CXX)
+project(Halcyon VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,13 +38,13 @@ add_executable(halcyon
 )
 
 # QML, themes and fonts are compiled into the binary.
-file(GLOB QML_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS qml/*.qml)
-file(GLOB THEME_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS themes/*.json)
+file(GLOB QML_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS qml/*.qml qml/skins/*.qml)
+file(GLOB THEME_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS themes/*.json skins/*.json skins/*.jpg)
 qt_add_resources(halcyon "ui" PREFIX "/" FILES ${QML_FILES} ${THEME_FILES})
-qt_add_shaders(halcyon "shaders" PREFIX "/" FILES shaders/rounded.frag shaders/ambient.frag)
-qt_add_resources(halcyon "fonts" PREFIX "/fonts" BASE assets/fonts
-  FILES assets/fonts/Manrope-Regular.ttf assets/fonts/Manrope-Medium.ttf assets/fonts/Manrope-SemiBold.ttf
-        assets/fonts/Manrope-Bold.ttf assets/fonts/BricolageGrotesque-SemiBold.ttf assets/fonts/BricolageGrotesque-Bold.ttf)
+file(GLOB SHADER_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS shaders/*.frag shaders/*.vert)
+qt_add_shaders(halcyon "shaders" PREFIX "/" FILES ${SHADER_FILES})
+file(GLOB FONT_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS assets/fonts/*.ttf)
+qt_add_resources(halcyon "fonts" PREFIX "/fonts" BASE assets/fonts FILES ${FONT_FILES})
 
 target_include_directories(halcyon PRIVATE src)
 target_link_libraries(halcyon PRIVATE

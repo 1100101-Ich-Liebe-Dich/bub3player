@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QQuickAsyncImageProvider>
 #include <QThreadPool>
+#include <QVariantList>
 
 // Serves album art as image://cover/<trackId>.
 // Order: cover/folder/front image in the track's folder, then art embedded in the file.
@@ -19,6 +20,7 @@ public:
     static QImage load(qint64 trackId, int size);           // null image if none
     static QString cachedFile(qint64 trackId, int size);    // path of cached JPEG, empty if none
     static QColor dominantColor(const QImage &img);         // vivid accent colour, invalid if grey
+    static QVariantList palette(const QImage &img);         // 4 colours: three vivid hues + a deep shade
 
 private:
     QThreadPool m_pool;

@@ -4,16 +4,16 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
-#include <QStandardPaths>
 #include <algorithm>
 #include <cmath>
 
 namespace {
 
-QVariantMap readTheme(const QString &file)
+QVariantMap readJson(const QString &file)
 {
     QFile f(file);
     if (!f.open(QIODevice::ReadOnly))
@@ -21,7 +21,7 @@ QVariantMap readTheme(const QString &file)
     QJsonParseError err;
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qWarning() << "Theme" << file << "ungültig:" << err.errorString();
+        qWarning() << "Theme-Datei" << file << "ungültig:" << err.errorString();
         return {};
     }
     QVariantMap m = doc.object().toVariantMap();
@@ -36,17 +36,24 @@ double luminance(const QColor &c)
     return 0.2126 * ch(c.redF()) + 0.7152 * ch(c.greenF()) + 0.0722 * ch(c.blueF());
 }
 
+QString skinKey(const QString &skin, const QString &key)
+{
+    return QStringLiteral("skin/%1/%2").arg(skin, key);
+}
+
 } // namespace
 
 Theme::Theme(QObject *parent) : QObject(parent)
 {
+    loadSkins();
     QSettings s;
-    m_dynamic = s.value(QStringLiteral("theme/dynamicAccent"), true).toBool();
-    m_ambientEnabled = s.value(QStringLiteral("theme/ambient"), true).toBool();
-    reloadThemes();
-    setTheme(s.value(QStringLiteral("theme/id"), QStringLiteral("tiefsee")).toString());
-    if (m_id.isEmpty())
-        setTheme(QStringLiteral("tiefsee"));
+    QString skin = s.value(QStringLiteral("theme/skin")).toString();
+    if (!m_skins.contains(skin))
+        skin = QStringLiteral("klassik");
+    // Before skins existed, "theme/id" was the classic colour scheme.
+    if (!s.contains(skinKey(QStringLiteral("klassik"), QStringLiteral("palette"))) && s.contains(QStringLiteral("theme/id")))
+        s.setValue(skinKey(QStringLiteral("klassik"), QStringLiteral("palette")), s.value(QStringLiteral("theme/id")));
+    setSkin(skin);
 }
 
 QString Theme::userDir() const
@@ -54,46 +61,143 @@ QString Theme::userDir() const
     return Paths::dataDir() + QStringLiteral("/themes");
 }
 
-void Theme::reloadThemes()
+void Theme::loadSkins()
 {
-    m_byId.clear();
+    const QDir dir(QStringLiteral(":/skins"));
+    QList<QVariantMap> list;
+    for (const QString &f : dir.entryList({QStringLiteral("*.json")}, QDir::Files)) {
+        QVariantMap m = readJson(dir.filePath(f));
+        if (m.isEmpty())
+            continue;
+        const QString id = m.value(QStringLiteral("id")).toString();
+        m_skins.insert(id, m);
+        list << m;
+    }
+    std::sort(list.begin(), list.end(), [](const QVariantMap &a, const QVariantMap &b) {
+        return a.value(QStringLiteral("order")).toInt() < b.value(QStringLiteral("order")).toInt();
+    });
+    for (const QVariantMap &m : list) {
+        const QString id = m.value(QStringLiteral("id")).toString();
+        const QString preview = QStringLiteral(":/skins/%1.jpg").arg(id);
+        m_skinList << QVariantMap{{QStringLiteral("id"), id},
+                                  {QStringLiteral("name"), m.value(QStringLiteral("name"))},
+                                  {QStringLiteral("tagline"), m.value(QStringLiteral("tagline"))},
+                                  {QStringLiteral("preview"), QFile::exists(preview) ? QStringLiteral("qrc") + preview : QString()},
+                                  {QStringLiteral("swatch"), m.value(QStringLiteral("swatch")).toList()},
+                                  {QStringLiteral("font"), m.value(QStringLiteral("fonts")).toMap().value(QStringLiteral("display"))}};
+    }
+}
+
+void Theme::loadPalettes()
+{
+    m_paletteList.clear();
+    m_paletteById.clear();
     QStringList order;
-    auto add = [&](const QString &file) {
-        const QVariantMap t = readTheme(file);
+    auto add = [&](const QVariantMap &t) {
         if (t.isEmpty())
             return;
         const QString id = t.value(QStringLiteral("id")).toString();
-        if (!m_byId.contains(id))
+        if (!m_paletteById.contains(id))
             order << id;
-        m_byId.insert(id, t);
+        m_paletteById.insert(id, t);
     };
-    const QDir builtIn(QStringLiteral(":/themes"));
-    QStringList files = builtIn.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-    // Keep the curated order from the file names ("01-tiefsee.json", ...).
-    for (const QString &f : files)
-        add(builtIn.filePath(f));
-    QDir().mkpath(userDir());
-    const QDir user(userDir());
-    for (const QString &f : user.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name))
-        add(user.filePath(f));
-
-    m_list.clear();
-    for (const QString &id : order) {
-        const QVariantMap t = m_byId.value(id);
-        const QVariantMap c = t.value(QStringLiteral("colors")).toMap();
-        m_list << QVariantMap{{QStringLiteral("id"), id},
-                              {QStringLiteral("name"), t.value(QStringLiteral("name"))},
-                              {QStringLiteral("dark"), t.value(QStringLiteral("dark"), true)},
-                              {QStringLiteral("bg"), c.value(QStringLiteral("bg"))},
-                              {QStringLiteral("surface"), c.value(QStringLiteral("surface"))},
-                              {QStringLiteral("text"), c.value(QStringLiteral("text"))},
-                              {QStringLiteral("accent"), c.value(QStringLiteral("accent"))}};
+    const QVariant src = m_skinDef.value(QStringLiteral("palettes"));
+    if (src.typeId() == QMetaType::QString && src.toString() == QLatin1String("files")) {
+        // Classic skin: the colour schemes in :/themes plus the user's own files.
+        const QDir builtIn(QStringLiteral(":/themes"));
+        for (const QString &f : builtIn.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name))
+            add(readJson(builtIn.filePath(f)));
+        QDir().mkpath(userDir());
+        const QDir user(userDir());
+        for (const QString &f : user.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name))
+            add(readJson(user.filePath(f)));
+    } else {
+        for (const QVariant &v : src.toList())
+            add(v.toMap());
     }
-    emit themesChanged();
+    for (const QString &id : order) {
+        const QVariantMap t = m_paletteById.value(id);
+        const QVariantMap c = t.value(QStringLiteral("colors")).toMap();
+        m_paletteList << QVariantMap{{QStringLiteral("id"), id},
+                                     {QStringLiteral("name"), t.value(QStringLiteral("name"))},
+                                     {QStringLiteral("dark"), t.value(QStringLiteral("dark"), true)},
+                                     {QStringLiteral("bg"), c.value(QStringLiteral("bg"))},
+                                     {QStringLiteral("surface"), c.value(QStringLiteral("surface"))},
+                                     {QStringLiteral("text"), c.value(QStringLiteral("text"))},
+                                     {QStringLiteral("accent"), c.value(QStringLiteral("accent"))},
+                                     {QStringLiteral("accent2"), c.value(QStringLiteral("accent2"), c.value(QStringLiteral("accent")))}};
+    }
+    emit palettesChanged();
 }
 
-bool Theme::apply(const QVariantMap &t)
+QVariantMap Theme::defaultOptions() const
 {
+    QVariantMap d;
+    for (const QVariant &v : m_skinDef.value(QStringLiteral("settings")).toList()) {
+        const QVariantMap s = v.toMap();
+        d.insert(s.value(QStringLiteral("key")).toString(), s.value(QStringLiteral("default")));
+    }
+    return d;
+}
+
+void Theme::loadOptions()
+{
+    QSettings s;
+    m_opt = defaultOptions();
+    for (auto it = m_opt.begin(); it != m_opt.end(); ++it) {
+        const QString k = skinKey(m_skin, it.key());
+        if (!s.contains(k))
+            continue;
+        QVariant v = s.value(k);
+        // QSettings returns strings for everything stored in INI files.
+        switch (it.value().typeId()) {
+        case QMetaType::Bool: v = v.toString() == QLatin1String("true") || v.toBool(); break;
+        case QMetaType::Double: case QMetaType::Int: case QMetaType::LongLong: v = v.toDouble(); break;
+        default: break;
+        }
+        it.value() = v;
+    }
+}
+
+QVariantList Theme::schema() const
+{
+    // Resolve "palette" settings into a choice list with colour previews.
+    QVariantList out;
+    for (const QVariant &v : m_skinDef.value(QStringLiteral("settings")).toList()) {
+        QVariantMap s = v.toMap();
+        if (s.value(QStringLiteral("type")).toString() == QLatin1String("palette"))
+            s.insert(QStringLiteral("options"), m_paletteList);
+        out << s;
+    }
+    return out;
+}
+
+void Theme::setSkin(const QString &id)
+{
+    auto it = m_skins.constFind(id);
+    if (it == m_skins.constEnd())
+        return;
+    m_skin = id;
+    m_skinDef = *it;
+    QSettings().setValue(QStringLiteral("theme/skin"), id);
+    loadPalettes();
+    loadOptions();
+    QString pal = m_opt.value(QStringLiteral("palette")).toString();
+    if (!m_paletteById.contains(pal) && !m_paletteList.isEmpty())
+        pal = m_paletteList.first().toMap().value(QStringLiteral("id")).toString();
+    applyPalette(pal);
+    emit skinChanged();
+    emit optionsChanged();
+    emit changed();
+    emit accentChanged();
+}
+
+bool Theme::applyPalette(const QString &paletteId)
+{
+    auto it = m_paletteById.constFind(paletteId);
+    if (it == m_paletteById.constEnd())
+        return false;
+    const QVariantMap &t = *it;
     const QVariantMap colors = t.value(QStringLiteral("colors")).toMap();
     static const QStringList required = {QStringLiteral("bg"), QStringLiteral("panel"), QStringLiteral("surface"),
                                          QStringLiteral("surfaceHover"), QStringLiteral("border"), QStringLiteral("text"),
@@ -102,39 +206,92 @@ bool Theme::apply(const QVariantMap &t)
     for (const QString &k : required) {
         const QColor col(colors.value(k).toString());
         if (!col.isValid()) {
-            qWarning() << "Theme" << t.value(QStringLiteral("id")) << ": Farbe fehlt oder ungültig:" << k;
+            qWarning() << "Farbschema" << paletteId << ": Farbe fehlt oder ungültig:" << k;
             return false;
         }
         c.insert(k, col);
     }
-    const QColor onAccent(colors.value(QStringLiteral("onAccent")).toString());
-    if (onAccent.isValid())
-        c.insert(QStringLiteral("onAccent"), onAccent);
+    for (const char *opt : {"onAccent", "accent2"}) {
+        const QColor col(colors.value(QLatin1String(opt)).toString());
+        if (col.isValid())
+            c.insert(QLatin1String(opt), col);
+    }
     m_c = c;
-    m_id = t.value(QStringLiteral("id")).toString();
-    m_name = t.value(QStringLiteral("name"), m_id).toString();
+    m_id = paletteId;
+    m_name = t.value(QStringLiteral("name"), paletteId).toString();
     m_dark = t.value(QStringLiteral("dark"), true).toBool();
-    m_radius = std::clamp(t.value(QStringLiteral("radius"), 10).toInt(), 0, 32);
-    m_ambient = std::clamp(t.value(QStringLiteral("ambient"), 0.5).toDouble(), 0.0, 1.0);
-    const QVariantMap fonts = t.value(QStringLiteral("fonts")).toMap();
-    m_uiFont = fonts.value(QStringLiteral("ui"), QStringLiteral("Manrope")).toString();
-    m_displayFont = fonts.value(QStringLiteral("display"), QStringLiteral("Bricolage Grotesque")).toString();
+    // Radius and fonts: palette may override the skin.
+    m_radius = std::clamp(t.value(QStringLiteral("radius"), m_skinDef.value(QStringLiteral("radius"), 10)).toInt(), 0, 40);
+    m_paletteAmbient = std::clamp(t.value(QStringLiteral("ambient"), 0.5).toDouble(), 0.0, 1.0);
+    const QVariantMap skinFonts = m_skinDef.value(QStringLiteral("fonts")).toMap();
+    const QVariantMap fonts = t.contains(QStringLiteral("fonts")) && m_skin == QLatin1String("klassik")
+                                  ? t.value(QStringLiteral("fonts")).toMap() : skinFonts;
+    m_uiFont = fonts.value(QStringLiteral("ui"), skinFonts.value(QStringLiteral("ui"), QStringLiteral("Manrope"))).toString();
+    m_displayFont = fonts.value(QStringLiteral("display"), skinFonts.value(QStringLiteral("display"), QStringLiteral("Bricolage Grotesque"))).toString();
+    m_monoFont = skinFonts.value(QStringLiteral("mono"), m_uiFont).toString();
     return true;
 }
 
-void Theme::setTheme(const QString &id)
+void Theme::setOption(const QString &key, const QVariant &value)
 {
-    auto it = m_byId.constFind(id);
-    if (it == m_byId.constEnd() || !apply(*it))
+    if (!m_opt.contains(key) || m_opt.value(key) == value)
         return;
-    QSettings().setValue(QStringLiteral("theme/id"), id);
+    m_opt.insert(key, value);
+    QSettings().setValue(skinKey(m_skin, key), value);
+    if (key == QLatin1String("palette") && applyPalette(value.toString())) {
+        emit changed();
+        emit accentChanged();
+    }
+    if (key == QLatin1String("dynamicAccent"))
+        emit accentChanged();
+    if (key == QLatin1String("ambient"))
+        emit changed();
+    emit optionsChanged();
+}
+
+void Theme::resetOptions()
+{
+    QSettings s;
+    s.remove(QStringLiteral("skin/") + m_skin);
+    setSkin(m_skin);
+}
+
+void Theme::reloadThemes()
+{
+    loadPalettes();
+    applyPalette(m_id);
     emit changed();
     emit accentChanged();
 }
 
+QUrl Theme::skinQml() const
+{
+    return QUrl(m_skinDef.value(QStringLiteral("qml")).toString());
+}
+
+double Theme::ambient() const
+{
+    if (m_opt.contains(QStringLiteral("ambient")))
+        return m_opt.value(QStringLiteral("ambient")).toBool() ? m_paletteAmbient : 0.0;
+    return m_skinDef.value(QStringLiteral("ambient"), 0.0).toDouble();
+}
+
+bool Theme::dynamicAccent() const
+{
+    if (m_opt.contains(QStringLiteral("dynamicAccent")))
+        return m_opt.value(QStringLiteral("dynamicAccent")).toBool();
+    return m_skinDef.value(QStringLiteral("dynamicAccent"), false).toBool();
+}
+
+QColor Theme::accent2() const
+{
+    const QColor c = m_c.value(QStringLiteral("accent2"));
+    return c.isValid() ? c : accentBase();
+}
+
 QColor Theme::accent() const
 {
-    if (!m_dynamic || !m_cover.isValid())
+    if (!dynamicAccent() || !m_cover.isValid())
         return accentBase();
     // Cover colours are often too dark or too grey for UI accents: keep the hue,
     // normalise saturation and lightness so it always reads on this background.
@@ -150,30 +307,12 @@ QColor Theme::accent() const
 QColor Theme::onAccent() const
 {
     const QColor a = accent();
-    if (!m_dynamic || !m_cover.isValid()) {
+    if (!dynamicAccent() || !m_cover.isValid()) {
         const QColor fixed = m_c.value(QStringLiteral("onAccent"));
         if (fixed.isValid())
             return fixed;
     }
     return luminance(a) > 0.35 ? QColor(QStringLiteral("#10131a")) : QColor(QStringLiteral("#ffffff"));
-}
-
-void Theme::setDynamicAccent(bool on)
-{
-    if (on == m_dynamic)
-        return;
-    m_dynamic = on;
-    QSettings().setValue(QStringLiteral("theme/dynamicAccent"), on);
-    emit accentChanged();
-}
-
-void Theme::setAmbientEnabled(bool on)
-{
-    if (on == m_ambientEnabled)
-        return;
-    m_ambientEnabled = on;
-    QSettings().setValue(QStringLiteral("theme/ambient"), on);
-    emit changed();
 }
 
 void Theme::setCoverColor(const QColor &c)
@@ -182,6 +321,24 @@ void Theme::setCoverColor(const QColor &c)
         return;
     m_cover = c;
     emit accentChanged();
+}
+
+void Theme::setCoverPalette(const QVariantList &p)
+{
+    if (p == m_coverPalette)
+        return;
+    m_coverPalette = p;
+    emit coverPaletteChanged();
+}
+
+QColor Theme::coverTone(int index, const QColor &fallback) const
+{
+    if (index >= 0 && index < m_coverPalette.size()) {
+        const QColor c = m_coverPalette.at(index).value<QColor>();
+        if (c.isValid())
+            return c;
+    }
+    return fallback;
 }
 
 QColor Theme::alpha(const QColor &c, double a) const

@@ -120,14 +120,14 @@ Rectangle {
                 width: parent.width
                 height: 18
                 Text {
-                    text: playerBar.fmt(Player.position)
+                    text: window.fmtTime(Player.position)
                     font.family: Theme.uiFont
                     font.pixelSize: 13
                     color: Theme.textDim
                 }
                 Text {
                     anchors.right: parent.right
-                    text: playerBar.fmt(Player.duration)
+                    text: window.fmtTime(Player.duration)
                     font.family: Theme.uiFont
                     font.pixelSize: 13
                     color: Theme.textDim

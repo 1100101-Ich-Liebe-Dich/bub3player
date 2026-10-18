@@ -71,17 +71,18 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("halcyon"));
     QGuiApplication::setOrganizationName(QStringLiteral("halcyon"));
-    QGuiApplication::setApplicationDisplayName(QStringLiteral("Halcyon"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("BuB3Player"));
     QGuiApplication::setDesktopFileName(QStringLiteral("halcyon"));
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-x-generic")));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Halcyon – Musikplayer für große Bibliotheken"));
+    parser.setApplicationDescription(QStringLiteral("BuB3Player – Musikplayer für große Bibliotheken. Projekt präsentiert von www.BAUENUNDBOOTEN.de"));
     parser.addHelpOption();
     parser.addOption({QStringLiteral("db"), QStringLiteral("Andere Datenbankdatei verwenden."), QStringLiteral("file")});
     parser.addOption({QStringLiteral("add-folder"), QStringLiteral("Musikordner zur Bibliothek hinzufügen."), QStringLiteral("dir")});
     parser.addOption({QStringLiteral("view"), QStringLiteral("Mit dieser Ansicht starten (z. B. albums)."), QStringLiteral("id")});
-    parser.addOption({QStringLiteral("theme"), QStringLiteral("Theme wählen (z. B. tiefsee)."), QStringLiteral("id")});
+    parser.addOption({QStringLiteral("skin"), QStringLiteral("Theme wählen: klassik, aurora, synthwave, studio."), QStringLiteral("id")});
+    parser.addOption({QStringLiteral("theme"), QStringLiteral("Farbschema des Themes wählen (z. B. tiefsee)."), QStringLiteral("id")});
     parser.addOption({QStringLiteral("no-scan"), QStringLiteral("Beim Start nicht nach Änderungen suchen.")});
     parser.addOption({QStringLiteral("screenshot"), QStringLiteral("Fenster nach N ms als Bild speichern und beenden (Tests)."),
                       QStringLiteral("file")});
@@ -101,19 +102,23 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Static weights (Manrope 400-700, Bricolage Grotesque 600/700), SIL OFL.
-    for (const char *f : {"Manrope-Regular", "Manrope-Medium", "Manrope-SemiBold", "Manrope-Bold",
-                          "BricolageGrotesque-SemiBold", "BricolageGrotesque-Bold"})
-        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/%1.ttf").arg(QLatin1String(f)));
+    // Bundled fonts for all skins (static weights, SIL OFL).
+    for (const QString &f : QDir(QStringLiteral(":/fonts")).entryList({QStringLiteral("*.ttf")}, QDir::Files))
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/") + f);
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     PlayQueue queue;
     Player player(&queue);
     Library library(&player, &queue);
     Theme theme;
+    if (parser.isSet(QStringLiteral("skin")))
+        theme.setSkin(parser.value(QStringLiteral("skin")));
     if (parser.isSet(QStringLiteral("theme")))
         theme.setTheme(parser.value(QStringLiteral("theme")));
-    QObject::connect(&player, &Player::coverColorChanged, &theme, [&] { theme.setCoverColor(player.coverColor()); });
+    QObject::connect(&player, &Player::coverColorChanged, &theme, [&] {
+        theme.setCoverColor(player.coverColor());
+        theme.setCoverPalette(player.coverPalette());
+    });
 
     QFont font(theme.uiFont());
     font.setPixelSize(14);

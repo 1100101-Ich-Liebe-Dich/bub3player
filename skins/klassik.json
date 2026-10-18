@@ -1,0 +1,17 @@
+{
+  "id": "klassik",
+  "order": 1,
+  "name": "Klassik",
+  "tagline": "Ruhig und aufgeräumt. Ein Farbschema nach Wahl, Leuchten aus dem Cover.",
+  "qml": "qrc:/qml/skins/Klassik.qml",
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "radius": 10,
+  "palettes": "files",
+  "swatch": ["#0C1422", "#162238", "#F2B661"],
+  "style": { "titleSize": 40, "titleUpper": false, "titleSpacing": -0.8 },
+  "settings": [
+    { "key": "palette", "type": "palette", "label": "Farbschema", "default": "tiefsee" },
+    { "key": "dynamicAccent", "type": "bool", "label": "Akzentfarbe aus dem Cover übernehmen", "default": true },
+    { "key": "ambient", "type": "bool", "label": "Farbiges Leuchten aus dem Cover im Hintergrund", "default": true }
+  ]
+}

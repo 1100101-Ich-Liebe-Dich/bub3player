@@ -1,0 +1,40 @@
+{
+  "id": "studio",
+  "order": 4,
+  "name": "Studio",
+  "tagline": "Hi-Fi-Anlage: Plattenspieler mit deinem Cover, Tonarm, VU-Meter mit echten Zeigern, Leuchtanzeige.",
+  "qml": "qrc:/qml/skins/Studio.qml",
+  "fonts": { "ui": "Barlow", "display": "Barlow Condensed", "mono": "VT323" },
+  "radius": 4,
+  "ambient": 0.0,
+  "dynamicAccent": false,
+  "swatch": ["#3B2416", "#D9C9A3", "#F0A030"],
+  "style": { "titleSize": 40, "titleUpper": true, "titleSpacing": 2, "titleWeight": 700 },
+  "palettes": [
+    { "id": "nachtstudio", "name": "Nachtstudio", "dark": true,
+      "colors": { "bg": "#0F0D0C", "panel": "#171412", "surface": "#201C19", "surfaceHover": "#2C2622",
+                  "border": "#3A332D", "text": "#F1E8D4", "textDim": "#B9AB91", "textFaint": "#7A6E5E",
+                  "accent": "#F0A030", "accent2": "#E2533A", "onAccent": "#1C1004" } },
+    { "id": "tageslicht", "name": "Tageslicht", "dark": false,
+      "colors": { "bg": "#E7E2D8", "panel": "#DCD5C8", "surface": "#F3EFE7", "surfaceHover": "#E2DBCD",
+                  "border": "#BDB3A2", "text": "#211C16", "textDim": "#5C5246", "textFaint": "#8E8473",
+                  "accent": "#C26A12", "accent2": "#B23A26", "onAccent": "#FFFFFF" } }
+  ],
+  "settings": [
+    { "key": "palette", "type": "palette", "label": "Licht im Raum", "default": "nachtstudio" },
+    { "key": "material", "type": "choice", "label": "Gehäuse", "default": "walnut",
+      "options": [ { "value": "walnut", "label": "Nussbaum" }, { "value": "aluminium", "label": "Aluminium" },
+                   { "value": "carbon", "label": "Carbon" }, { "value": "lacquer", "label": "Klavierlack" } ] },
+    { "key": "vu", "type": "choice", "label": "VU-Meter", "default": "classic",
+      "options": [ { "value": "classic", "label": "Klassisch" }, { "value": "amber", "label": "Bernstein" },
+                   { "value": "led", "label": "LED-Kette" } ] },
+    { "key": "vfd", "type": "choice", "label": "Leuchtanzeige", "default": "cyan",
+      "options": [ { "value": "cyan", "label": "Türkis" }, { "value": "amber", "label": "Bernstein" },
+                   { "value": "green", "label": "Grün" }, { "value": "white", "label": "Weiß" } ] },
+    { "key": "rpm", "type": "choice", "label": "Plattenteller", "default": "33",
+      "options": [ { "value": "33", "label": "33⅓" }, { "value": "45", "label": "45" }, { "value": "0", "label": "Steht" } ] },
+    { "key": "needle", "type": "range", "label": "Zeiger-Trägheit", "min": 0.1, "max": 1.0, "step": 0.05, "default": 0.45, "percent": true },
+    { "key": "tonearm", "type": "bool", "label": "Tonarm folgt dem Titelverlauf", "default": true },
+    { "key": "compact", "type": "bool", "label": "Kompakter Receiver", "default": false }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "aurora",
+  "order": 2,
+  "name": "Aurora",
+  "tagline": "Fließendes Licht in den Farben deines Covers, echtes Milchglas, Tiefe. Reagiert auf die Musik.",
+  "qml": "qrc:/qml/skins/Aurora.qml",
+  "fonts": { "ui": "Manrope", "display": "Unbounded" },
+  "radius": 14,
+  "ambient": 0.0,
+  "dynamicAccent": true,
+  "swatch": ["#120B2E", "#6A3DF0", "#22D3EE"],
+  "style": { "titleSize": 34, "titleUpper": false, "titleSpacing": -0.5, "titleWeight": 800 },
+  "palettes": [
+    { "id": "nacht", "name": "Nachtglas", "dark": true,
+      "colors": { "bg": "#07060F", "panel": "#140F2A", "surface": "#1C1638", "surfaceHover": "#2A2250",
+                  "border": "#3A3470", "text": "#F4F2FF", "textDim": "#B9B3DA", "textFaint": "#7D77A3",
+                  "accent": "#8B7BFF", "accent2": "#22D3EE", "onAccent": "#0B0820" } },
+    { "id": "perlmutt", "name": "Perlmutt", "dark": false,
+      "colors": { "bg": "#E9E6F5", "panel": "#FFFFFF", "surface": "#FFFFFF", "surfaceHover": "#ECE8FB",
+                  "border": "#D6D0F0", "text": "#16132B", "textDim": "#4D4870", "textFaint": "#837EA6",
+                  "accent": "#5B3DF0", "accent2": "#0E9FB8", "onAccent": "#FFFFFF" } }
+  ],
+  "settings": [
+    { "key": "palette", "type": "palette", "label": "Glas", "default": "nacht" },
+    { "key": "lights", "type": "choice", "label": "Lichtfarben", "default": "cover",
+      "options": [ { "value": "cover", "label": "Aus dem Cover" }, { "value": "aurora", "label": "Polarlicht" },
+                   { "value": "sunset", "label": "Abendrot" }, { "value": "ocean", "label": "Tiefsee" },
+                   { "value": "candy", "label": "Bonbon" } ] },
+    { "key": "intensity", "type": "range", "label": "Leuchtkraft", "min": 0.2, "max": 1.0, "step": 0.05, "default": 0.75, "percent": true },
+    { "key": "speed", "type": "range", "label": "Fließgeschwindigkeit", "min": 0.0, "max": 2.0, "step": 0.1, "default": 0.6, "unit": "×" },
+    { "key": "reactive", "type": "range", "label": "Reaktion auf die Musik", "min": 0.0, "max": 1.0, "step": 0.05, "default": 0.6, "percent": true },
+    { "key": "blur", "type": "range", "label": "Milchglas-Unschärfe", "min": 0.2, "max": 1.0, "step": 0.05, "default": 0.7, "percent": true },
+    { "key": "tint", "type": "range", "label": "Glas-Tönung", "min": 0.1, "max": 0.9, "step": 0.05, "default": 0.45, "percent": true },
+    { "key": "corner", "type": "range", "label": "Eckenradius", "min": 8, "max": 36, "step": 1, "default": 26, "unit": "px" },
+    { "key": "bokeh", "type": "bool", "label": "Schwebende Lichtpunkte", "default": true },
+    { "key": "reflex", "type": "bool", "label": "Lichtreflex folgt der Maus", "default": true },
+    { "key": "grain", "type": "bool", "label": "Feine Körnung (gegen Farbstufen)", "default": true },
+    { "key": "disc", "type": "bool", "label": "Cover dreht sich in der Großansicht", "default": true },
+    { "key": "fps", "type": "choice", "label": "Animation", "default": "60",
+      "options": [ { "value": "60", "label": "Flüssig" }, { "value": "30", "label": "Sparsam" }, { "value": "0", "label": "Aus" } ] }
+  ]
+}

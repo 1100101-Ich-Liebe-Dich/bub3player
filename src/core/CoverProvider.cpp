@@ -296,3 +296,68 @@ QColor CoverProvider::dominantColor(const QImage &source)
         return {};
     return QColor::fromRgbF(float(r[best] / weight[best]), float(g[best] / weight[best]), float(b[best] / weight[best]));
 }
+
+QVariantList CoverProvider::palette(const QImage &source)
+{
+    QVariantList out;
+    if (source.isNull())
+        return out;
+    const QImage img = source.scaled(32, 32, Qt::IgnoreAspectRatio, Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
+    // 18 hue buckets (20 degrees), weighted by how vivid each pixel is.
+    constexpr int N = 18;
+    double w[N] = {0}, r[N] = {0}, g[N] = {0}, b[N] = {0};
+    double dr = 0, dg = 0, db = 0, dw = 0;
+    for (int y = 0; y < img.height(); ++y) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); ++x) {
+            const QColor c(line[x]);
+            const double s = c.hsvSaturationF(), v = c.valueF();
+            if (v < 0.35) { // collect the dark tones separately
+                dr += c.redF(); dg += c.greenF(); db += c.blueF(); dw += 1;
+            }
+            if (s < 0.18 || v < 0.15)
+                continue;
+            const int h = std::max(0, c.hsvHue()) * N / 360 % N;
+            const double wt = s * s * (0.3 + v);
+            w[h] += wt;
+            r[h] += c.redF() * wt;
+            g[h] += c.greenF() * wt;
+            b[h] += c.blueF() * wt;
+        }
+    }
+    // Pick up to three buckets that are at least 3 buckets (60 degrees) apart.
+    QVector<int> picked;
+    for (int k = 0; k < 3; ++k) {
+        int best = -1;
+        for (int i = 0; i < N; ++i) {
+            if (w[i] < 0.4)
+                continue;
+            bool near = false;
+            for (int p : picked) {
+                const int d = std::abs(p - i);
+                if (std::min(d, N - d) < 3)
+                    near = true;
+            }
+            if (!near && (best < 0 || w[i] > w[best]))
+                best = i;
+        }
+        if (best < 0)
+            break;
+        picked << best;
+    }
+    QVector<QColor> cols;
+    for (int i : picked)
+        cols << QColor::fromRgbF(float(r[i] / w[i]), float(g[i] / w[i]), float(b[i] / w[i]));
+    if (cols.isEmpty())
+        return out; // greyscale cover: let the skin use its own colours
+    // Fill missing slots with hue-shifted siblings of the main colour.
+    while (cols.size() < 3) {
+        float h, sat, l, a;
+        cols.first().getHslF(&h, &sat, &l, &a);
+        cols << QColor::fromHslF(std::fmod(h + (cols.size() == 1 ? 0.12f : 0.88f), 1.0f), sat, l);
+    }
+    for (const QColor &c : cols)
+        out << c;
+    out << (dw > 0 ? QColor::fromRgbF(float(dr / dw), float(dg / dw), float(db / dw)) : cols.first().darker(300));
+    return out;
+}

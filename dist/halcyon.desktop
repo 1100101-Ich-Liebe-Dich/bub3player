@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Halcyon
+Name=BuB3Player
 GenericName=Musikplayer
 Comment=Musikplayer für große lokale Bibliotheken und Jellyfin
 Exec=halcyon %U
