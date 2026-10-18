@@ -282,6 +282,10 @@ G_GNUC_END_IGNORE_DEPRECATIONS
     default:
         break;
     }
+    // Everything we need was copied or ref'd above. A sync handler that returns
+    // GST_BUS_DROP owns the message and must unref it, otherwise every message
+    // (30+ spectrum/level messages per second) stays in memory forever.
+    gst_message_unref(msg);
     return GST_BUS_DROP;
 }
 

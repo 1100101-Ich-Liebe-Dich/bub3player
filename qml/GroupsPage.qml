@@ -30,6 +30,11 @@ Item {
     readonly property int columns: Math.max(1, Math.floor((grid.width - side * 2 - (letterJump ? 24 : 0)) / minCell))
     readonly property real cellW: (grid.width - side * 2 - (letterJump ? 24 : 0)) / columns
 
+    // --ui-test scroll: page through the whole grid (memory tests)
+    function scrollStep() {
+        if (grid.contentHeight <= grid.height) return
+        grid.contentY = grid.atYEnd ? grid.originY : Math.min(grid.contentY + grid.height * 0.9, grid.originY + grid.contentHeight - grid.height)
+    }
     function openFirst(row) {
         if (groups.count > 0)
             window.openGroup(groups, Math.min(groups.count - 1, row || 0), page.groupBy)

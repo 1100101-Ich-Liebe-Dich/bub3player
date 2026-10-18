@@ -125,6 +125,9 @@ bool resolve(qint64 trackId, Source &src)
     if (!known) {
         folderImage = findFolderImage(folder);
         QMutexLocker lock(&g_mutex);
+        // Bounded: with huge libraries this map would otherwise only ever grow.
+        if (g_folderCover.size() > 20000)
+            g_folderCover.clear();
         g_folderCover.insert(folderId, folderImage);
     }
 
@@ -172,6 +175,8 @@ QImage produce(const Source &src, int bucket, QString *outPath)
     }
     if (img.isNull()) {
         QMutexLocker lock(&g_mutex);
+        if (g_noArt.size() > 50000)
+            g_noArt.clear();
         g_noArt.insert(src.key);
         return {};
     }

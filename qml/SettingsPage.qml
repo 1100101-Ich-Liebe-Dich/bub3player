@@ -241,6 +241,17 @@ Item {
                         checked: window.lowPower
                         onToggled: window.lowPower = checked
                     }
+                    Text {
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        // live while this page is open
+                        Binding { target: Memory; property: "watching"; value: page.visible }
+                        text: qsTr("Arbeitsspeicher gerade: %1 MB, davon %2 MB eigene Daten (Rest: geteilte Bibliotheken und Grafiktreiber).")
+                              .arg(Memory.residentMb).arg(Memory.privateMb)
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
                     HToggle {
                         width: col.width
                         label: qsTr("Wellenform zum Spulen berechnen (einmal pro Titel, im Hintergrund)")
