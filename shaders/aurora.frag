@@ -50,7 +50,7 @@ void main()
 
     vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t * 0.7));
     vec2 r = vec2(fbm(p + 3.5 * q + vec2(1.7, 9.2) + t * 1.3), fbm(p + 3.5 * q + vec2(8.3, 2.8) - t));
-    float f = fbm(p + 3.0 * r + energy * 0.5);
+    float f = fbm(p + 3.0 * r + energy * 0.15);
 
     vec3 col = base.rgb;
     col = mix(col, c1.rgb, smoothstep(0.18, 0.85, f));
@@ -59,10 +59,10 @@ void main()
 
     // Curtains of light drifting through.
     float band = sin(p.x * 1.4 + r.y * 2.6 + t * 3.0) * 0.5 + 0.5;
-    col += c2.rgb * pow(band, 6.0) * 0.22 * (0.6 + energy);
+    col += c2.rgb * pow(band, 6.0) * 0.22 * (0.7 + energy * 0.5);
 
     float vig = smoothstep(1.35, 0.1, length((uv - 0.5) * vec2(aspect * 0.7, 1.0)));
-    float k = clamp(intensity * (0.95 + 0.35 * boost) + beat * 0.18, 0.0, 1.0);
+    float k = clamp(intensity * (0.95 + 0.35 * boost) + beat * 0.05, 0.0, 1.0);
     col = mix(base.rgb, col, k) * (0.68 + 0.32 * vig) * (1.0 + 0.12 * boost);
 
     if (bokeh > 0.5) {
@@ -75,7 +75,7 @@ void main()
             vec2 d = (uv - c) * vec2(aspect, 1.0);
             float b = smoothstep(rad, rad * 0.55, length(d));
             vec3 bc = mix(c1.rgb, c3.rgb, hash(vec2(fi, 5.5)));
-            col += bc * b * 0.16 * (0.7 + beat * 0.7);
+            col += bc * b * 0.16 * (0.8 + beat * 0.2);
         }
     }
     fragColor = vec4(col, 1.0) * qt_Opacity;

@@ -22,6 +22,8 @@ ApplicationWindow {
     property bool queueOpen: Library.setting("queueOpen", false) === true || Library.setting("queueOpen", false) === "true"
     property bool nowPlayingOpen: false
     property bool visualizer: Library.setting("visualizer", true) !== false && Library.setting("visualizer", true) !== "false"
+    property bool waveform: Library.setting("waveform", true) !== false && Library.setting("waveform", true) !== "false"
+    onWaveformChanged: Library.setSetting("waveform", waveform)
     property bool pauseInactive: Library.setting("pauseInactive", true) !== false && Library.setting("pauseInactive", true) !== "false"
     property int settingsTab: 0
     property bool lowPower: Library.setting("lowPower", false) === true || Library.setting("lowPower", false) === "true"
@@ -55,6 +57,11 @@ ApplicationWindow {
         target: Player
         property: "spectrumEnabled"
         value: window.visualizer && window.onScreen
+    }
+    Binding {
+        target: Player
+        property: "waveformEnabled"
+        value: window.waveform
     }
     Binding {
         target: Player
@@ -236,6 +243,7 @@ ApplicationWindow {
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
             if (a.indexOf("cycle") >= 0) cycleTimer.start()
+            if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
             if (a.indexOf("search") >= 0) {
                 if (window.skin && window.skin.setSearchText) window.skin.setSearchText("nord")
                 window.search("nord")

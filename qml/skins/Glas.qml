@@ -5,8 +5,9 @@ import QtQuick.Window
 import Halcyon
 import ".."
 
-// Skin "Glas": glassmorphism. Glossy spheres drift over a deep gradient; every
-// part of the player is a frosted card above them. Navigation runs along the
+// Skin "Glas": glassmorphism. Soap bubbles rise slowly through soft colour
+// glows (from the cover by default) and follow the music, gently; every part
+// of the player is a frosted card above them. Navigation runs along the
 // top, the player and queue live permanently in a column on the right.
 Item {
     id: skin
@@ -20,8 +21,8 @@ Item {
 
     readonly property int gap: 18
     readonly property real corner: Theme.opt.corner !== undefined ? Theme.opt.corner : 28
-    readonly property real frost: Theme.opt.frost !== undefined ? Theme.opt.frost : 0.75
-    readonly property real tint: Theme.opt.tint !== undefined ? Theme.opt.tint : 0.16
+    readonly property real frost: Theme.opt.frost !== undefined ? Theme.opt.frost : 0.6
+    readonly property real tint: Theme.opt.tint !== undefined ? Theme.opt.tint : 0.12
     readonly property real speed: Theme.opt.speed !== undefined ? Theme.opt.speed : 1.0
     readonly property bool canShade: GraphicsInfo.api !== GraphicsInfo.Software
     readonly property bool np: window.nowPlayingOpen
@@ -31,7 +32,13 @@ Item {
     property real npMix: np ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 560; easing.type: Easing.InOutCubic } }
 
-    // time for the spheres; integrating keeps speed changes smooth
+    // Music, heavily smoothed: bubbles rise a little faster and breathe with
+    // fuller passages. Never a sudden change.
+    readonly property real react: Theme.opt.react !== undefined ? Theme.opt.react : 0.5
+    property real swell: Player.playing ? Math.min(1, Player.energy * 1.3) * react : 0
+    Behavior on swell { NumberAnimation { duration: 2200; easing.type: Easing.InOutSine } }
+
+    // time for the bubbles; integrating keeps speed changes smooth
     property real flow: 0
     property real lastFx: 0
     Connections {
@@ -39,20 +46,14 @@ Item {
         function onFxTimeChanged() {
             var dt = window.fxTime - skin.lastFx
             skin.lastFx = window.fxTime
-            if (dt > 0 && dt < 0.5) skin.flow += dt * skin.speed
+            if (dt > 0 && dt < 0.5) skin.flow += dt * skin.speed * (1 + skin.swell * 1.4)
         }
     }
 
-    // mouse: light reflex on the glass and a little parallax for the spheres
+    // mouse: only a soft light reflex on the glass
     property point mouse: Qt.point(-9999, -9999)
-    property vector2d par: Qt.vector2d(0, 0)
-    Behavior on par { enabled: !skin.np; PropertyAnimation { duration: 600; easing.type: Easing.OutCubic } }
     HoverHandler {
-        onPointChanged: {
-            if (Theme.opt.reflex !== false) skin.mouse = point.position
-            if (Theme.opt.parallax !== false && skin.width > 0)
-                skin.par = Qt.vector2d(point.position.x / skin.width * 2 - 1, point.position.y / skin.height * 2 - 1)
-        }
+        onPointChanged: if (Theme.opt.reflex !== false) skin.mouse = point.position
     }
 
     // ---------- colours ----------
@@ -66,7 +67,7 @@ Item {
         sonne: { b1: "#4D1342", b2: "#1C0619", c: ["#FF8A3D", "#FF4F7B", "#FFD15C", "#FF6F61", "#FFC9A6"], accent: "#FFB347" }
     })
     readonly property var cols: {
-        var mode = Theme.opt.orbs || "beere"
+        var mode = Theme.opt.orbs || "cover"
         if (mode === "cover" && Theme.coverPalette.length >= 3) {
             var cp = Theme.coverPalette
             var h0 = cp[0].hslHue < 0 ? 0.75 : cp[0].hslHue
@@ -115,16 +116,15 @@ Item {
         property real px: 1.0 / height
         property real coverMix: coverAmount
         property real scale: Theme.opt.size !== undefined ? Theme.opt.size : 1.0
-        property vector2d parallax: skin.par
+        property real count: Theme.opt.count !== undefined ? Theme.opt.count : 9
+        property real swell: skin.swell
         property color base1: skin.cols.b1
         property color base2: skin.cols.b2
         property color c1: skin.cols.c[0]
         property color c2: skin.cols.c[1]
         property color c3: skin.cols.c[2]
-        property color c4: skin.cols.c[3]
-        property color c5: skin.cols.c[4]
         property variant cover: coverSrc
-        fragmentShader: "qrc:/shaders/orbs.frag.qsb"
+        fragmentShader: "qrc:/shaders/bubbles.frag.qsb"
     }
     ShaderEffectSource {
         id: softSrc
@@ -147,16 +147,15 @@ Item {
         property real px: 1.0 / Math.max(1, height)
         property real coverMix: Math.min(1, skin.coverAmount)
         property real scale: orbsSoft.scale
-        property vector2d parallax: skin.par
+        property real count: Theme.opt.count !== undefined ? Theme.opt.count : 9
+        property real swell: skin.swell
         property color base1: skin.cols.b1
         property color base2: skin.cols.b2
         property color c1: skin.cols.c[0]
         property color c2: skin.cols.c[1]
         property color c3: skin.cols.c[2]
-        property color c4: skin.cols.c[3]
-        property color c5: skin.cols.c[4]
         property variant cover: coverSrc
-        fragmentShader: "qrc:/shaders/orbs.frag.qsb"
+        fragmentShader: "qrc:/shaders/bubbles.frag.qsb"
     }
 
     // ---------- library ----------

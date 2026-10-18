@@ -79,6 +79,8 @@ signals:
     void message(const QString &text);
 
 private:
+    void maybeAutoplay();
+    QVector<qint64> autoplayPicks(qint64 seed, int count);
     void refreshStats();
     void playIds(QVector<qint64> ids, int start, bool shuffle);
     QVector<qint64> idsForSpec(const QVariantMap &spec);
@@ -88,6 +90,7 @@ private:
     Scanner *m_scanner;
     Player *m_player;
     PlayQueue *m_queue;
+    qint64 m_autoplaySeed = 0;
     QStringList m_roots;
     QVariantList m_views;
     QString m_viewsError;

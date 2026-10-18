@@ -399,9 +399,24 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 16
-                    height: 14
+                    anchors.bottomMargin: 12
+                    height: 24
                     readonly property real frac: Player.duration > 0 ? (dragFrac >= 0 ? dragFrac : Player.position / Player.duration) : 0
+                    // neon waveform of the track behind the progress line
+                    Waveform {
+                        id: neonWave
+                        anchors.fill: parent
+                        interactive: false
+                        showHead: false
+                        dragFrac: seekArea.dragFrac
+                        style: "mirror"
+                        barWidth: 2
+                        barGap: 2
+                        color1: Theme.accent2
+                        color2: Theme.accent
+                        dimColor: Theme.alpha(Theme.text, 0.13)
+                    }
+                    Glow { target: neonWave; visible: skin.glow && neonWave.ready; spread: 1.0; downscale: 3; opacity: 0.6 }
                     Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 2; color: Theme.alpha(Theme.text, 0.15) }
                     Rectangle {
                         id: fillLine
@@ -578,8 +593,19 @@ Item {
             }
             Item {
                 width: parent.width
-                height: 22
+                height: 44
                 Text { anchors.verticalCenter: parent.verticalCenter; text: window.fmtTime(Player.position); font.family: "Orbitron"; font.pixelSize: 16; font.weight: Font.Bold; color: Theme.accent }
+                Waveform {
+                    x: 80; width: parent.width - 160; height: 40
+                    anchors.verticalCenter: parent.verticalCenter
+                    style: "mirror"
+                    barWidth: 3
+                    barGap: 2
+                    showHead: false
+                    color1: Theme.accent2
+                    color2: Theme.accent
+                    dimColor: Theme.alpha(Theme.text, 0.12)
+                }
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     x: 80; width: parent.width - 160; height: 3

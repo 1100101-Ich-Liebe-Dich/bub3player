@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Window
 import Halcyon
 import ".."
 
@@ -9,14 +10,15 @@ import ".."
 Item {
     id: skin
     property alias stack: stack
-    readonly property bool animated: false
+    // only the big view moves (clouds), and only very gently
+    readonly property bool animated: window.nowPlayingOpen && Theme.opt.clouds !== false
     readonly property bool wantsLevels: false
     readonly property int toastMargin: dock.height + 40
     function focusSearch() { sidebar.focusSearch() }
     function clearSearch() { sidebar.clearSearch() }
     function setSearchText(t) { sidebar.searchText = t }
 
-    readonly property real corner: Theme.opt.corner !== undefined ? Theme.opt.corner : 28
+    readonly property real corner: Theme.opt.corner !== undefined ? Theme.opt.corner : 24
     readonly property int gap: 22
 
     property real npMix: window.nowPlayingOpen ? 1 : 0
@@ -187,6 +189,41 @@ Item {
         MouseArea { anchors.fill: parent }
 
         readonly property real dial: Math.min(height * 0.66, width * 0.42)
+
+        // clouds drifting by; music only lets them billow and drift a little faster
+        property real calm: Player.playing ? Math.min(1, Player.energy * 1.4) : 0
+        Behavior on calm { NumberAnimation { duration: 2400; easing.type: Easing.InOutSine } }
+        property real flow: 0
+        property real lastFx: 0
+        Connections {
+            target: window
+            enabled: skin.animated
+            function onFxTimeChanged() {
+                var dt = window.fxTime - nowPlaying.lastFx
+                nowPlaying.lastFx = window.fxTime
+                if (dt > 0 && dt < 0.5) nowPlaying.flow += dt * (0.6 + nowPlaying.calm * 0.9)
+            }
+        }
+        ShaderEffect {
+            id: clouds
+            visible: Theme.opt.clouds !== false && GraphicsInfo.api !== GraphicsInfo.Software
+            width: 220
+            height: Math.max(60, Math.round(220 * parent.height / Math.max(1, parent.width)))
+            property real time: nowPlaying.flow
+            property real aspect: parent.width / Math.max(1, parent.height)
+            property real swell: nowPlaying.calm
+            property color base: Theme.bg
+            property color light: Theme.paletteData.light || Qt.lighter(Theme.bg, 1.2)
+            property color dark: Theme.paletteData.shadow || Qt.darker(Theme.bg, 1.3)
+            fragmentShader: "qrc:/shaders/clouds.frag.qsb"
+        }
+        ShaderEffectSource {
+            anchors.fill: parent
+            visible: clouds.visible
+            sourceItem: clouds
+            hideSource: true
+            smooth: true
+        }
 
         SoftButton {
             x: 26; y: 24

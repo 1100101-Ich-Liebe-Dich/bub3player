@@ -1,8 +1,9 @@
 import QtQuick
 import Halcyon
 
-// Seek bar drawn as a row of level bars: a fixed fingerprint per track at rest,
-// the live spectrum while playing. Played part is in the accent colour.
+// Seek bar: the real waveform of the track once it has been analysed
+// (see Waveform.qml); until then a row of level bars with the live spectrum.
+// Played part is in the accent colour.
 Item {
     id: seek
     property int bars: 56
@@ -10,7 +11,10 @@ Item {
     property bool interactive: true
     property real dragFrac: -1
     readonly property var spec: Player.spectrum
-    readonly property bool live: Player.spectrumEnabled && Player.playing && spec.length > 0
+    readonly property bool hasWave: Player.waveform.length > 0
+    readonly property bool live: !hasWave && Player.spectrumEnabled && Player.playing && spec.length > 0
+    property color waveColor1: Theme.accent
+    property color waveColor2: Theme.accent
     readonly property real frac: Player.duration > 0
                                  ? (dragFrac >= 0 ? dragFrac : Math.min(1, Player.position / Player.duration)) : 0
     implicitHeight: 32
@@ -24,8 +28,23 @@ Item {
         return (0.25 + 0.6 * x) * env
     }
 
+    Waveform {
+        anchors.fill: parent
+        visible: seek.hasWave
+        interactive: false
+        showHead: false
+        dragFrac: seek.dragFrac
+        style: "mirror"
+        barWidth: 2
+        barGap: 1.5
+        color1: seek.waveColor1
+        color2: seek.waveColor2
+        dimColor: Theme.alpha(Theme.text, hover.containsMouse ? 0.3 : 0.2)
+    }
+
     Row {
         id: row
+        visible: !seek.hasWave
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

@@ -42,7 +42,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 0
             Text { text: "BuB3Player"; font.family: skin.mono; font.pixelSize: skin.fs; font.weight: Font.Bold; color: Theme.accent }
-            Text { text: " v0.3 │ Projekt präsentiert von "; font.family: skin.mono; font.pixelSize: skin.fs; color: Theme.textDim }
+            Text { text: " v0.4 │ Projekt präsentiert von "; font.family: skin.mono; font.pixelSize: skin.fs; color: Theme.textDim }
             Text {
                 text: "www.BAUENUNDBOOTEN.de"
                 font.family: skin.mono; font.pixelSize: skin.fs; font.underline: true
@@ -210,6 +210,7 @@ Item {
                             }
                         }
                     }
+                    TButton { text: "[auto:" + (Queue.autoplay ? "an " : "aus") + "]"; on: Queue.autoplay; onClicked: Queue.autoplay = !Queue.autoplay }
                     TButton { text: "[liste]"; on: window.queueOpen; onClicked: window.queueOpen = !window.queueOpen }
                     TButton { text: "[vollbild]"; onClicked: window.nowPlayingOpen = true }
                 }

@@ -16,13 +16,13 @@ Einstellungen. Inhalte und Funktionen sind in allen gleich. Umschalten: Einstell
 
 | Theme | Was es ausmacht | Eigene Einstellungen |
 |---|---|---|
-| **Klassik** | Ruhige Seitenleiste, Leuchten aus dem Cover | 7 Farbschemata, Akzent aus Cover, Leuchten |
-| **Soft** | Neumorphism: Karten und Tasten wachsen weich aus der Fläche oder sind hineingedrückt. Runde Tasten, eingelassene Regler, Großansicht als Drehscheibe mit Fortschrittsring (Knopf ziehen zum Spulen) | Wolke, Sand, Mint, Nacht; Tiefe, Eckenradius, Akzent aus Cover, Spektrum |
-| **Glas** | Glassmorphism: schwebende Milchglas-Karten über glänzenden Kugeln und einem Ring, die langsam treiben und leicht der Maus folgen. Navigation oben als Glasleiste, Player und Warteschlange immer rechts, Großansicht als große Glaskarte | Kugelfarben (Beere, Eis, Sonne, aus dem Cover), Unschärfe, Glas-Helligkeit, Kugelgröße, Bewegung, Cover im Hintergrund, Parallaxe, Lichtreflex, Eckenradius, Animation |
-| **Aurora** | Fließendes Licht in den Cover-Farben, Milchglas mit irisierenden Kanten, Dock mit Fortschrittsring, Großansicht mit drehender Cover-Scheibe und Rundum-Spektrum. Reagiert auf die Musik | Glas hell/dunkel, Lichtfarben, Leuchtkraft, Geschwindigkeit, Musik-Reaktion, Unschärfe, Tönung, Eckenradius, Lichtpunkte, Reflex, Körnung, Scheibe, Animation |
-| **Vintage** | 60er/70er-Wohnzimmer: Tapete, Möbel aus Holz, Plattenspieler mit Stroboskop-Punkten und Tonarm, abgegriffene Plattenhülle. Receiver mit beleuchteter Senderskala (der rote Zeiger ist die Spielposition), glühenden Lämpchen, Kipphebeln, Klaviertasten, VU-Metern und gerändelten Knöpfen (TUNING spult). Taste PHONO öffnet den großen Plattenspieler mit Rückseite der Hülle | Nussbaum & Orange, Teak & Avocado, Palisander & Petrol; Frontplatte (Silber, Champagner, Schwarz), Skalenlicht, Tapete (Kreise, Wellen, Blumen, Holzvertäfelung, schlicht), Raumlicht, VU-Meter, Zeiger-Trägheit, 33⅓/45, Tonarm, Aufglühen |
-| **Synthwave** | Retro-Sonne, Neon-Gitter im Takt, HUD-Panels, LED-Spektrum, Glitch beim Titelwechsel | Farbwelten, Gitter-Tempo, Takt-Puls, Scanlines, Sonne, Sterne, Berge, Glitch, Neon, Animation |
-| **Hi-Fi Turm** | 90er-Minianlage: Leuchtdisplay mit 14-Segment-Lauftext, Zeit, Disc-Anzeige und 20-Band-Spektrum mit Spitzenwert, Lautstärkerad mit LED-Kranz, CD-Wechsler mit regenbogenschillernder CD, Doppel-Kassettendeck mit handbeschriftetem Etikett, drehenden Spulen und Bandwickel, der mit dem Titel wandert, Zählwerk, Lauflicht. Großansicht: Turm in der Mitte, Boxen mit pumpenden Bässen und LED-Ringen, Scheinwerfer als Lichtorgel, Spiegelkugel | Displayfarbe (Türkis, Orange, Grün, Rot), Displayanzeige, Demo/Blinken, Dimmer, Lichtshow, Spiegelkugel, LED-Ringe, Animation |
+| **Klassik** | Ruhige Seitenleiste, Leuchten aus dem Cover, Wellenform zum Spulen | 7 Farbschemata, Akzent aus Cover, Leuchten |
+| **Soft** | Neumorphism: Karten und Tasten wachsen weich aus der Fläche oder sind hineingedrückt. Runde Tasten, eingelassene Regler, Großansicht als Drehscheibe mit Fortschrittsring (Knopf ziehen zum Spulen), dahinter ziehen langsam weiche Wolken, die sanft der Musik folgen | Regenwolke, Sand, Mint, Nacht; Tiefe (Standard 4 px), Rundung (24 px), Akzent aus Cover, Spektrum, Wolken, Animation |
+| **Glas** | Glassmorphism: Milchglas-Karten über Seifenblasen mit schillerndem Rand, die langsam aufsteigen und mit der Musik sanft schneller werden und atmen. Farben aus dem Cover. Navigation oben als Glasleiste, Player und Warteschlange immer rechts, Großansicht als große Glaskarte | Farben (Cover, Beere, Eis, Sonne), Unschärfe (60 %), Glas-Helligkeit (12 %), Anzahl, Größe, Aufsteigen, Musik-Reaktion, Cover im Hintergrund, Lichtreflex, Eckenradius, Animation |
+| **Aurora** | Fließendes Licht in den Cover-Farben, Milchglas mit irisierenden Kanten, Dock mit Fortschrittsring, Großansicht mit drehender Cover-Scheibe und Rundum-Spektrum. Reagiert geglättet auf die Musik, ohne Aufblitzen. Wellenform zum Spulen | Glas hell/dunkel, Lichtfarben, Leuchtkraft, Geschwindigkeit, Musik-Reaktion, Unschärfe, Tönung, Eckenradius, Lichtpunkte, Reflex, Körnung, Scheibe, Animation |
+| **Vintage** | 60er/70er-Wohnzimmer: Tapete, Möbel aus Holz, Plattenspieler mit Stroboskop-Punkten und Tonarm, abgegriffene Plattenhülle. Receiver mit beleuchteter Senderskala (der rote Zeiger ist die Spielposition), glühenden Lämpchen, Kipphebeln, Klaviertasten, VU-Metern und gerändelten Knöpfen (TUNING spult). Rechts unten die Warteschlange, Taste COVER zeigt stattdessen die Plattenhülle, Taste PHONO öffnet den großen Plattenspieler mit Rückseite der Hülle | Nussbaum & Orange, Teak & Avocado, Palisander & Petrol; Frontplatte (Silber, Champagner, Schwarz), Skalenlicht, Tapete (Kreise, Wellen, Blumen, Holzvertäfelung, schlicht), Raumlicht, VU-Meter, Zeiger-Trägheit, 33⅓/45, Tonarm, Hülle statt Liste, Aufglühen |
+| **Synthwave** | Retro-Sonne, Neon-Gitter im Takt, HUD-Panels, LED-Spektrum, Neon-Wellenform zum Spulen, Glitch beim Titelwechsel | Farbwelten, Gitter-Tempo, Takt-Puls, Scanlines, Sonne, Sterne, Berge, Glitch, Neon, Animation |
+| **Hi-Fi Turm** | 90er-Minianlage: Leuchtdisplay mit 14-Segment-Lauftext, Zeit, Disc-Anzeige und 20-Band-Spektrum mit Spitzenwert, Lautstärkerad mit LED-Kranz, CD-Wechsler mit regenbogenschillernder CD, Doppel-Kassettendeck mit handbeschriftetem Etikett, drehenden Spulen und Bandwickel, der mit dem Titel wandert, Zählwerk, Lauflicht. Großansicht: Turm und Boxen vor einer dunklen Kunststoffwand, darüber ein Oszilloskop (oder eine Chrom-Welle), das Bässen, Mitten und Höhen folgt | Displayfarbe (Türkis, Orange, Grün, Rot), Displayanzeige, Demo/Blinken, Dimmer, Hintergrund (Oszilloskop, Chrom-Welle, schlicht), LED-Ringe, Animation |
 | **Terminal** | Textmodus auf einer Bildröhre: Kästen aus Linien, Cover als ASCII-Art, Spektrum aus Blockzeichen, Fortschritt als `[====>····]`, Tasten in eckigen Klammern, Tastenhilfe unten, Startsequenz, Scanlines | Phosphor-Grün, Bernstein, Papierweiß, Brotkasten (8-Bit); Scanlines, Bildrand, Flimmern, ASCII-Raster, ASCII in Farbe, Startsequenz |
 
 Für ältere Rechner: Einstellungen → Allgemein → **Leistung** (Sparmodus, Animationen im
@@ -30,16 +30,27 @@ Hintergrund anhalten, Musik-Analyse aus) und in jedem animierten Theme „Animat
 Ohne GPU-Beschleunigung schalten alle Themes automatisch auf einfache Flächen um.
 Wer vorher „Studio“ benutzt hat, landet automatisch im neuen Vintage-Theme.
 
-Bilder: [Soft](docs/screenshots/soft-bibliothek.jpg), [Soft Nacht Großansicht](docs/screenshots/soft-nacht-grossansicht.jpg),
+Bilder: [Soft](docs/screenshots/soft-bibliothek.jpg), [Soft Großansicht mit Wolken](docs/screenshots/soft-regenwolke-grossansicht.jpg),
 [Glas](docs/screenshots/glas-bibliothek.jpg), [Glas Großansicht](docs/screenshots/glas-grossansicht.jpg),
 [Vintage](docs/screenshots/vintage-bibliothek.jpg), [Vintage Plattenspieler](docs/screenshots/vintage-plattenspieler.jpg),
-[Hi-Fi Turm](docs/screenshots/turm-bibliothek.jpg), [Turm Großansicht](docs/screenshots/turm-grossansicht.jpg),
-[Turm Orange](docs/screenshots/turm-orange.jpg), [Terminal](docs/screenshots/terminal-bibliothek.jpg),
-[Terminal Bernstein](docs/screenshots/terminal-bernstein.jpg), [Aurora](docs/screenshots/aurora-grossansicht.jpg),
-[Synthwave](docs/screenshots/synthwave-grossansicht.jpg), [Klassik](docs/screenshots/klassik.jpg),
-[Theme-Einstellungen](docs/screenshots/theme-einstellungen.jpg)
+[Hi-Fi Turm](docs/screenshots/turm-bibliothek.jpg), [Turm Großansicht (Oszilloskop)](docs/screenshots/turm-grossansicht.jpg),
+[Turm Chrom-Welle](docs/screenshots/turm-chrom.jpg), [Terminal](docs/screenshots/terminal-bibliothek.jpg),
+[Terminal Bernstein](docs/screenshots/terminal-bernstein.jpg), [Aurora mit Wellenform](docs/screenshots/aurora-grossansicht.jpg),
+[Synthwave Wellenform](docs/screenshots/synthwave-wellenform.jpg), [Autoplay](docs/screenshots/autoplay-warteschlange.jpg),
+[Klassik](docs/screenshots/klassik.jpg), [Theme-Einstellungen](docs/screenshots/theme-einstellungen.jpg)
 
 ## Was schon geht
+
+**Neu in 0.4:**
+- **Wellenform zum Spulen** (Klassik, Aurora, Synthwave): Jeder Titel wird einmal im Hintergrund
+  analysiert (eigene, gedrosselte GStreamer-Pipeline, unabhängig von der Wiedergabe, ca. 0,25 s
+  für 4 Minuten FLAC) und als 480-Byte-Datei in `~/.cache/halcyon/waves/` abgelegt. Der nächste
+  Titel wird schon vorbereitet. Abschaltbar unter Einstellungen → Leistung.
+- **Autoplay (erste Stufe)**: Geht die Warteschlange zu Ende, werden passende Titel angehängt
+  (gleiches Genre und ähnliche Zeit, ein paar vom selben Künstler, nichts aus den letzten zwei
+  Tagen, nichts doppelt). Schalter: Stern-Symbol in der Warteschlange, Einstellungen → Autoplay,
+  im Terminal `[auto]`. Bei „Wiederholen“ pausiert Autoplay. Die Empfehlungs-Engine (Phase 3)
+  liefert später die Titel für genau diese Stelle.
 
 **Bibliothek**
 - Inkrementeller Zwei-Phasen-Scanner: erst Ordner (Bibliothek sofort nutzbar), dann Tags im
@@ -219,11 +230,12 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 
 1. **Phase 1 – fertig:** lokale Bibliothek, Scanner, Ansichten, Wiedergabe
 1b. **Themes – fertig:** Klassik, Soft, Glas, Aurora, Vintage, Synthwave, Hi-Fi Turm, Terminal,
-    jedes mit eigenen Einstellungen
+    jedes mit eigenen Einstellungen; Wellenform zum Spulen, Autoplay (einfach)
 2. **Phase 2 – Jellyfin:** Anmeldung, inkrementeller Abgleich in dieselbe Datenbank
    (Tabelle `sources` ist schon da), Streaming, Ordneransicht über Jellyfin-Pfade, Scrobbling
 3. **Phase 3 – Empfehlungen:** aus dem Hörverlauf (zusammen gehört, Skips, Tageszeit),
-   „Mehr wie dieser Titel“, endlose Radio-Warteschlange
+   „Mehr wie dieser Titel“, endlose Radio-Warteschlange. Andockpunkt ist schon da:
+   `Library::autoplayPicks()` – heute Genre/Zeit/Künstler, später die Empfehlungen
 4. **Phase 4 – Audioanalyse und Automix:** BPM, Tonart, Energie, Lautheit im Hintergrund;
    Übergänge an Stille-/Intro-Grenzen, Crossfade mit zwei Pipelines
 5. **Phase 5:** Equalizer, Ausgabegerät wählen / Bit-Perfect über ALSA, Playlists und

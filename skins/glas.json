@@ -2,34 +2,174 @@
   "id": "glas",
   "order": 3,
   "name": "Glas",
-  "tagline": "Glassmorphism: schwebende Milchglas-Karten über leuchtenden Kugeln, Navigation oben, Player immer rechts.",
+  "tagline": "Glassmorphism: Milchglas-Karten über aufsteigenden Seifenblasen, die sanft der Musik folgen. Navigation oben, Player immer rechts.",
   "qml": "qrc:/qml/skins/Glas.qml",
-  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "fonts": {
+    "ui": "Manrope",
+    "display": "Bricolage Grotesque"
+  },
   "radius": 14,
   "ambient": 0.0,
   "dynamicAccent": false,
-  "swatch": ["#2A1A6E", "#FF6FB5", "#6FE3FF"],
-  "style": { "titleSize": 40, "titleUpper": false, "titleSpacing": -0.8, "titleWeight": 700, "controls": "glass" },
+  "swatch": [
+    "#2A1A6E",
+    "#FF6FB5",
+    "#6FE3FF"
+  ],
+  "style": {
+    "titleSize": 40,
+    "titleUpper": false,
+    "titleSpacing": -0.8,
+    "titleWeight": 700,
+    "controls": "glass"
+  },
   "palettes": [
-    { "id": "kristall", "name": "Kristall", "dark": true,
-      "colors": { "bg": "#1D1550", "panel": "#2C2468", "surface": "#352C78", "surfaceHover": "#41378C",
-                  "border": "#7A70C8", "text": "#FFFFFF", "textDim": "#EEEBFF", "textFaint": "#C4BEEA",
-                  "accent": "#FF6FB5", "accent2": "#6FE3FF", "onAccent": "#2A0D25",
-                  "light": "#FFFFFF", "shadow": "#0B0628" } }
+    {
+      "id": "kristall",
+      "name": "Kristall",
+      "dark": true,
+      "colors": {
+        "bg": "#1D1550",
+        "panel": "#2C2468",
+        "surface": "#352C78",
+        "surfaceHover": "#41378C",
+        "border": "#7A70C8",
+        "text": "#FFFFFF",
+        "textDim": "#EEEBFF",
+        "textFaint": "#C4BEEA",
+        "accent": "#FF6FB5",
+        "accent2": "#6FE3FF",
+        "onAccent": "#2A0D25",
+        "light": "#FFFFFF",
+        "shadow": "#0B0628"
+      }
+    }
   ],
   "settings": [
-    { "key": "orbs", "type": "choice", "label": "Kugeln", "default": "beere",
-      "options": [ { "value": "beere", "label": "Beere (Pink, Violett, Türkis)" }, { "value": "eis", "label": "Eis (Blau, Türkis, Weiß)" },
-                   { "value": "sonne", "label": "Sonne (Orange, Koralle, Gold)" }, { "value": "cover", "label": "Aus dem Cover" } ] },
-    { "key": "frost", "type": "range", "label": "Milchglas-Unschärfe", "min": 0.2, "max": 1.0, "step": 0.05, "default": 0.75, "percent": true },
-    { "key": "tint", "type": "range", "label": "Glas-Helligkeit", "min": 0.04, "max": 0.4, "step": 0.02, "default": 0.16, "percent": true },
-    { "key": "size", "type": "range", "label": "Größe der Kugeln", "min": 0.6, "max": 1.4, "step": 0.05, "default": 1.0, "unit": "×" },
-    { "key": "speed", "type": "range", "label": "Bewegung der Kugeln", "min": 0.0, "max": 3.0, "step": 0.1, "default": 1.0, "unit": "×" },
-    { "key": "coverBg", "type": "bool", "label": "Cover im Hintergrund", "default": false },
-    { "key": "parallax", "type": "bool", "label": "Kugeln folgen leicht der Maus", "default": true },
-    { "key": "reflex", "type": "bool", "label": "Lichtreflex auf dem Glas", "default": true },
-    { "key": "corner", "type": "range", "label": "Eckenradius", "min": 10, "max": 40, "step": 1, "default": 28, "unit": "px" },
-    { "key": "fps", "type": "choice", "label": "Animation", "default": "30",
-      "options": [ { "value": "60", "label": "Flüssig" }, { "value": "30", "label": "Sparsam" }, { "value": "0", "label": "Aus" } ] }
+    {
+      "key": "orbs",
+      "type": "choice",
+      "label": "Farben",
+      "default": "cover",
+      "options": [
+        {
+          "value": "cover",
+          "label": "Aus dem Cover"
+        },
+        {
+          "value": "beere",
+          "label": "Beere (Pink, Violett, Türkis)"
+        },
+        {
+          "value": "eis",
+          "label": "Eis (Blau, Türkis, Weiß)"
+        },
+        {
+          "value": "sonne",
+          "label": "Sonne (Orange, Koralle, Gold)"
+        }
+      ]
+    },
+    {
+      "key": "frost",
+      "type": "range",
+      "label": "Milchglas-Unschärfe",
+      "min": 0.2,
+      "max": 1.0,
+      "step": 0.05,
+      "default": 0.6,
+      "percent": true
+    },
+    {
+      "key": "tint",
+      "type": "range",
+      "label": "Glas-Helligkeit",
+      "min": 0.04,
+      "max": 0.4,
+      "step": 0.02,
+      "default": 0.12,
+      "percent": true
+    },
+    {
+      "key": "count",
+      "type": "range",
+      "label": "Anzahl der Seifenblasen",
+      "min": 4,
+      "max": 14,
+      "step": 1,
+      "default": 9
+    },
+    {
+      "key": "size",
+      "type": "range",
+      "label": "Größe der Seifenblasen",
+      "min": 0.6,
+      "max": 1.6,
+      "step": 0.05,
+      "default": 1.0,
+      "unit": "×"
+    },
+    {
+      "key": "speed",
+      "type": "range",
+      "label": "Aufsteigen",
+      "min": 0.0,
+      "max": 3.0,
+      "step": 0.1,
+      "default": 1.0,
+      "unit": "×"
+    },
+    {
+      "key": "react",
+      "type": "range",
+      "label": "Reaktion auf die Musik (sanft)",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.05,
+      "default": 0.5,
+      "percent": true
+    },
+    {
+      "key": "coverBg",
+      "type": "bool",
+      "label": "Cover im Hintergrund",
+      "default": false
+    },
+    {
+      "key": "reflex",
+      "type": "bool",
+      "label": "Weicher Lichtreflex auf dem Glas",
+      "default": true
+    },
+    {
+      "key": "corner",
+      "type": "range",
+      "label": "Eckenradius",
+      "min": 10,
+      "max": 40,
+      "step": 1,
+      "default": 28,
+      "unit": "px"
+    },
+    {
+      "key": "fps",
+      "type": "choice",
+      "label": "Animation",
+      "default": "30",
+      "options": [
+        {
+          "value": "60",
+          "label": "Flüssig"
+        },
+        {
+          "value": "30",
+          "label": "Sparsam"
+        },
+        {
+          "value": "0",
+          "label": "Aus"
+        }
+      ]
+    }
   ]
 }

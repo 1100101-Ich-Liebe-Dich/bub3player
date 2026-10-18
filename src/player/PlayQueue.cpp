@@ -1,5 +1,7 @@
 #include "player/PlayQueue.h"
 
+#include <QSettings>
+
 #include "core/Paths.h"
 #include "library/TrackCache.h"
 
@@ -27,7 +29,20 @@ void shuffleRange(QVector<int> &v, int from)
 }
 } // namespace
 
-PlayQueue::PlayQueue(QObject *parent) : QAbstractListModel(parent) {}
+PlayQueue::PlayQueue(QObject *parent) : QAbstractListModel(parent)
+{
+    m_autoplay = QSettings().value(QStringLiteral("player/autoplay"), false).toBool();
+}
+
+void PlayQueue::setAutoplay(bool on)
+{
+    if (on == m_autoplay)
+        return;
+    m_autoplay = on;
+    QSettings().setValue(QStringLiteral("player/autoplay"), on);
+    emit modeChanged();
+    emit upcomingChanged();
+}
 
 int PlayQueue::rowCount(const QModelIndex &parent) const
 {

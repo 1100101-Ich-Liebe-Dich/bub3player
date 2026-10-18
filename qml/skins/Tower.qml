@@ -59,11 +59,11 @@ Item {
         color: Qt.rgba(skin.ink.r, skin.ink.g, skin.ink.b, 0.13 + skin.energy * 0.08)
     }
 
-    // ---------- light show (big view) ----------
+    // ---------- big view backdrop: dark plastic wall with a 90s scope ----------
     Item {
         id: show
         anchors.fill: parent
-        opacity: skin.npMix * (Theme.opt.lightshow !== false ? 1 : 0)
+        opacity: skin.npMix
         visible: opacity > 0.01
         readonly property var spec: Player.spectrum
         function bandAvg(a, b) {
@@ -73,107 +73,42 @@ Item {
             for (var i = i0; i < i1; ++i) m += s[i]
             return m / (i1 - i0)
         }
-        readonly property real bass: bandAvg(0, 0.12)
-        readonly property real mid: bandAvg(0.12, 0.4)
-        readonly property real high: bandAvg(0.4, 1.0)
+        // smoothed: the trace swells with the music, it never jumps
+        property real bass: visible ? bandAvg(0, 0.12) : 0
+        property real mid: visible ? bandAvg(0.12, 0.4) : 0
+        property real high: visible ? bandAvg(0.4, 1.0) : 0
+        Behavior on bass { NumberAnimation { duration: 280; easing.type: Easing.OutQuad } }
+        Behavior on mid { NumberAnimation { duration: 240; easing.type: Easing.OutQuad } }
+        Behavior on high { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
+        ShaderEffect {
+            id: scope
+            anchors.fill: parent
+            visible: skin.canShade
+            property real time: skin.t
+            property real aspect: width / Math.max(1, height)
+            property real mode: Theme.opt.backdrop === "chrome" ? 1 : Theme.opt.backdrop === "plain" ? 2 : 0
+            property real bass: show.bass
+            property real mid: show.mid
+            property real high: show.high
+            property real centre: 0.12
+            property color ink: skin.ink
+            property color wall: "#17191d"
+            fragmentShader: "qrc:/shaders/scope.frag.qsb"
+        }
+        Rectangle { // software renderer
+            anchors.fill: parent
+            visible: !skin.canShade
+            color: "#15171a"
+        }
         // floor
         Rectangle {
             anchors.bottom: parent.bottom
-            width: parent.width; height: parent.height * 0.16
+            width: parent.width; height: parent.height * 0.1
             gradient: Gradient {
                 GradientStop { position: 0; color: "#00000000" }
-                GradientStop { position: 0.15; color: "#121418" }
-                GradientStop { position: 1; color: "#060708" }
-            }
-        }
-        // spotlights on a truss along the top
-        Rectangle {
-            y: 8; width: parent.width; height: 6
-            gradient: Gradient {
-                GradientStop { position: 0; color: "#5b6168" }
-                GradientStop { position: 1; color: "#1c1f23" }
-            }
-        }
-        Repeater {
-            model: [["#FF2A4A", "bass", 0.0], ["#FFD23A", "mid", 1.3], ["#3AFF7A", "high", 2.1], ["#3A8BFF", "high", 3.4], ["#FF3AE0", "mid", 4.2], ["#FF8A2A", "bass", 5.5]]
-            Item {
-                id: spot
-                readonly property real lvl: modelData[1] === "bass" ? show.bass : modelData[1] === "mid" ? show.mid : show.high
-                readonly property real fx: (index + 0.5) / 6
-                x: show.width * fx
-                y: 10
-                ShaderEffect {
-                    visible: skin.canShade
-                    width: show.height * 0.75
-                    height: show.height * 1.05
-                    x: -width / 2
-                    y: 0
-                    transform: Rotation {
-                        origin.x: show.height * 0.375
-                        origin.y: 0
-                        angle: Math.sin(skin.t * (0.5 + index * 0.13) + modelData[2]) * 28 + (spot.fx - 0.5) * -30
-                    }
-                    property color color: modelData[0]
-                    property real intensity: Math.min(1, 0.12 + spot.lvl * 1.6)
-                    property real spread: 0.16
-                    fragmentShader: "qrc:/shaders/beam.frag.qsb"
-                }
-                Rectangle { // the can
-                    x: -11; y: -2
-                    width: 22; height: 18; radius: 4
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: "#3a3e44" }
-                        GradientStop { position: 1; color: "#0d0e10" }
-                    }
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        width: 16; height: 5; radius: 2
-                        color: modelData[0]
-                        opacity: 0.3 + spot.lvl * 0.7
-                    }
-                }
-            }
-        }
-        // mirror ball and its sparkles
-        Item {
-            visible: Theme.opt.mirrorball !== false
-            anchors.fill: parent
-            Rectangle { x: parent.width / 2 - 0.5; y: 0; width: 1; height: 54; color: "#6a7078" }
-            Canvas {
-                id: ball
-                x: parent.width / 2 - 26; y: 50
-                width: 52; height: 52
-                onPaint: {
-                    var c = getContext("2d"), r = 26
-                    c.reset()
-                    c.save(); c.beginPath(); c.arc(r, r, r, 0, Math.PI * 2); c.clip()
-                    for (var yy = 0; yy < 52; yy += 5)
-                        for (var xx = 0; xx < 52; xx += 5) {
-                            var v = Math.floor(90 + Math.random() * 150)
-                            c.fillStyle = "rgb(" + v + "," + v + "," + (v + 10) + ")"
-                            c.fillRect(xx + 0.5, yy + 0.5, 4, 4)
-                        }
-                    var g = c.createRadialGradient(r * 0.7, r * 0.6, 2, r, r, r)
-                    g.addColorStop(0, "rgba(255,255,255,0.35)"); g.addColorStop(1, "rgba(0,0,0,0.55)")
-                    c.fillStyle = g; c.fillRect(0, 0, 52, 52)
-                    c.restore()
-                }
-                Component.onCompleted: requestPaint()
-            }
-            Repeater {
-                model: 36
-                Rectangle {
-                    readonly property real seedA: (index * 137.5) % 360 * Math.PI / 180
-                    readonly property real dist: 0.25 + ((index * 53) % 70) / 100
-                    readonly property real ang: seedA + skin.t * 0.18
-                    x: show.width / 2 + Math.cos(ang) * show.width * 0.55 * dist
-                    y: show.height * 0.42 + Math.sin(ang) * show.height * 0.45 * dist
-                    width: 5; height: 5; radius: 2.5
-                    color: "white"
-                    opacity: (0.25 + 0.75 * Math.abs(Math.sin(skin.t * 2.2 + index))) * (0.4 + show.high)
-                }
+                GradientStop { position: 0.2; color: "#0d0e10" }
+                GradientStop { position: 1; color: "#060607" }
             }
         }
     }
@@ -234,7 +169,7 @@ Item {
 
     // ---------- speakers ----------
     readonly property real libScale: Math.min((height - 2 * gap) / 860, (width * 0.34) / 420)
-    readonly property real npScale: Math.min(height * 0.84 / 860, width * 0.96 / (420 + 2 * 300 + 2 * 50))
+    readonly property real npScale: Math.min(height * 0.74 / 860, width * 0.96 / (420 + 2 * 300 + 2 * 50))
     readonly property real s: libScale + (npScale - libScale) * npMix
     readonly property real floorY: height * (1 - 0.04 * npMix) - gap * (1 - npMix)
     TwSpeaker {
@@ -249,7 +184,7 @@ Item {
         beat: skin.beat
         energy: skin.energy
         phase: skin.t
-        lights: Theme.opt.speakerLeds !== false
+        lights: Theme.opt.speakerLeds === true
         side: "L"
     }
     TwSpeaker {
@@ -264,7 +199,7 @@ Item {
         beat: skin.beat
         energy: skin.energy
         phase: skin.t + 1
-        lights: Theme.opt.speakerLeds !== false
+        lights: Theme.opt.speakerLeds === true
         side: "R"
     }
 

@@ -215,6 +215,17 @@ Item {
                 }
 
                 Section {
+                    title: qsTr("Autoplay")
+                    text: qsTr("Wenn die Warteschlange zu Ende geht, hängt der Player passende Titel an: gleiches Genre und ähnliche Zeit, ein paar vom selben Künstler, nichts aus den letzten zwei Tagen. Das ist die erste, einfache Stufe; später kommen hier die Empfehlungen aus deinem Hörverlauf und der Klanganalyse dazu. Schalter auch in der Warteschlange (Stern-Symbol).")
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Autoplay: am Ende mit passender Musik weitermachen")
+                        checked: Queue.autoplay
+                        onToggled: Queue.autoplay = checked
+                    }
+                }
+
+                Section {
                     title: qsTr("Leistung")
                     text: qsTr("Für ältere Rechner: Effekte lassen sich hier und in den Theme-Einstellungen zurückfahren.")
                     HToggle {
@@ -229,6 +240,12 @@ Item {
                         label: qsTr("Sparmodus: Effekte mit höchstens 30 Bildern/s, Musik-Analyse halb so oft")
                         checked: window.lowPower
                         onToggled: window.lowPower = checked
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Wellenform zum Spulen berechnen (einmal pro Titel, im Hintergrund)")
+                        checked: window.waveform
+                        onToggled: window.waveform = checked
                     }
                     HToggle {
                         width: col.width

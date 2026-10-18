@@ -32,6 +32,18 @@ Rectangle {
             color: Theme.textDim
         }
         IconButton {
+            anchors.right: clearBtn.left
+            anchors.rightMargin: 2
+            y: 22
+            iconName: "sparkle"
+            iconSize: 18
+            active: Queue.autoplay
+            tip: Queue.autoplay ? qsTr("Autoplay an: am Ende geht es mit passender Musik weiter")
+                                : qsTr("Autoplay: am Ende passende Titel anhängen")
+            onClicked: Queue.autoplay = !Queue.autoplay
+        }
+        IconButton {
+            id: clearBtn
             anchors.right: parent.right
             anchors.rightMargin: 14
             y: 22
@@ -58,6 +70,25 @@ Rectangle {
                 Qt.callLater(function () { list.positionViewAtIndex(Queue.currentRow, mode) })
         }
         Component.onCompleted: showCurrent(ListView.Beginning)
+        footer: Item {
+            width: list.width
+            height: Queue.autoplay && Queue.count > 0 ? 54 : 0
+            visible: height > 0
+            Row {
+                x: 24
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                Icon { anchors.verticalCenter: parent.verticalCenter; name: "sparkle"; size: 16; color: Theme.accent }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Queue.repeat !== 0 ? qsTr("Autoplay pausiert, solange Wiederholen an ist")
+                                             : qsTr("Autoplay: danach geht es passend weiter")
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                    color: Theme.textDim
+                }
+            }
+        }
         onHeightChanged: if (height > 100) showCurrent(ListView.Beginning)
         Connections {
             target: Queue

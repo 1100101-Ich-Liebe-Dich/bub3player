@@ -31,6 +31,8 @@ Item {
     readonly property color engraveSoft: darkFace ? "#9C9486" : "#5C5142"
     readonly property color dialLight: Theme.opt.dial === "blue" ? "#5FC8F0" : Theme.opt.dial === "green" ? "#7DE38A" : "#FFB45A"
     readonly property real rpm: Theme.opt.rpm === "45" ? 45 : 33.333
+    // Lower right: the queue by default; the COVER key shows the record sleeve instead.
+    readonly property bool showCover: Theme.opt.cover === true
 
     property real npMix: window.nowPlayingOpen ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 520; easing.type: Easing.InOutCubic } }
@@ -126,12 +128,12 @@ Item {
                         anchors.margins: 2
                         transparent: true
                         clip: true
-                        visible: window.queueOpen
+                        visible: !skin.showCover
                     }
                     Item {
                         anchors.fill: parent
                         anchors.margins: 14
-                        visible: !window.queueOpen
+                        visible: skin.showCover
                         VtSleeve {
                             id: smallSleeve
                             width: parent.width
@@ -429,7 +431,7 @@ Item {
                         VtKey { width: 64; iconName: Player.playing ? "pause" : "play"; label: "PLAY"; latched: Player.playing; onClicked: Player.toggle() }
                         VtKey { width: 50; iconName: "next"; label: ""; onClicked: Player.next() }
                         Item { width: 8; height: 1 }
-                        VtKey { width: 58; label: "LISTE"; latched: window.queueOpen; onClicked: window.queueOpen = !window.queueOpen }
+                        VtKey { width: 58; label: "COVER"; latched: skin.showCover; onClicked: Theme.setOption("cover", !skin.showCover) }
                         VtKey { width: 58; label: "PHONO"; latched: window.nowPlayingOpen; enabled: Player.currentId > 0 || window.nowPlayingOpen; onClicked: window.nowPlayingOpen = !window.nowPlayingOpen }
                     }
                 }

@@ -9,6 +9,8 @@
 #include <QVariantList>
 #include <QVector>
 
+#include "player/Waveform.h"
+
 typedef struct _GstElement GstElement;
 typedef struct _GstMessage GstMessage;
 typedef struct _GstBus GstBus;
@@ -54,6 +56,9 @@ class Player : public QObject
     Q_PROPERTY(double energy READ energy NOTIFY levelsChanged)
     Q_PROPERTY(double beat READ beat NOTIFY levelsChanged)
     Q_PROPERTY(int analysisHz READ analysisHz WRITE setAnalysisHz NOTIFY analysisHzChanged) // spectrum/level update rate
+    // Loudness envelope of the current track for the seek bar (Waveform::Buckets values 0..1, empty until ready).
+    Q_PROPERTY(QVariantList waveform READ waveform NOTIFY waveformChanged)
+    Q_PROPERTY(bool waveformEnabled READ waveformEnabled WRITE setWaveformEnabled NOTIFY waveformChanged)
 
 public:
     explicit Player(PlayQueue *queue, QObject *parent = nullptr);
@@ -97,6 +102,9 @@ public:
     double beat() const { return m_beat; }
     int analysisHz() const { return m_analysisHz; }
     void setAnalysisHz(int hz);
+    QVariantList waveform() const { return m_waveform; }
+    bool waveformEnabled() const { return m_wave.enabled(); }
+    void setWaveformEnabled(bool on);
 
     Q_INVOKABLE void playCurrent();
     Q_INVOKABLE void playRow(int queueRow);
@@ -128,6 +136,7 @@ signals:
     void levelsChanged();
     void beatHit();
     void analysisHzChanged();
+    void waveformChanged();
 
 public:
     // GStreamer callbacks (called from streaming threads).
@@ -186,6 +195,10 @@ private:
     QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error;
     int m_year = 0;
     QColor m_coverColor;
+
+    Waveform m_wave;
+    QVariantList m_waveform;
+    void requestWaveform();
 
     QVector<float> m_bars;
     QVariantList m_spectrumOut;

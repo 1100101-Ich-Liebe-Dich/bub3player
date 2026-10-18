@@ -14,6 +14,9 @@ class PlayQueue : public QAbstractListModel
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY modeChanged)
     Q_PROPERTY(int repeat READ repeat WRITE setRepeat NOTIFY modeChanged) // 0 off, 1 all, 2 one
     Q_PROPERTY(QString upNext READ upNext NOTIFY upcomingChanged)          // "Titel – Künstler" of the next track
+    // Autoplay: when the queue is about to run out, the library appends matching
+    // tracks (see Library::maybeAutoplay). Later this is fed by recommendations.
+    Q_PROPERTY(bool autoplay READ autoplay WRITE setAutoplay NOTIFY modeChanged)
 
 public:
     enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole };
@@ -33,6 +36,10 @@ public:
     void setShuffle(bool on);
     int repeat() const { return m_repeat; }
     void setRepeat(int mode);
+    bool autoplay() const { return m_autoplay; }
+    void setAutoplay(bool on);
+    qint64 lastId() const { return m_order.isEmpty() ? 0 : idAtRow(int(m_order.size()) - 1); }
+    const QVector<qint64> &ids() const { return m_ids; }
 
     void setTracks(QVector<qint64> ids, int start, bool shuffle);
     void append(const QVector<qint64> &ids);
@@ -64,4 +71,5 @@ private:
     int m_pos = -1;
     bool m_shuffle = false;
     int m_repeat = 0;
+    bool m_autoplay = false;
 };

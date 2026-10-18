@@ -8,13 +8,13 @@
   "radius": 16,
   "ambient": 0.0,
   "dynamicAccent": false,
-  "swatch": ["#E4E9F0", "#C9D1DC", "#5B7CFA"],
-  "style": { "titleSize": 38, "titleUpper": false, "titleSpacing": -0.5, "titleWeight": 800, "controls": "neu", "neuDepth": 6 },
+  "swatch": ["#5C6B86", "#7685A2", "#A9D2FF"],
+  "style": { "titleSize": 38, "titleUpper": false, "titleSpacing": -0.5, "titleWeight": 800, "controls": "neu", "neuDepth": 4 },
   "palettes": [
-    { "id": "wolke", "name": "Wolke", "dark": false, "light": "#FFFFFF", "shadow": "#B5BFCC",
-      "colors": { "bg": "#E4E9F0", "panel": "#E4E9F0", "surface": "#E4E9F0", "surfaceHover": "#DCE2EA",
-                  "border": "#CBD3DE", "text": "#343C4B", "textDim": "#687183", "textFaint": "#97A0AF",
-                  "accent": "#5B7CFA", "accent2": "#8EA4FF", "onAccent": "#FFFFFF" } },
+    { "id": "wolke", "name": "Regenwolke", "dark": true, "light": "#7685A2", "shadow": "#435069",
+      "colors": { "bg": "#5C6B86", "panel": "#5C6B86", "surface": "#5C6B86", "surfaceHover": "#64738E",
+                  "border": "#6B7A96", "text": "#F3F6FB", "textDim": "#D0D8E7", "textFaint": "#A4B0C6",
+                  "accent": "#A9D2FF", "accent2": "#7DB1F5", "onAccent": "#1C2741" } },
     { "id": "sand", "name": "Sand", "dark": false, "light": "#FFFDF8", "shadow": "#C8BDAD",
       "colors": { "bg": "#ECE6DD", "panel": "#ECE6DD", "surface": "#ECE6DD", "surfaceHover": "#E4DDD2",
                   "border": "#D6CDBF", "text": "#433A31", "textDim": "#786C60", "textFaint": "#A49789",
@@ -30,9 +30,12 @@
   ],
   "settings": [
     { "key": "palette", "type": "palette", "label": "Farbe", "default": "wolke" },
-    { "key": "depth", "type": "range", "label": "Tiefe der Schatten", "min": 2, "max": 12, "step": 1, "default": 6, "unit": "px" },
-    { "key": "corner", "type": "range", "label": "Rundung der Karten", "min": 10, "max": 40, "step": 1, "default": 28, "unit": "px" },
+    { "key": "depth", "type": "range", "label": "Tiefe der Schatten", "min": 2, "max": 12, "step": 1, "default": 4, "unit": "px" },
+    { "key": "corner", "type": "range", "label": "Rundung der Karten", "min": 10, "max": 40, "step": 1, "default": 24, "unit": "px" },
     { "key": "dynamicAccent", "type": "bool", "label": "Akzentfarbe aus dem Cover übernehmen", "default": false },
-    { "key": "bars", "type": "bool", "label": "Weiche Spektrum-Balken in der Großansicht", "default": true }
+    { "key": "bars", "type": "bool", "label": "Weiche Spektrum-Balken in der Großansicht", "default": true },
+    { "key": "clouds", "type": "bool", "label": "Schwebende Wolken in der Großansicht (sanft zur Musik)", "default": true },
+    { "key": "fps", "type": "choice", "label": "Animation der Wolken", "default": "30",
+      "options": [ { "value": "60", "label": "Flüssig" }, { "value": "30", "label": "Sparsam" }, { "value": "0", "label": "Aus" } ] }
   ]
 }

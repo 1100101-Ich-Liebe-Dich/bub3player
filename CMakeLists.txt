@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 0.3.0 LANGUAGES CXX)
+project(Halcyon VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +32,7 @@ add_executable(halcyon
   src/library/ViewRegistry.h   src/library/ViewRegistry.cpp
   src/player/PlayQueue.h       src/player/PlayQueue.cpp
   src/player/Player.h          src/player/Player.cpp
+  src/player/Waveform.h        src/player/Waveform.cpp
   src/player/Mpris.h           src/player/Mpris.cpp
   src/ui/Theme.h               src/ui/Theme.cpp
   src/core/Paths.h

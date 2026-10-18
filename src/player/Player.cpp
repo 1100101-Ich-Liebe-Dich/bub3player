@@ -73,6 +73,16 @@ void recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
 
 Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(queue)
 {
+    connect(&m_wave, &Waveform::ready, this, [this](qint64 id, const QVariantList &values) {
+        if (id != m_playingId)
+            return;
+        m_waveform = values;
+        emit waveformChanged();
+        // Prepare the next track while nothing else is going on.
+        const qint64 next = m_queue->nextId();
+        if (next > 0 && !values.isEmpty())
+            m_wave.request(next, TrackCache::instance().pathOf(next), 0, TrackCache::instance().get(next).mtime);
+    });
     m_playbin = gst_element_factory_make("playbin", "halcyon");
     if (!m_playbin) {
         m_error = tr("GStreamer 'playbin' fehlt. Bitte gst-plugins-base installieren.");
@@ -494,6 +504,7 @@ void Player::updateMeta(qint64 id)
     m_duration = r.durationMs;
     emit trackChanged();
     emit durationChanged();
+    requestWaveform();
 
     QPointer<Player> self(this);
     (void)QtConcurrent::run([self, id] {
@@ -509,6 +520,30 @@ void Player::updateMeta(qint64 id)
         }, Qt::QueuedConnection);
     });
     armNext();
+}
+
+void Player::requestWaveform()
+{
+    if (!m_waveform.isEmpty()) {
+        m_waveform.clear();
+        emit waveformChanged();
+    }
+    if (m_playingId > 0 && m_wave.enabled()) {
+        const TrackRow r = TrackCache::instance().get(m_playingId);
+        m_wave.request(m_playingId, TrackCache::instance().pathOf(m_playingId), 0, r.mtime);
+    }
+}
+
+void Player::setWaveformEnabled(bool on)
+{
+    if (on == m_wave.enabled())
+        return;
+    m_wave.setEnabled(on);
+    if (on)
+        requestWaveform();
+    else if (!m_waveform.isEmpty())
+        m_waveform.clear();
+    emit waveformChanged();
 }
 
 void Player::armNext()

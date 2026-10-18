@@ -25,8 +25,11 @@ Item {
 
     // Music reactivity (0..1), scaled by the user's setting.
     readonly property real react: Theme.opt.reactive !== undefined ? Theme.opt.reactive : 0.6
-    readonly property real energy: Player.playing ? Player.energy * react : 0
-    readonly property real beat: Player.playing ? Player.beat * react : 0
+    // Smoothed on purpose: the light swells with the music but never flashes.
+    property real energy: Player.playing ? Player.energy * react : 0
+    Behavior on energy { NumberAnimation { duration: 900; easing.type: Easing.InOutSine } }
+    property real beat: Player.playing ? Player.beat * react * 0.6 : 0
+    Behavior on beat { NumberAnimation { duration: 700; easing.type: Easing.OutSine } }
 
     // Full-screen view blends in over ~0.7 s; the background brightens with it.
     property real npMix: np ? 1 : 0
@@ -334,6 +337,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     height: 30
                     bars: Math.max(24, Math.floor(width / 7))
+                    waveColor1: Theme.accent2
                 }
                 Text {
                     id: dur
@@ -575,6 +579,7 @@ Item {
                     height: 46
                     bars: Math.max(32, Math.floor(width / 9))
                     barGap: 3
+                    waveColor1: Theme.accent2
                 }
                 Item {
                     width: parent.width
