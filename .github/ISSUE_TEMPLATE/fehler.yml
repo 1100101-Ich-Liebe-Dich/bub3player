@@ -1,0 +1,74 @@
+name: 🐞 Fehler melden
+description: Etwas funktioniert nicht wie erwartet.
+labels: ["fehler"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass du dir die Zeit nimmst! Je genauer die Beschreibung, desto schneller ist der Fehler behoben.
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert?
+      description: Was hast du gemacht, was hast du erwartet und was ist stattdessen passiert?
+      placeholder: "Ich habe … geklickt, dann …"
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: So lässt es sich nachstellen
+      placeholder: |
+        1. Theme „Vintage“ wählen
+        2. …
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Steht unter Einstellungen → Über.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installiert als
+      options:
+        - AppImage
+        - Selbst gebaut
+        - Anders (bitte unten angeben)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distribution und Desktop
+      placeholder: "z. B. Arch Linux, KDE Plasma 6, Wayland"
+    validations:
+      required: true
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      options:
+        - Egal / alle
+        - Klassik
+        - Soft
+        - Glas
+        - Aurora
+        - Vintage
+        - Synthwave
+        - Hi-Fi Turm
+        - Terminal
+  - type: input
+    id: bibliothek
+    attributes:
+      label: Größe der Bibliothek
+      placeholder: "z. B. 250 000 Titel, davon 40 000 von Jellyfin"
+  - type: textarea
+    id: log
+    attributes:
+      label: Ausgabe im Terminal
+      description: Starte den Player im Terminal und kopiere die Meldungen hier hinein.
+      render: text

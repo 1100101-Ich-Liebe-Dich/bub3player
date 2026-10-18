@@ -1,0 +1,21 @@
+name: 💡 Idee oder Wunsch
+description: Eine neue Funktion oder eine Verbesserung vorschlagen.
+labels: ["wunsch"]
+body:
+  - type: textarea
+    id: wunsch
+    attributes:
+      label: Was wünschst du dir?
+      placeholder: "Ich hätte gern …"
+    validations:
+      required: true
+  - type: textarea
+    id: warum
+    attributes:
+      label: Wofür brauchst du das?
+      description: Wie hörst du Musik, und wo fehlt dir gerade etwas? Das hilft, die beste Lösung zu finden.
+  - type: textarea
+    id: wie
+    attributes:
+      label: Wie könnte es aussehen?
+      description: Skizzen, Screenshots aus anderen Programmen oder eine kurze Beschreibung.
