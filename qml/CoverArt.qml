@@ -5,6 +5,11 @@ import Halcyon
 // Album art with a generated placeholder underneath (shows through while loading
 // or when a release has no art). Rounded corners via a tiny shader; plain image
 // on the software renderer.
+//
+// Memory: the image is decoded at the size it is shown (64/128/256/512/1024 px
+// buckets, never above requestSize) and only while it is visible; a hidden
+// cover (e.g. the big view of a theme while the library is shown) lets go of
+// its image after a few seconds.
 Item {
     id: c
     property var coverId: 0
@@ -16,6 +21,18 @@ Item {
     readonly property bool useShader: c.canShade && (c.radius > 0 || c.duotone)
     readonly property bool loaded: img.status === Image.Ready && img.implicitWidth > 1
     readonly property bool canShade: GraphicsInfo.api !== GraphicsInfo.Software
+
+    readonly property int shownPx: Math.ceil(Math.max(width, height) * Screen.devicePixelRatio)
+    readonly property int decodeSize: {
+        var b = shownPx <= 64 ? 64 : shownPx <= 128 ? 128 : shownPx <= 256 ? 256 : shownPx <= 512 ? 512 : 1024
+        return Math.min(c.requestSize, b)
+    }
+    property bool shown: visible
+    onVisibleChanged: {
+        if (visible) { releaseTimer.stop(); shown = true }
+        else releaseTimer.restart()
+    }
+    Timer { id: releaseTimer; interval: 4000; onTriggered: c.shown = c.visible }
 
     function hue(s) {
         var h = 0
@@ -46,8 +63,8 @@ Item {
     Image {
         id: img
         anchors.fill: parent
-        source: c.coverId > 0 ? "image://cover/" + c.coverId : ""
-        sourceSize: Qt.size(c.requestSize, c.requestSize)
+        source: c.coverId > 0 && c.shown && c.shownPx > 0 ? "image://cover/" + c.coverId : ""
+        sourceSize: Qt.size(c.decodeSize, c.decodeSize)
         asynchronous: true
         cache: true
         smooth: true

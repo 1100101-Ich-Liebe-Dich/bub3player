@@ -97,6 +97,29 @@ Testrechner: VM mit 2 vCPUs, 8 GB RAM, SSD. 1 000 000 Dateien in 101 000 Ordnern
 
 Details: [docs/benchmark.md](docs/benchmark.md)
 
+### Arbeitsspeicher
+
+Gemessen mit 1 080 Titeln und 360 Covern in 2000 × 2000 px, Fenster 1380 × 880, Grafik über
+Mesa llvmpipe (Software-OpenGL; zählt seine Puffer mit). „Eigene Daten“ ist der anonyme
+Speicher des Players, „gesamt“ enthält zusätzlich geteilte Bibliotheken und Grafiktreiber.
+
+| Situation | eigene Daten | gesamt |
+|---|---|---|
+| ein Theme, Wiedergabe, Alben durchblättern, Großansicht | 108–165 MB | 239–296 MB |
+| 4 min Dauerbelastung: alle 1,6 s Theme wechseln, Titel springen, blättern | 200–250 MB, stabil | ~380 MB |
+| dasselbe mit Software-Renderer (`QT_QUICK_BACKEND=software`) | 80–90 MB | ~160 MB |
+
+Was dafür sorgt:
+- **Speicherleck behoben** (0.4.1): GStreamer-Nachrichten von Spektrum und Pegelmesser wurden
+  nie freigegeben, gut 10 MB pro Minute Wiedergabe. Daher kamen die 600 MB.
+- Cover werden nur in der angezeigten Größe dekodiert (64–1024 px) und nur solange sie zu
+  sehen sind; verborgene Cover (z. B. die Großansicht) geben ihr Bild nach 4 s frei.
+- Nach jedem Theme-Wechsel, im Hintergrund und alle 3 Minuten: QML-Speicher einsammeln,
+  Grafik-Caches leeren, freien Speicher ans System zurückgeben. Höchstens 2 malloc-Arenen.
+- Einstellungen → Allgemein → Leistung zeigt den aktuellen Verbrauch live.
+
+Testwerkzeuge: `--ui-test playall,skip,scroll,cycleloop` (Dauerbelastung), `swap-<theme>`, `pair`.
+
 Wichtig: Beim Test lagen die Dateien im RAM-Cache. Auf einer **HDD** bestimmt beim Erstimport
 die Platte das Tempo (jede Datei braucht 1–3 Lesezugriffe). Rechne dort mit deutlich längeren
 Zeiten für Phase 2. Phase 1 und alle späteren Scans bleiben schnell, und die Bibliothek ist

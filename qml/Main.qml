@@ -179,7 +179,12 @@ ApplicationWindow {
         anchors.fill: parent
         source: Theme.skinQml
         focus: true
-        onLoaded: window.restoreView()
+        onLoaded: {
+            window.restoreView()
+            // the previous theme is gone now: let QML collect it and give the memory back
+            Memory.trimSoon(1500)
+            secondTrim.restart()
+        }
     }
 
     Toast {
@@ -214,6 +219,28 @@ ApplicationWindow {
             uiTestTimer.start()
     }
 
+    // a second pass: objects released by the first collection go in the second
+    Timer { id: secondTrim; interval: 6000; onTriggered: Memory.trim() }
+
+    // --ui-test swap-<id>: switch to another theme after a while (memory tests)
+    Timer {
+        id: swapTimer
+        property string target
+        interval: 6000
+        onTriggered: Theme.setSkin(target)
+    }
+
+    // --ui-test skip: next track every 1.5 s (track change / waveform / cover tests)
+    Timer { id: skipTimer; interval: 1500; repeat: true; onTriggered: Player.next() }
+
+    // --ui-test scroll: keep paging through the current grid
+    Timer {
+        id: scrollTimer
+        interval: 250
+        repeat: true
+        onTriggered: if (window.stack && window.stack.currentItem && window.stack.currentItem.scrollStep) window.stack.currentItem.scrollStep()
+    }
+
     // --ui-test cycle: switch through all skins (tests loading and teardown).
     Timer {
         id: cycleTimer
@@ -221,8 +248,8 @@ ApplicationWindow {
         interval: 1600
         repeat: true
         onTriggered: {
-            var list = Theme.skins
-            if (i >= list.length * 2) { stop(); return }
+            var list = uiTest.indexOf("pair") >= 0 ? [{ id: "klassik" }, { id: "aurora" }] : Theme.skins
+            if (i >= list.length * 2 && uiTest.indexOf("cycleloop") < 0) { stop(); return }
             Theme.setSkin(list[i % list.length].id)
             if (i % 3 === 1) window.nowPlayingOpen = true
             ++i
@@ -235,7 +262,9 @@ ApplicationWindow {
         interval: 900
         onTriggered: {
             var a = uiTest
-            if (a.indexOf("play") >= 0)
+            if (a.indexOf("playall") >= 0)
+                Library.playSpec({ sort: "album" }, false)
+            else if (a.indexOf("play") >= 0)
                 Library.playSpec({ sort: "album", filters: [{ field: "bits", op: "ge", value: 24 }] }, false)
             if (a.indexOf("queue") >= 0) window.queueOpen = true
             if (a.indexOf("now-playing") >= 0) window.nowPlayingOpen = true
@@ -243,6 +272,10 @@ ApplicationWindow {
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
             if (a.indexOf("cycle") >= 0) cycleTimer.start()
+            if (a.indexOf("scroll") >= 0) scrollTimer.start()
+            if (a.indexOf("skip") >= 0) skipTimer.start()
+            var sw = a.match(/swap-(\w+)/)
+            if (sw) swapTimer.target = sw[1], swapTimer.start()
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
             if (a.indexOf("search") >= 0) {
                 if (window.skin && window.skin.setSearchText) window.skin.setSearchText("nord")

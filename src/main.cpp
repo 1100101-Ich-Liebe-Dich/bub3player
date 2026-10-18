@@ -8,6 +8,7 @@
 #include "library/TrackListModel.h"
 #include "player/Mpris.h"
 #include "player/PlayQueue.h"
+#include "ui/Memory.h"
 #include "player/Player.h"
 #include "ui/Theme.h"
 
@@ -61,6 +62,7 @@ int runHeadlessScan(int argc, char **argv)
 
 int main(int argc, char *argv[])
 {
+    Memory::configureAllocator();
     for (int i = 1; i < argc; ++i)
         if (qstrcmp(argv[i], "--scan") == 0)
             return runHeadlessScan(argc, argv);
@@ -112,6 +114,7 @@ int main(int argc, char *argv[])
     Player player(&queue);
     Library library(&player, &queue);
     Theme theme;
+    Memory memory;
     if (parser.isSet(QStringLiteral("skin")))
         theme.setSkin(parser.value(QStringLiteral("skin")));
     if (parser.isSet(QStringLiteral("theme")))
@@ -141,6 +144,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Player", &player);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Queue", &queue);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Theme", &theme);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Memory", &memory);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
@@ -156,6 +160,7 @@ int main(int argc, char *argv[])
         return 1;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
 
+    memory.setWindow(window);
     Mpris::install(&player, &queue, window);
     queue.restore();
     player.restoreSession();
