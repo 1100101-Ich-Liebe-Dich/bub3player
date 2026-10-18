@@ -18,6 +18,7 @@ Column {
     property bool showMark: true
     property bool oneLine: false
     property int maxWidth: 220
+    property color glowColor: "transparent"
     spacing: 4
 
     Row {
@@ -32,18 +33,43 @@ Column {
                     width: Math.max(3, Math.round(brand.nameSize * 0.17))
                     height: Math.round(brand.nameSize * modelData)
                     radius: width / 2
-                    anchors.bottom: parent.bottom
+                    anchors.bottom: parent ? parent.bottom : undefined
                     color: brand.markColor
                 }
             }
         }
+        Item {
+            width: nameText.implicitWidth
+            height: nameText.implicitHeight
+            // Neon glow: a coloured copy rendered small and stretched (blurred).
+            Text {
+                id: glowSrc
+                visible: brand.glowColor.a > 0
+                text: nameText.text
+                font: nameText.font
+                color: brand.glowColor
+            }
+            ShaderEffectSource {
+                visible: brand.glowColor.a > 0
+                sourceItem: glowSrc
+                hideSource: true
+                smooth: true
+                textureSize: Qt.size(Math.max(4, Math.round(glowSrc.width / 2.5)), Math.max(4, Math.round(glowSrc.height / 2.5)))
+                width: glowSrc.width * 1.06
+                height: glowSrc.height * 1.3
+                x: -glowSrc.width * 0.03
+                y: -glowSrc.height * 0.15
+                opacity: 0.85
+            }
         Text {
+            id: nameText
             text: brand.upper ? "BUB3PLAYER" : "BuB3Player"
             font.family: brand.nameFont
             font.pixelSize: brand.nameSize
             font.weight: brand.nameWeight
             font.letterSpacing: brand.nameSpacing
             color: brand.nameColor
+        }
         }
     }
     Text {

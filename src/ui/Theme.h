@@ -52,6 +52,8 @@ class Theme : public QObject
     Q_PROPERTY(QString monoFont READ monoFont NOTIFY changed)
     Q_PROPERTY(bool dynamicAccent READ dynamicAccent NOTIFY accentChanged)
     Q_PROPERTY(QColor coverColor READ coverColor WRITE setCoverColor NOTIFY accentChanged)
+    // A skin may tint the accent itself (e.g. Aurora with a preset light colour). Alpha 0 = none.
+    Q_PROPERTY(QColor accentOverride READ accentOverride WRITE setAccentOverride NOTIFY accentChanged)
     Q_PROPERTY(QVariantList coverPalette READ coverPalette WRITE setCoverPalette NOTIFY coverPaletteChanged)
     Q_PROPERTY(QString userDir READ userDir CONSTANT)
     // Back-compat for the palette list used by the classic skin's settings.
@@ -92,6 +94,8 @@ public:
     QString monoFont() const { return m_monoFont; }
     bool dynamicAccent() const;
     QColor coverColor() const { return m_cover; }
+    QColor accentOverride() const { return m_accentOverride; }
+    void setAccentOverride(const QColor &c);
     void setCoverColor(const QColor &c);
     QVariantList coverPalette() const { return m_coverPalette; }
     void setCoverPalette(const QVariantList &p);
@@ -137,5 +141,6 @@ private:
     double m_paletteAmbient = 0.5;
     QHash<QString, QColor> m_c;
     QColor m_cover;
+    QColor m_accentOverride;
     QVariantList m_coverPalette;
 };

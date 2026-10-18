@@ -77,6 +77,15 @@ qint64 PlayQueue::nextId() const
     return m_repeat == 1 ? idAtRow(0) : 0;
 }
 
+QString PlayQueue::upNext() const
+{
+    const qint64 id = nextId();
+    if (id <= 0)
+        return {};
+    const TrackRow r = TrackCache::instance().get(id);
+    return r.artist.isEmpty() ? r.title : r.title + QStringLiteral(" – ") + r.artist;
+}
+
 void PlayQueue::setPos(int pos)
 {
     const int old = m_pos;

@@ -1,12 +1,39 @@
-# Halcyon
+# BuB3Player
+
+*Projekt präsentiert von [www.BAUENUNDBOOTEN.de](https://www.bauenundbooten.de)*
 
 Musikplayer für Linux, gebaut für **sehr große lokale Bibliotheken** (1 Mio+ Titel) und
-später auch für **Jellyfin**. C++20, Qt 6 / QML, GStreamer, TagLib, SQLite.
+später auch für **Jellyfin**. Interner Projektname: **Halcyon**.
+C++20, Qt 6 / QML, GStreamer, TagLib, SQLite.
 
-![Alben](docs/screenshots/alben-tiefsee.png)
+![Aurora](docs/screenshots/aurora-grossansicht.jpg)
 
-> Arbeitstitel. Stand: Phase 1 (lokale Bibliothek, Wiedergabe, Ansichten, Themes).
-> Jellyfin, Empfehlungen und Automix folgen in den nächsten Phasen (siehe unten).
+## Themes
+
+Vier Themes, die sich komplett unterscheiden: eigener Aufbau, eigene Effekte, eigene
+Einstellungen. Inhalte und Funktionen sind in allen gleich. Umschalten: Einstellungen → Theme
+(oder `Strg + T`), jedes Theme merkt sich seine Einstellungen für sich.
+
+| Theme | Was es ausmacht | Eigene Einstellungen |
+|---|---|---|
+| **Klassik** | Ruhige Seitenleiste, Leuchten aus dem Cover | 7 Farbschemata, Akzent aus Cover, Leuchten |
+| **Aurora** | Fließendes Licht in den Cover-Farben (Shader), echtes Milchglas mit irisierenden Kanten, Lichtreflex folgt der Maus, schwebendes Dock mit Fortschrittsring, Großansicht mit drehender Cover-Scheibe, 3D-Neigung und Rundum-Spektrum. Reagiert auf die Musik. | Glas hell/dunkel, Lichtfarben (Cover, Polarlicht, Abendrot, Tiefsee, Bonbon), Leuchtkraft, Geschwindigkeit, Musik-Reaktion, Unschärfe, Tönung, Eckenradius, Lichtpunkte, Reflex, Körnung, Scheibe, Animation |
+| **Synthwave** | Retro-Sonne, Sterne, Berge und ein Neon-Gitter, das im Takt rast. HUD-Panels mit abgeschrägten Ecken, LED-Spektrum, Glitch beim Titelwechsel, schwebendes Cover mit Spiegelung | Farbwelten (Outrun, Sonnenbrand, Matrix, Eiszeit), Gitter-Tempo, Takt-Puls, Scanlines, Sonne, Sterne, Berge, Glitch, Neon-Leuchten, Animation |
+| **Studio** | Hi-Fi-Receiver: Plattenspieler mit dem Cover als Label (33⅓/45), Tonarm wandert mit dem Titel, VU-Meter mit gefederten Zeigern, Leuchtanzeige (VFD) mit Punkt-Spektrum, Hardware-Tasten mit LEDs, Lautstärke-Drehknopf. Großansicht = die ganze Anlage | Gehäuse (Nussbaum, Aluminium, Carbon, Klavierlack), VU-Meter (klassisch, Bernstein, LED), Anzeigefarbe, Drehzahl, Zeiger-Trägheit, Tonarm, kompakter Receiver, Raumlicht hell/dunkel |
+
+Für ältere Rechner: Einstellungen → Allgemein → **Leistung** (Sparmodus, Animationen im
+Hintergrund anhalten, Musik-Analyse aus) und in jedem animierten Theme „Animation: Sparsam/Aus“.
+Ohne GPU-Beschleunigung schalten alle Themes automatisch auf einfache Flächen um.
+
+Weitere Bilder: [Aurora Bibliothek](docs/screenshots/aurora-bibliothek.jpg),
+[Aurora Perlmutt](docs/screenshots/aurora-perlmutt.jpg),
+[Synthwave](docs/screenshots/synthwave-bibliothek.jpg),
+[Synthwave Großansicht](docs/screenshots/synthwave-grossansicht.jpg),
+[Studio](docs/screenshots/studio-bibliothek.jpg),
+[Studio Großansicht](docs/screenshots/studio-grossansicht.jpg),
+[Studio Aluminium](docs/screenshots/studio-aluminium.jpg),
+[Klassik](docs/screenshots/klassik.jpg),
+[Theme-Einstellungen](docs/screenshots/theme-einstellungen.jpg)
 
 ## Was schon geht
 
@@ -37,15 +64,9 @@ später auch für **Jellyfin**. C++20, Qt 6 / QML, GStreamer, TagLib, SQLite.
 - Wiedergabestatistik (Wiedergaben, Skips, Verlauf) als Basis für Empfehlungen
 
 **Oberfläche**
-- 7 Themes (Tiefsee, Polarlicht, Papier, OLED Schwarz, Fjord, Neon, Wald) + eigene als JSON
-- Akzentfarbe und Hintergrund-Leuchten aus dem aktuellen Cover
-- Live-Spektrum in der Seek-Leiste und in der Großansicht (nur aktiv, wenn sichtbar)
+- 4 grundverschiedene Themes (siehe oben), Klassik mit 7 Farbschemata + eigenen als JSON
+- Musik-Analyse: Spektrum, Pegel links/rechts, Energie und Takt-Erkennung (nur aktiv, wenn sichtbar)
 - Software-Renderer-Fallback für sehr alte Grafik
-
-Weitere Bilder: [Großansicht (Neon)](docs/screenshots/grossansicht-neon.png),
-[Album (Polarlicht)](docs/screenshots/album-polarlicht.png), [Genres (Papier)](docs/screenshots/genres-papier.png),
-[Ordner (Wald)](docs/screenshots/ordner-wald.png), [Suche](docs/screenshots/suche.png),
-[1 Mio Titel](docs/screenshots/eine-million-titel.png)
 
 ## Gemessen
 
@@ -117,13 +138,14 @@ sudo cmake --install build
 | Strg + F | Suchen |
 | Strg + J | Warteschlange |
 | Strg + L | Großansicht |
+| Strg + T | Theme wechseln |
 | Alt + ← | Zurück |
 | Strg + Q | Beenden |
 
 Doppelklick spielt ab, Rechtsklick bietet „Als Nächstes spielen“, „Zur Warteschlange“,
 „Album öffnen“ usw.
 
-Kommandozeile: `halcyon --help` (u. a. `--add-folder`, `--view`, `--theme`, `--db`, `--scan`).
+Kommandozeile: `halcyon --help` (u. a. `--add-folder`, `--view`, `--skin`, `--theme`, `--skin-opt`, `--db`, `--scan`).
 
 ## Eigene Ansichten
 
@@ -158,10 +180,14 @@ Kommandozeile: `halcyon --help` (u. a. `--add-folder`, `--view`, `--theme`, `--d
 
 Alle Werte werden als Parameter gebunden, Felder und Operatoren sind auf eine feste Liste begrenzt.
 
-## Eigene Themes
+## Eigene Farbschemata (Klassik)
 
 JSON-Datei nach `~/.local/share/halcyon/themes/` legen, z. B. eine Kopie von
-`themes/01-tiefsee.json` mit neuer `id`. Gleiche `id` überschreibt ein mitgeliefertes Theme.
+`themes/01-tiefsee.json` mit neuer `id`. Gleiche `id` überschreibt ein mitgeliefertes Schema.
+
+Ein neues Theme besteht aus einer Beschreibung in `skins/<id>.json` (Name, Schriften,
+Farbschemata, Einstellungs-Schema) und einer QML-Datei in `qml/skins/`. Die Einstellungsseite
+wird aus dem Schema erzeugt (Typen `palette`, `bool`, `range`, `choice`).
 
 ## Aufbau
 
@@ -170,9 +196,11 @@ src/core      Datenbank (Schema, WAL, FTS5), Scanner, TagReader, Cover- und Icon
 src/library   Abfragen (QueryBuilder), Listen-/Gruppen-/Ordnermodelle, Ansichten, Library-API für QML
 src/player    GStreamer-Player, Warteschlange, MPRIS
 src/ui        Theme-System
-qml/          Oberfläche
-themes/       mitgelieferte Themes
-shaders/      Cover-Rundung, Hintergrund-Leuchten
+qml/          gemeinsame Seiten und Bausteine
+qml/skins/    die vier Themes (Aufbau, Effekte, Player, Großansicht)
+skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
+themes/       Farbschemata für Klassik
+shaders/      Aurora-Licht, Milchglas, Synthwave-Szene, HUD, Glitch, Holz/Metall/Carbon, Vinyl …
 ```
 
 Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
@@ -184,7 +212,8 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 
 ## Fahrplan
 
-1. **Phase 1 – fertig:** lokale Bibliothek, Scanner, Ansichten, Wiedergabe, Themes
+1. **Phase 1 – fertig:** lokale Bibliothek, Scanner, Ansichten, Wiedergabe
+1b. **Themes – fertig:** Klassik, Aurora, Synthwave, Studio mit eigenen Einstellungen
 2. **Phase 2 – Jellyfin:** Anmeldung, inkrementeller Abgleich in dieselbe Datenbank
    (Tabelle `sources` ist schon da), Streaming, Ordneransicht über Jellyfin-Pfade, Scrobbling
 3. **Phase 3 – Empfehlungen:** aus dem Hörverlauf (zusammen gehört, Skips, Tageszeit),
@@ -196,5 +225,6 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 
 ## Lizenzen
 
-Schriften: Manrope und Bricolage Grotesque, SIL Open Font License (`assets/fonts/`).
+Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow,
+Barlow Condensed, VT323 – alle SIL Open Font License (`assets/fonts/`).
 Icons: Pfade aus Material Icons (Apache 2.0).

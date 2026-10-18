@@ -53,6 +53,7 @@ class Player : public QObject
     Q_PROPERTY(double peakR READ peakR NOTIFY levelsChanged)
     Q_PROPERTY(double energy READ energy NOTIFY levelsChanged)
     Q_PROPERTY(double beat READ beat NOTIFY levelsChanged)
+    Q_PROPERTY(int analysisHz READ analysisHz WRITE setAnalysisHz NOTIFY analysisHzChanged) // spectrum/level update rate
 
 public:
     explicit Player(PlayQueue *queue, QObject *parent = nullptr);
@@ -94,6 +95,8 @@ public:
     double peakR() const { return m_peakR; }
     double energy() const { return m_energy; }
     double beat() const { return m_beat; }
+    int analysisHz() const { return m_analysisHz; }
+    void setAnalysisHz(int hz);
 
     Q_INVOKABLE void playCurrent();
     Q_INVOKABLE void playRow(int queueRow);
@@ -124,6 +127,7 @@ signals:
     void levelsEnabledChanged();
     void levelsChanged();
     void beatHit();
+    void analysisHzChanged();
 
 public:
     // GStreamer callbacks (called from streaming threads).
@@ -158,6 +162,7 @@ private:
     bool m_levelsEnabled = false;
     double m_levelL = 0, m_levelR = 0, m_peakL = 0, m_peakR = 0, m_energy = 0, m_beat = 0, m_avgEnergy = 0;
     int m_beatCooldown = 0;
+    int m_analysisHz = 30;
     QVariantList m_coverPalette;
 
     QMutex m_mutex; // guards m_nextUri/m_nextId/m_expectAdvance (streaming thread)

@@ -441,6 +441,19 @@ void Player::setLevelsEnabled(bool on)
     emit levelsEnabledChanged();
 }
 
+void Player::setAnalysisHz(int hz)
+{
+    hz = std::clamp(hz, 5, 60);
+    if (hz == m_analysisHz)
+        return;
+    m_analysisHz = hz;
+    const guint64 interval = guint64(1000 / hz) * GST_MSECOND;
+    for (GstElement *e : {m_spectrumRg, m_spectrumPlain, m_levelRg, m_levelPlain})
+        if (e)
+            g_object_set(e, "interval", interval, nullptr);
+    emit analysisHzChanged();
+}
+
 void Player::resetLevels()
 {
     m_levelL = m_levelR = m_peakL = m_peakR = m_energy = m_beat = 0;

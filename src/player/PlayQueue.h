@@ -13,6 +13,7 @@ class PlayQueue : public QAbstractListModel
     Q_PROPERTY(qint64 currentId READ currentId NOTIFY currentChanged)
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY modeChanged)
     Q_PROPERTY(int repeat READ repeat WRITE setRepeat NOTIFY modeChanged) // 0 off, 1 all, 2 one
+    Q_PROPERTY(QString upNext READ upNext NOTIFY upcomingChanged)          // "Titel – Künstler" of the next track
 
 public:
     enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole };
@@ -27,6 +28,7 @@ public:
     int currentRow() const { return m_pos; }
     qint64 currentId() const;
     qint64 nextId() const; // what plays after the current track (respects repeat), 0 = none
+    QString upNext() const;
     bool shuffle() const { return m_shuffle; }
     void setShuffle(bool on);
     int repeat() const { return m_repeat; }

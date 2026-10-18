@@ -179,6 +179,7 @@ void Theme::setSkin(const QString &id)
         return;
     m_skin = id;
     m_skinDef = *it;
+    m_accentOverride = QColor();
     QSettings().setValue(QStringLiteral("theme/skin"), id);
     loadPalettes();
     loadOptions();
@@ -291,6 +292,11 @@ QColor Theme::accent2() const
 
 QColor Theme::accent() const
 {
+    if (m_accentOverride.isValid() && m_accentOverride.alpha() > 0) {
+        float h, s, l, a;
+        m_accentOverride.getHslF(&h, &s, &l, &a);
+        return QColor::fromHslF(std::max(0.0f, h), std::clamp(s, 0.45f, 0.9f), m_dark ? 0.68f : 0.42f);
+    }
     if (!dynamicAccent() || !m_cover.isValid())
         return accentBase();
     // Cover colours are often too dark or too grey for UI accents: keep the hue,
@@ -307,7 +313,8 @@ QColor Theme::accent() const
 QColor Theme::onAccent() const
 {
     const QColor a = accent();
-    if (!dynamicAccent() || !m_cover.isValid()) {
+    const bool overridden = m_accentOverride.isValid() && m_accentOverride.alpha() > 0;
+    if (!overridden && (!dynamicAccent() || !m_cover.isValid())) {
         const QColor fixed = m_c.value(QStringLiteral("onAccent"));
         if (fixed.isValid())
             return fixed;
@@ -320,6 +327,14 @@ void Theme::setCoverColor(const QColor &c)
     if (c == m_cover)
         return;
     m_cover = c;
+    emit accentChanged();
+}
+
+void Theme::setAccentOverride(const QColor &c)
+{
+    if (c == m_accentOverride)
+        return;
+    m_accentOverride = c;
     emit accentChanged();
 }
 

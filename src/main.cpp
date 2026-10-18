@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
     parser.addOption({QStringLiteral("view"), QStringLiteral("Mit dieser Ansicht starten (z. B. albums)."), QStringLiteral("id")});
     parser.addOption({QStringLiteral("skin"), QStringLiteral("Theme wählen: klassik, aurora, synthwave, studio."), QStringLiteral("id")});
     parser.addOption({QStringLiteral("theme"), QStringLiteral("Farbschema des Themes wählen (z. B. tiefsee)."), QStringLiteral("id")});
+    parser.addOption({QStringLiteral("skin-opt"), QStringLiteral("Theme-Einstellung setzen, z. B. material=carbon (mehrfach möglich)."), QStringLiteral("key=value")});
     parser.addOption({QStringLiteral("no-scan"), QStringLiteral("Beim Start nicht nach Änderungen suchen.")});
     parser.addOption({QStringLiteral("screenshot"), QStringLiteral("Fenster nach N ms als Bild speichern und beenden (Tests)."),
                       QStringLiteral("file")});
@@ -115,6 +116,18 @@ int main(int argc, char *argv[])
         theme.setSkin(parser.value(QStringLiteral("skin")));
     if (parser.isSet(QStringLiteral("theme")))
         theme.setTheme(parser.value(QStringLiteral("theme")));
+    for (const QString &kv : parser.values(QStringLiteral("skin-opt"))) {
+        const QString key = kv.section(QLatin1Char('='), 0, 0);
+        const QString val = kv.section(QLatin1Char('='), 1);
+        bool isNum = false;
+        const double num = val.toDouble(&isNum);
+        if (val == QLatin1String("true") || val == QLatin1String("false"))
+            theme.setOption(key, val == QLatin1String("true"));
+        else if (isNum && theme.opt().value(key).typeId() == QMetaType::Double)
+            theme.setOption(key, num);
+        else
+            theme.setOption(key, val);
+    }
     QObject::connect(&player, &Player::coverColorChanged, &theme, [&] {
         theme.setCoverColor(player.coverColor());
         theme.setCoverPalette(player.coverPalette());

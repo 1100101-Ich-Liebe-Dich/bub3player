@@ -12,9 +12,13 @@ Rectangle {
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
     function clearSearch() { search.text = "" }
 
-    color: Theme.alpha(Theme.panel, Theme.ambient > 0 ? 0.78 : 1)
+    property bool transparent: false
+    property bool showBrand: true
+    property bool showSearch: true
+    color: transparent ? "transparent" : Theme.alpha(Theme.panel, Theme.ambient > 0 ? 0.78 : 1)
 
     Rectangle {
+        visible: !side.transparent
         anchors.right: parent.right
         width: 1
         height: parent.height
@@ -28,6 +32,7 @@ Rectangle {
         spacing: 0
 
         Brand {
+            visible: side.showBrand
             Layout.leftMargin: 22
             Layout.bottomMargin: 16
             maxWidth: 210
@@ -35,6 +40,7 @@ Rectangle {
 
         // Search
         Rectangle {
+            visible: side.showSearch
             Layout.fillWidth: true
             Layout.leftMargin: 14
             Layout.rightMargin: 14

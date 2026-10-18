@@ -223,6 +223,12 @@ Item {
                     }
                     HToggle {
                         width: col.width
+                        label: qsTr("Sparmodus: Effekte mit höchstens 30 Bildern/s, Musik-Analyse halb so oft")
+                        checked: window.lowPower
+                        onToggled: window.lowPower = checked
+                    }
+                    HToggle {
+                        width: col.width
                         label: qsTr("Animationen anhalten, wenn das Fenster im Hintergrund ist")
                         checked: window.pauseInactive
                         onToggled: window.pauseInactive = checked
@@ -415,14 +421,14 @@ Item {
         Option {
             label: s.label
             value: {
-                var v = Theme.opt[s.key]
+                var v = Theme.opt[s.key] !== undefined ? Theme.opt[s.key] : s["default"]
                 if (s.percent) return Math.round(v * 100) + " %"
                 return (s.step < 1 ? Number(v).toFixed(1) : Math.round(v)) + (s.unit ? " " + s.unit : "")
             }
             HSlider {
                 width: Math.min(420, col.width)
                 from: s.min; to: s.max; stepSize: s.step
-                value: Theme.opt[s.key]
+                value: Theme.opt[s.key] !== undefined ? Theme.opt[s.key] : s["default"]
                 onMoved: Theme.setOption(s.key, value)
             }
         }

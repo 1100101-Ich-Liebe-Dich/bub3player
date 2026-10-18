@@ -57,9 +57,10 @@ Item {
             Layout.fillWidth: true
             text: h.title
             font.family: Theme.displayFont
-            font.pixelSize: h.hero ? 46 : 40
-            font.weight: Font.Bold
-            font.letterSpacing: -0.8
+            font.pixelSize: (Theme.style.titleSize || 40) + (h.hero ? 6 : 0)
+            font.weight: Theme.style.titleWeight || Font.Bold
+            font.letterSpacing: Theme.style.titleSpacing !== undefined ? Theme.style.titleSpacing : -0.8
+            font.capitalization: Theme.style.titleUpper ? Font.AllUppercase : Font.MixedCase
             color: Theme.text
             elide: Text.ElideRight
             maximumLineCount: 2

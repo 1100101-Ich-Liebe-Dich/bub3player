@@ -4,10 +4,11 @@ import Halcyon
 
 Rectangle {
     id: panel
-    color: Theme.alpha(Theme.panel, Theme.ambient > 0 ? 0.86 : 1)
+    property bool transparent: false
+    color: transparent ? "transparent" : Theme.alpha(Theme.panel, Theme.ambient > 0 ? 0.86 : 1)
     clip: true
 
-    Rectangle { width: 1; height: parent.height; color: Theme.alpha(Theme.border, 0.8) }
+    Rectangle { visible: !panel.transparent; width: 1; height: parent.height; color: Theme.alpha(Theme.border, 0.8) }
 
     Item {
         id: head

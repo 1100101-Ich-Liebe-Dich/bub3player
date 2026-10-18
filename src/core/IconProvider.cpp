@@ -66,6 +66,34 @@ IconProvider::IconProvider() : QQuickImageProvider(QQuickImageProvider::Image) {
 QImage IconProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
 {
     const QString name = id.section(QLatin1Char('/'), 0, 0);
+    if (name == QLatin1String("mesh")) {
+        // Fine dot mesh in front of a vacuum-fluorescent display.
+        QImage img(4, 4, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        for (int i = 0; i < 4; ++i) {
+            img.setPixel(i, 3, qRgba(0, 0, 0, 200));
+            img.setPixel(3, i, qRgba(0, 0, 0, 200));
+        }
+        if (size)
+            *size = img.size();
+        return img;
+    }
+    if (name == QLatin1String("noise")) {
+        // Tileable film grain for skins (fixed seed: identical on every start).
+        QImage img(128, 128, QImage::Format_ARGB32_Premultiplied);
+        quint32 seed = 0x9E3779B9u;
+        for (int y = 0; y < img.height(); ++y) {
+            QRgb *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+            for (int x = 0; x < img.width(); ++x) {
+                seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+                const int v = int(seed & 0xFF);
+                line[x] = qRgba(v, v, v, 255);
+            }
+        }
+        if (size)
+            *size = img.size();
+        return img;
+    }
     QString color = id.section(QLatin1Char('/'), 1, 1);
     if (color.isEmpty())
         color = QStringLiteral("ffffff");

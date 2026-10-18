@@ -24,6 +24,8 @@ ApplicationWindow {
     property bool visualizer: Library.setting("visualizer", true) !== false && Library.setting("visualizer", true) !== "false"
     property bool pauseInactive: Library.setting("pauseInactive", true) !== false && Library.setting("pauseInactive", true) !== "false"
     property int settingsTab: 0
+    property bool lowPower: Library.setting("lowPower", false) === true || Library.setting("lowPower", false) === "true"
+    onLowPowerChanged: Library.setSetting("lowPower", lowPower)
     property var stack: skinLoader.item ? skinLoader.item.stack : null
     readonly property var skin: skinLoader.item
 
@@ -37,7 +39,10 @@ ApplicationWindow {
 
     // ---------- effect clock ----------
     // One shared clock for all shader effects. "Sparsam" ticks at 30 fps, "Aus" stops it.
-    readonly property int fxFps: Theme.opt.fps === undefined ? 60 : parseInt(Theme.opt.fps)
+    readonly property int fxFps: {
+        var f = Theme.opt.fps === undefined ? 60 : parseInt(Theme.opt.fps)
+        return lowPower ? Math.min(f, 30) : f
+    }
     property real fxTime: 0
     Timer {
         interval: window.fxFps >= 60 ? 16 : 33
@@ -50,6 +55,11 @@ ApplicationWindow {
         target: Player
         property: "spectrumEnabled"
         value: window.visualizer && window.onScreen
+    }
+    Binding {
+        target: Player
+        property: "analysisHz"
+        value: window.lowPower ? 15 : 30
     }
     Binding {
         target: Player
