@@ -41,6 +41,45 @@ Bilder: [Soft](docs/screenshots/soft-bibliothek.jpg), [Soft Großansicht mit Wol
 
 ## Was schon geht
 
+**Neu in 0.6: Audioanalyse, Empfehlungen, Automix** (Einstellungen → Mix)
+- **Audioanalyse**: Jeder Titel wird einmal angehört (eigene, gedrosselte GStreamer-Pipeline,
+  unabhängig von der Wiedergabe): **Tempo** (BPM, mit Sicherheit und erstem Schlag), **Tonart**
+  (Camelot-Schreibweise, z. B. 8A = a-Moll), **Lautheit** nach EBU R128 (integriert, Spannweite,
+  Spitze), **Energie**, Helligkeit, Anschläge pro Sekunde und wo der Titel **anfängt, einblendet,
+  ausblendet und aufhört**. Die Wellenform fällt im selben Durchgang mit ab. Rund 0,5 s für
+  4 Minuten FLAC auf einem Kern. Der laufende und der nächste Titel kommen sofort dran, der Rest
+  der Bibliothek im Hintergrund: „Sanft“ (ein Drittel eines Kerns, pausiert beim Scan und wenn
+  der Rechner zu tun hat), „Zügig“ (halbe Kernzahl) oder „Nur Gespieltes“. Fortschritt und
+  Restzeit stehen in den Einstellungen; ein Abbruch macht nichts, es geht beim nächsten Start
+  weiter. Ohne Oberfläche: `halcyon --analyze DATEI…`
+- **Übergänge**: Lückenlos (wie bisher), **Überblenden** (gleich laute Überblendung, 1–15 s)
+  oder **Automix**: Stille am Anfang und Ende fällt weg; endet ein Titel mit eigenem Ausblenden,
+  kommt der nächste mitten hinein; bei passendem Tempo wird länger und auf dem Schlag gemischt,
+  bei sehr unterschiedlichem kürzer; ein langsames Intro darf selbst einblenden. Aufeinander
+  folgende Titel eines Albums bleiben lückenlos. Technisch: zwei Wiedergabe-Decks, die Blenden
+  laufen sample-genau im GStreamer-Controller, der Pegelmesser zeigt, was zu hören ist.
+- **Lautstärke angleichen**: Titel ohne ReplayGain bekommen ihren Ausgleich aus der gemessenen
+  Lautheit (Bezug −18 LUFS wie ReplayGain 2) statt pauschal −6 dB.
+- **Empfehlungen** lernen nur auf diesem Rechner aus dem Hörverlauf: welche Künstler in einer
+  Sitzung zusammen laufen, was übersprungen wird, was du zu welcher Tageszeit hörst. Dazu Genre,
+  Zeit, Tempo, Tonart und Energie. Gezogen wird mit gewichtetem Zufall, nie zweimal dieselbe
+  Liste; Künstler und Alben häufen sich nicht. Der vorhandene Hörverlauf wird beim ersten Start
+  einmal ausgewertet. Einstellbar: Entdeckerfreude (Vertraut, Ausgewogen, Abenteuerlich), Lernen
+  an/aus, Gelerntes löschen.
+- **Autoplay** nimmt jetzt die Empfehlungen. **Radio**: „Mehr wie dieser Titel“ (Rechtsklick auf
+  einen Titel) oder „Radio dazu starten“ (Rechtsklick auf Album, Künstler, Genre …). Die
+  Warteschlange füllt sich von selbst weiter; wer einen vorgeschlagenen Titel früh überspringt,
+  bekommt von diesem Künstler für den Rest der Sitzung weniger, schon geplante werden ersetzt.
+  Vorgeschlagene Titel tragen in der Warteschlange ein kleines Funkeln.
+- **Für dich** (Entdecken): „Weiter wie zuletzt“, dein Mix zur Tageszeit, „Wiederentdecken“
+  (lange nicht gehört, früher gern gespielt) und „Neu für dich“ (nie gehört, passend zu deinen
+  Lieblingen). Jeder Mix läuft danach als Radio weiter.
+- **Nach Tempo** und **Nach Tonart** unter Entdecken; Tempo und Tonart stehen in der Großansicht.
+  Filter und Sortierung für eigene Ansichten: `bpm`, `tempo`, `key`, `energy`, `loudness`.
+- Jellyfin-Titel können beim Abspielen mit analysiert werden (lädt sie ein zweites Mal);
+  Titel eines Servers, der gerade nicht erreichbar ist, schlägt der Player nicht vor.
+- Zum Nachprüfen ohne Oberfläche: `halcyon --recommend TITEL-ID …` zeigt, was folgen würde.
+
 **Neu in 0.5: Jellyfin** (Einstellungen → Jellyfin)
 - **Anmelden** mit Benutzer und Passwort oder per **Quick Connect** (Code in der Jellyfin-App
   bestätigen). Gespeichert wird nur der Zugangsschlüssel des Servers, nie das Passwort; widerrufen
@@ -116,6 +155,19 @@ Testrechner: VM mit 2 vCPUs, 8 GB RAM, SSD. 1 000 000 Dateien in 101 000 Ordnern
 | Volltextsuche | < 0,1 s | |
 
 Details: [docs/benchmark.md](docs/benchmark.md)
+
+### Audioanalyse
+
+Mit erzeugten Testtiteln, bei denen Tempo, Tonart und Lautheit bekannt sind (2 vCPUs):
+
+| Was | Ergebnis |
+|---|---|
+| Tempo, 30 Titel mit Schlagzeug, 84–176 BPM | alle auf ±0,2 BPM; Rauschen ohne Takt: Sicherheit 0 |
+| Tonart | Dur und Moll mit Leitton richtig; Moll-Stücke aus denselben Akkorden wie die Parallel-Dur zeigen die Parallel-Dur (gleiche Camelot-Zahl, mischt genauso) |
+| Lautheit gegenüber `ffmpeg ebur128` | ±0,1 LU bei Musik, 1 LU bei rosa Rauschen (Höhen über 11 kHz zählen weniger) |
+| Stille, Ein- und Ausblenden | auf 0,1 s (Stille), Ausblenden erkannt ab −6 dB unter dem Titel |
+| Dauer | 0,54 s für 3:51 min FLAC, 0,70 s als MP3; „Sanft“ braucht rund dreimal so lang, nebenbei |
+| Speicher | 150 s Dauertest mit Analyse „Zügig“, Titelsprüngen und Blättern: 295 MB gesamt, 157 MB eigene Daten, stabil |
 
 ### Arbeitsspeicher
 
@@ -252,7 +304,9 @@ wird aus dem Schema erzeugt (Typen `palette`, `bool`, `range`, `choice`).
 ```
 src/core      Datenbank (Schema, WAL, FTS5), Scanner, TagReader, Cover- und Icon-Provider
 src/library   Abfragen (QueryBuilder), Listen-/Gruppen-/Ordnermodelle, Ansichten, Library-API für QML
-src/player    GStreamer-Player, Warteschlange, MPRIS
+src/player    GStreamer-Player (zwei Decks, Überblenden), Warteschlange, MPRIS
+src/analysis  Audioanalyse (Tempo, Tonart, Lautheit, Übergänge, Wellenform) und ihre Hintergrund-Warteschlange
+src/recommend Empfehlungen: Lernen aus dem Hörverlauf, Auswahl, Autoplay, Radio, „Für dich“
 src/jellyfin  Jellyfin: Anmeldung, Abgleich (seitenweise im Hintergrund), Streaming-Adressen, Rückmeldung
 src/ui        Theme-System
 qml/          gemeinsame Seiten und Bausteine
@@ -279,11 +333,10 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 2. **Phase 2 – Jellyfin – fertig (0.5):** Anmeldung (Passwort, Quick Connect), Bibliotheken
    wählen, inkrementeller Abgleich in dieselbe Datenbank, Streaming, Ordneransicht über
    Jellyfin-Pfade, Rückmeldung an den Server, Doppelte ausblenden
-3. **Phase 3 – Empfehlungen:** aus dem Hörverlauf (zusammen gehört, Skips, Tageszeit),
-   „Mehr wie dieser Titel“, endlose Radio-Warteschlange. Andockpunkt ist schon da:
-   `Library::autoplayPicks()` – heute Genre/Zeit/Künstler, später die Empfehlungen
-4. **Phase 4 – Audioanalyse und Automix:** BPM, Tonart, Energie, Lautheit im Hintergrund;
-   Übergänge an Stille-/Intro-Grenzen, Crossfade mit zwei Pipelines
+3. **Phase 3 – Empfehlungen – fertig (0.6):** aus dem Hörverlauf (zusammen gehört, Skips,
+   Tageszeit), „Mehr wie dieser Titel“, Radio, „Für dich“
+4. **Phase 4 – Audioanalyse und Automix – fertig (0.6):** BPM, Tonart, Energie, Lautheit im
+   Hintergrund; Übergänge an Stille-/Ausblend-Grenzen, Überblenden mit zwei Decks
 5. **Phase 5:** Equalizer, Ausgabegerät wählen / Bit-Perfect über ALSA, Playlists und
    Smart-Playlists im Editor, Ordnerüberwachung (inotify), Liedtexte, mehr Themes
 

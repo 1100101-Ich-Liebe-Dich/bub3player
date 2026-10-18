@@ -110,6 +110,17 @@ void TrackListModel::reload()
     if (!m_specSet)
         return;
     const int gen = ++m_generation;
+    if (m_spec.contains(QStringLiteral("ids"))) {
+        // A fixed list (a mix): shown in exactly this order.
+        QVector<qint64> ids;
+        for (const QVariant &v : m_spec.value(QStringLiteral("ids")).toList())
+            ids << v.toLongLong();
+        qint64 total = 0;
+        for (const TrackRow &r : TrackCache::instance().fetch(ids))
+            total += r.durationMs;
+        apply(gen, std::move(ids), total, {});
+        return;
+    }
     if (!m_loading) {
         m_loading = true;
         emit loadingChanged();

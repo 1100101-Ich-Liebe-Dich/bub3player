@@ -52,7 +52,7 @@ int PlayQueue::rowCount(const QModelIndex &parent) const
 QHash<int, QByteArray> PlayQueue::roleNames() const
 {
     return {{IdRole, "trackId"}, {TitleRole, "title"}, {ArtistRole, "artist"}, {AlbumRole, "album"},
-            {DurationRole, "duration"}, {IsCurrentRole, "isCurrent"}, {IsPastRole, "isPast"}};
+            {DurationRole, "duration"}, {IsCurrentRole, "isCurrent"}, {IsPastRole, "isPast"}, {IsAutoRole, "isAuto"}};
 }
 
 QVariant PlayQueue::data(const QModelIndex &index, int role) const
@@ -64,6 +64,7 @@ QVariant PlayQueue::data(const QModelIndex &index, int role) const
     case IdRole: return id;
     case IsCurrentRole: return index.row() == m_pos;
     case IsPastRole: return index.row() < m_pos;
+    case IsAutoRole: return m_auto.value(m_order[index.row()]);
     default: break;
     }
     const TrackRow r = TrackCache::instance().get(id);
@@ -117,6 +118,8 @@ void PlayQueue::setTracks(QVector<qint64> ids, int start, bool shuffle)
 {
     beginResetModel();
     m_ids = std::move(ids);
+    m_auto.fill(false, m_ids.size());
+    m_radio.clear();
     m_order.resize(m_ids.size());
     std::iota(m_order.begin(), m_order.end(), 0);
     if (start < 0 || start >= m_ids.size())
@@ -136,7 +139,7 @@ void PlayQueue::setTracks(QVector<qint64> ids, int start, bool shuffle)
     emit upcomingChanged();
 }
 
-void PlayQueue::append(const QVector<qint64> &ids)
+void PlayQueue::append(const QVector<qint64> &ids, bool automatic)
 {
     if (ids.isEmpty())
         return;
@@ -145,6 +148,7 @@ void PlayQueue::append(const QVector<qint64> &ids)
     for (qint64 id : ids) {
         m_order << int(m_ids.size());
         m_ids << id;
+        m_auto << automatic;
     }
     endInsertRows();
     if (m_pos < 0)
@@ -164,6 +168,7 @@ void PlayQueue::insertNext(const QVector<qint64> &ids)
     for (qint64 id : ids) {
         idx << int(m_ids.size());
         m_ids << id;
+        m_auto << false;
     }
     for (int i = 0; i < idx.size(); ++i)
         m_order.insert(at + i, idx[i]);
@@ -255,6 +260,7 @@ void PlayQueue::removeAt(int row)
     const int k = m_order[row];
     m_order.removeAt(row);
     m_ids.removeAt(k);
+    m_auto.removeAt(k);
     for (int &o : m_order)
         if (o > k)
             --o;
@@ -291,13 +297,38 @@ void PlayQueue::clear()
     setTracks({}, 0, m_shuffle);
 }
 
+void PlayQueue::setRadio(const QVector<qint64> &ids, const QString &label, int start, bool firstPicked)
+{
+    setTracks(ids, start, false);
+    const int chosen = std::clamp(start, 0, std::max(0, int(m_auto.size()) - 1));
+    for (int i = 0; i < m_auto.size(); ++i)
+        m_auto[i] = firstPicked || i != chosen;
+    m_radio = label;
+    if (!m_auto.isEmpty())
+        emit dataChanged(index(0), index(int(m_order.size()) - 1), {IsAutoRole});
+    emit modeChanged();
+    emit upcomingChanged();
+}
+
+int PlayQueue::removeUpcomingAuto(const std::function<bool(qint64)> &match)
+{
+    int removed = 0;
+    for (int row = int(m_order.size()) - 1; row > m_pos; --row) {
+        if (m_auto.value(m_order[row]) && match(idAtRow(row))) {
+            removeAt(row);
+            ++removed;
+        }
+    }
+    return removed;
+}
+
 void PlayQueue::save() const
 {
     QSaveFile f(queueFile());
     if (!f.open(QIODevice::WriteOnly))
         return;
     QDataStream out(&f);
-    out << quint32(1) << m_ids << m_order << qint32(m_pos) << m_shuffle << qint32(m_repeat);
+    out << quint32(2) << m_ids << m_order << qint32(m_pos) << m_shuffle << qint32(m_repeat) << m_auto << m_radio;
     f.commit();
 }
 
@@ -312,14 +343,22 @@ void PlayQueue::restore()
     QVector<int> order;
     qint32 pos = -1, repeat = 0;
     bool shuffle = false;
+    QVector<bool> autos;
+    QString radio;
     in >> version >> ids >> order >> pos >> shuffle >> repeat;
-    if (in.status() != QDataStream::Ok || version != 1 || ids.size() != order.size())
+    if (version >= 2)
+        in >> autos >> radio;
+    if (in.status() != QDataStream::Ok || version < 1 || version > 2 || ids.size() != order.size())
         return;
+    if (autos.size() != ids.size())
+        autos.fill(false, ids.size());
     for (int o : order)
         if (o < 0 || o >= ids.size())
             return;
     beginResetModel();
     m_ids = ids;
+    m_auto = autos;
+    m_radio = radio;
     m_order = order;
     m_pos = (pos >= 0 && pos < order.size()) ? pos : (order.isEmpty() ? -1 : 0);
     m_shuffle = shuffle;

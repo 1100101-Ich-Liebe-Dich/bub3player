@@ -336,7 +336,7 @@ Item {
                 Text {
                     width: parent.width
                     visible: Player.format !== ""
-                    text: Player.format
+                    text: Player.formatInfo
                     font.family: Theme.uiFont
                     font.pixelSize: 11
                     font.letterSpacing: 2

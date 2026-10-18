@@ -14,7 +14,12 @@ struct Field
 {
     const char *expr;
     bool text;
+    bool analysis = false; // needs the analysis table (alias a)
 };
+
+// Joined only when a filter, sort or grouping uses it. Stale analyses (file
+// changed since) do not count.
+const char *AnalysisJoin = " LEFT JOIN analysis a ON a.track_id = t.id AND a.mtime = t.mtime";
 
 const QHash<QString, Field> &fieldMap()
 {
@@ -43,6 +48,12 @@ const QHash<QString, Field> &fieldMap()
         {QStringLiteral("source"), {"t.source_id", false}},
         {QStringLiteral("addedMonth"), {"strftime('%Y-%m', t.added_at, 'unixepoch')", true}},
         {QStringLiteral("fileYear"), {"CAST(strftime('%Y', t.mtime, 'unixepoch') AS INTEGER)", false}},
+        // from the audio analysis
+        {QStringLiteral("bpm"), {"(CASE WHEN a.bpm_conf >= 0.3 THEN a.bpm END)", false, true}},
+        {QStringLiteral("tempo"), {"(CASE WHEN a.bpm_conf >= 0.3 THEN CAST(a.bpm / 10 AS INTEGER) * 10 END)", false, true}},
+        {QStringLiteral("key"), {"(CASE WHEN a.key >= 0 AND a.key_conf >= 0.25 THEN a.key * 2 + a.minor END)", false, true}},
+        {QStringLiteral("energy"), {"a.energy", false, true}},
+        {QStringLiteral("loudness"), {"a.loudness", false, true}},
         {QStringLiteral("quality"),
          {"(CASE WHEN t.bits > 0 AND t.sample_rate > 0 "
           "THEN printf('%s %d bit, %g kHz', t.codec, t.bits, t.sample_rate / 1000.0) "
@@ -58,6 +69,7 @@ struct SortDef
     QStringList keys;  // first keys get the direction, the rest stay ascending
     int directional;   // how many leading keys follow 'desc'
     bool needsFolder;
+    bool needsAnalysis = false;
 };
 
 const QHash<QString, SortDef> &sortMap()
@@ -80,6 +92,9 @@ const QHash<QString, SortDef> &sortMap()
         {QStringLiteral("genre"), {split(QStringLiteral("t.genre COLLATE NOCASE|t.aa COLLATE NOCASE|t.album COLLATE NOCASE|") + albumTail), 1, false}},
         {QStringLiteral("path"), {split(QStringLiteral("f.path|t.filename")), 2, true}},
         {QStringLiteral("random"), {split(QStringLiteral("RANDOM()")), 0, false}},
+        // unanalysed tracks last, either direction
+        {QStringLiteral("bpm"), {split(QStringLiteral("(a.bpm_conf IS NULL OR a.bpm_conf < 0.3)|a.bpm|t.id")), 0, false, true}},
+        {QStringLiteral("energy"), {split(QStringLiteral("(a.energy IS NULL)|a.energy|t.id")), 0, false, true}},
     };
     return m;
 }
@@ -107,7 +122,7 @@ QString likeEscape(QString s)
 
 std::atomic<bool> g_hideDuplicates{false};
 
-bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds, QString &error)
+bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds, QString &error, bool *analysis)
 {
     // Jellyfin copies of tracks that also exist locally (see JellyfinWriter::markDuplicates).
     if (g_hideDuplicates.load(std::memory_order_relaxed))
@@ -137,6 +152,8 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
         }
         const QString e = QString::fromLatin1(it->expr);
         const QString coll = it->text ? QStringLiteral(" COLLATE NOCASE") : QString();
+        if (it->analysis && analysis)
+            *analysis = true;
 
         if (op == QLatin1String("eq")) {
             where << e + QStringLiteral(" = ?") + coll;
@@ -213,7 +230,8 @@ Built trackIds(const QVariantMap &spec)
 {
     Built b;
     QStringList where;
-    if (!buildWhere(spec, where, b.binds, b.error)) {
+    bool analysis = false;
+    if (!buildWhere(spec, where, b.binds, b.error, &analysis)) {
         b.ok = false;
         return b;
     }
@@ -221,12 +239,17 @@ Built trackIds(const QVariantMap &spec)
     const SortDef sd = sortMap().value(sortKey, sortMap().value(QStringLiteral("album")));
     const bool desc = spec.value(QStringLiteral("desc")).toBool();
     QStringList order;
-    for (int i = 0; i < sd.keys.size(); ++i)
-        order << sd.keys[i] + ((desc && i < sd.directional) ? QStringLiteral(" DESC") : QString());
+    for (int i = 0; i < sd.keys.size(); ++i) {
+        // bpm/energy: the value itself follows the direction, "not analysed" stays last
+        const bool dir = sd.needsAnalysis ? i == 1 : i < sd.directional;
+        order << sd.keys[i] + ((desc && dir) ? QStringLiteral(" DESC") : QString());
+    }
 
     QString from = QStringLiteral(" FROM tracks t");
     if (sd.needsFolder)
         from += QStringLiteral(" JOIN folders f ON f.id = t.folder_id");
+    if (analysis || sd.needsAnalysis)
+        from += QLatin1String(AnalysisJoin);
     if (!where.isEmpty())
         from += QStringLiteral(" WHERE ") + where.join(QStringLiteral(" AND "));
     b.sql = QStringLiteral("SELECT t.id") + from + QStringLiteral(" ORDER BY ") + order.join(QStringLiteral(", "));
@@ -241,11 +264,16 @@ Built groups(const QVariantMap &spec)
 {
     Built b;
     QStringList where;
-    if (!buildWhere(spec, where, b.binds, b.error)) {
+    bool analysis = false;
+    if (!buildWhere(spec, where, b.binds, b.error, &analysis)) {
         b.ok = false;
         return b;
     }
     const QString by = spec.value(QStringLiteral("groupBy"), QStringLiteral("album")).toString();
+    const bool byAnalysis = by == QLatin1String("tempo") || by == QLatin1String("key");
+    if (byAnalysis) // only tracks that have a value
+        where << QStringLiteral("%1 IS NOT NULL").arg(QLatin1String(fieldMap().value(by).expr));
+    const QString join = (analysis || byAnalysis) ? QString::fromLatin1(AnalysisJoin) : QString();
     const QString gsort = spec.value(QStringLiteral("groupSort"), QStringLiteral("name")).toString();
     const bool desc = spec.value(QStringLiteral("desc")).toBool();
     const QString dir = desc ? QStringLiteral(" DESC") : QString();
@@ -265,9 +293,9 @@ Built groups(const QVariantMap &spec)
         else // unknown artist / album go last, not first
             order = QStringLiteral("(t.aa = '') , 1 COLLATE NOCASE%1, (t.album = ''), 2 COLLATE NOCASE%1").arg(dir);
         const bool needAdded = gsort == QLatin1String("added");
-        b.sql = QStringLiteral("SELECT t.aa, t.album, COUNT(*), MIN(t.id), MAX(t.year), %1 FROM tracks t%2 "
-                               "GROUP BY t.aa COLLATE NOCASE, t.album COLLATE NOCASE ORDER BY %3")
-                    .arg(needAdded ? QStringLiteral("MAX(t.added_at)") : QStringLiteral("0"), whereSql, order);
+        b.sql = QStringLiteral("SELECT t.aa, t.album, COUNT(*), MIN(t.id), MAX(t.year), %1 FROM tracks t%2%3 "
+                               "GROUP BY t.aa COLLATE NOCASE, t.album COLLATE NOCASE ORDER BY %4")
+                    .arg(needAdded ? QStringLiteral("MAX(t.added_at)") : QStringLiteral("0"), join, whereSql, order);
         return b;
     }
 
@@ -281,6 +309,8 @@ Built groups(const QVariantMap &spec)
         {QStringLiteral("quality"), QStringLiteral("quality")},
         {QStringLiteral("addedMonth"), QStringLiteral("addedMonth")},
         {QStringLiteral("fileYear"), QStringLiteral("fileYear")},
+        {QStringLiteral("tempo"), QStringLiteral("tempo")},
+        {QStringLiteral("key"), QStringLiteral("key")},
     };
     auto it = single.constFind(by);
     if (it == single.constEnd()) {
@@ -304,14 +334,16 @@ Built groups(const QVariantMap &spec)
     QString order;
     if (gsort == QLatin1String("count"))
         order = QStringLiteral("3%1").arg(desc ? QString() : QStringLiteral(" DESC"));
+    else if (byAnalysis)
+        order = QStringLiteral("1%1").arg(desc ? QStringLiteral(" DESC") : QString()); // slow to fast (key: GroupModel sorts by Camelot)
     else if (timeLike)
         order = QStringLiteral("1%1").arg(desc ? QString() : QStringLiteral(" DESC"));
     else
         order = QStringLiteral("(%1 = ''), 1%2%3").arg(expr, coll, dir); // "Unbekannt" last
     if (timeLike && gsort != QLatin1String("count"))
         order = QStringLiteral("(%1 = 0), ").arg(expr) + order;       // "Ohne Jahr" last
-    b.sql = QStringLiteral("SELECT %1, NULL, COUNT(*), MIN(t.id), 0, 0 FROM tracks t%2 GROUP BY 1%3 ORDER BY %4")
-                .arg(expr, whereSql, coll, order);
+    b.sql = QStringLiteral("SELECT %1, NULL, COUNT(*), MIN(t.id), 0, 0 FROM tracks t%2%3 GROUP BY 1%4 ORDER BY %5")
+                .arg(expr, join, whereSql, coll, order);
     return b;
 }
 

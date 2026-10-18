@@ -119,6 +119,11 @@ Jellyfin::Jellyfin(Player *player, Library *library, QObject *parent)
         reportProgress();
     });
 
+    // Keep the reachability for other parts (recommendations) up to date.
+    connect(this, &Jellyfin::serversChanged, this, [this] {
+        for (const Server &srv : std::as_const(m_servers))
+            JellyfinAccess::setOnline(srv.id, srv.status != QLatin1String("offline") && srv.status != QLatin1String("denied"));
+    });
     load();
     m_autoSync.setInterval(30 * 60 * 1000);
     connect(&m_autoSync, &QTimer::timeout, this, &Jellyfin::scheduleAutoSync);

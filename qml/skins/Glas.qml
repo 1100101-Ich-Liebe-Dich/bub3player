@@ -552,7 +552,7 @@ Item {
                 anchors.left: bigCover.left
                 anchors.bottom: bigCover.bottom
                 anchors.margins: 16
-                text: Player.format
+                text: Player.formatInfo
                 big: true
             }
             Column {

@@ -348,7 +348,7 @@ Item {
             }
             Text {
                 width: parent.width
-                text: Player.album + (Player.year > 0 ? ", " + Player.year : "") + (Player.format !== "" ? "   " + Player.format : "")
+                text: Player.album + (Player.year > 0 ? ", " + Player.year : "") + (Player.format !== "" ? "   " + Player.formatInfo : "")
                 font.family: Theme.uiFont
                 font.pixelSize: 15
                 font.weight: Font.DemiBold

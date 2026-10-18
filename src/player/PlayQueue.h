@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QVector>
+#include <functional>
 
 // Play queue. Rows are shown in playback order; shuffle permutes the order
 // without losing the original, so turning shuffle off restores it.
@@ -17,9 +18,12 @@ class PlayQueue : public QAbstractListModel
     // Autoplay: when the queue is about to run out, the library appends matching
     // tracks (see Library::maybeAutoplay). Later this is fed by recommendations.
     Q_PROPERTY(bool autoplay READ autoplay WRITE setAutoplay NOTIFY modeChanged)
+    // Radio ("Mehr wie dieser Titel"): the queue keeps filling itself even with
+    // autoplay off, until something else is played. Label: what it started from.
+    Q_PROPERTY(QString radio READ radio NOTIFY modeChanged)
 
 public:
-    enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole };
+    enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole, IsAutoRole };
 
     explicit PlayQueue(QObject *parent = nullptr);
 
@@ -39,11 +43,19 @@ public:
     bool autoplay() const { return m_autoplay; }
     void setAutoplay(bool on);
     qint64 lastId() const { return m_order.isEmpty() ? 0 : idAtRow(int(m_order.size()) - 1); }
+    Q_INVOKABLE qint64 idAt(int row) const { return row >= 0 && row < m_order.size() ? idAtRow(row) : 0; }
     const QVector<qint64> &ids() const { return m_ids; }
 
     void setTracks(QVector<qint64> ids, int start, bool shuffle);
-    void append(const QVector<qint64> &ids);
+    void append(const QVector<qint64> &ids, bool automatic = false); // automatic: picked by autoplay / radio
     void insertNext(const QVector<qint64> &ids);
+    // Starts a radio: first track chosen by the listener, the rest picked.
+    // `firstPicked`: also the first track was picked (a mix), not chosen by the listener.
+    void setRadio(const QVector<qint64> &ids, const QString &label, int start = 0, bool firstPicked = false);
+    QString radio() const { return m_radio; }
+    bool isAuto(int row) const { return row >= 0 && row < m_order.size() && m_auto.value(m_order[row]); }
+    // Drops picked tracks after the current one that match (e.g. an artist just skipped).
+    int removeUpcomingAuto(const std::function<bool(qint64)> &match);
 
     bool advance();          // automatic or "next": false at the end of the queue
     bool back();
@@ -67,7 +79,9 @@ private:
     void setPos(int pos);
 
     QVector<qint64> m_ids;
+    QVector<bool> m_auto;   // per entry of m_ids
     QVector<int> m_order;
+    QString m_radio;
     int m_pos = -1;
     bool m_shuffle = false;
     int m_repeat = 0;

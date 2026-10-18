@@ -313,5 +313,6 @@ Item {
         HMenuItem { text: qsTr("Zufällig abspielen"); onTriggered: Library.playGroup(groups, ctx.row, true) }
         HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueGroup(groups, ctx.row, true) }
         HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueGroup(groups, ctx.row, false) }
+        HMenuItem { text: qsTr("Radio dazu starten"); onTriggered: Recommend.startRadioFromGroup(groups, ctx.row) }
     }
 }

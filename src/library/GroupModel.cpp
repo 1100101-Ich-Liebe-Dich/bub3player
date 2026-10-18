@@ -1,5 +1,6 @@
 #include "library/GroupModel.h"
 
+#include "analysis/AudioAnalyzer.h"
 #include "core/Database.h"
 #include "library/Library.h"
 #include "library/QueryBuilder.h"
@@ -110,6 +111,15 @@ void GroupModel::reload()
                         const int d = s.i32(0);
                         g.title = d > 0 ? QStringLiteral("%1er").arg(d) : QStringLiteral("Ohne Jahr");
                         g.subtitle = countText(g.count);
+                    } else if (by == QLatin1String("tempo")) {
+                        const int t = s.i32(0);
+                        g.title = QStringLiteral("%1–%2 BPM").arg(t).arg(t + 9);
+                        g.subtitle = countText(g.count);
+                    } else if (by == QLatin1String("key")) {
+                        const int code = s.i32(0);
+                        g.title = AudioAnalyzer::camelot(code / 2, code % 2) + QStringLiteral(" · ")
+                                  + AudioAnalyzer::keyName(code / 2, code % 2);
+                        g.subtitle = countText(g.count);
                     } else if (by == QLatin1String("year") || by == QLatin1String("fileYear")) {
                         const int y = s.i32(0);
                         g.title = y > 0 ? QString::number(y) : QStringLiteral("Ohne Jahr");
@@ -124,6 +134,13 @@ void GroupModel::reload()
                 qWarning() << "Gruppenabfrage fehlgeschlagen:" << e.what();
             }
         }
+        if (by == QLatin1String("key")) // around the Camelot wheel: 1A 1B 2A 2B ...
+            std::stable_sort(groups.begin(), groups.end(), [](const Group &a, const Group &b) {
+                const int ka = a.key1.toInt(), kb = b.key1.toInt();
+                const QString ca = AudioAnalyzer::camelot(ka / 2, ka % 2), cb = AudioAnalyzer::camelot(kb / 2, kb % 2);
+                const int na = ca.chopped(1).toInt(), nb = cb.chopped(1).toInt();
+                return na != nb ? na < nb : ca.back() < cb.back();
+            });
         QMetaObject::invokeMethod(qApp, [self, gen, groups = std::move(groups)]() mutable {
             if (self)
                 self->apply(gen, std::move(groups));

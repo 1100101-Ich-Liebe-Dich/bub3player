@@ -9,6 +9,7 @@
 
 // Virtualized track list for any view spec. Holds only ids; rows are pulled in
 // pages of 128 when the ListView asks for them. Id queries run off the UI thread.
+// A spec {"ids": [...]} shows exactly these tracks in this order (mixes).
 class TrackListModel : public QAbstractListModel
 {
     Q_OBJECT

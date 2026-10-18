@@ -1,3 +1,5 @@
+#include "analysis/AnalysisService.h"
+#include "analysis/AudioAnalyzer.h"
 #include "core/CoverProvider.h"
 #include "core/Database.h"
 #include "core/IconProvider.h"
@@ -13,10 +15,14 @@
 #include "player/PlayQueue.h"
 #include "ui/Memory.h"
 #include "player/Player.h"
+#include "recommend/Recommender.h"
 #include "ui/Theme.h"
 
 #include <QCommandLineParser>
 #include <QDir>
+#include <atomic>
+#include <QUrl>
+#include <QElapsedTimer>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QIcon>
@@ -61,6 +67,95 @@ int runHeadlessScan(int argc, char **argv)
     return 0;
 }
 
+// halcyon --analyze FILE [FILE...]
+// Audio analysis without the UI: tempo, key, loudness, transitions, timing.
+int runHeadlessAnalyze(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    gst_init(&argc, &argv);
+    std::atomic<bool> cancel{false};
+    int files = 0;
+    double total = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--analyze") == 0)
+            continue;
+        const QString path = QDir(QString::fromLocal8Bit(argv[i])).absolutePath();
+        QElapsedTimer t;
+        t.start();
+        const AudioAnalyzer::Result r = AudioAnalyzer::analyse(QUrl::fromLocalFile(path).toEncoded(), cancel);
+        const double sec = t.elapsed() / 1000.0;
+        total += sec;
+        ++files;
+        if (!r.ok) {
+            std::printf("%s\n  nicht lesbar (%.2f s)\n", qPrintable(path), sec);
+            continue;
+        }
+        std::printf("%s\n  %.1f BPM (sicher %.2f, erster Schlag %lld ms) | %s %s (sicher %.2f)\n"
+                    "  %.1f LUFS, LRA %.1f LU, Spitze %.1f dBFS | Energie %.2f, Helligkeit %.0f Hz, %.1f Anschläge/s\n"
+                    "  Länge %lld ms, Klang %lld..%lld ms, Intro bis %lld ms, Outro ab %lld ms | %.2f s\n",
+                    qPrintable(path), r.bpm, r.bpmConf, (long long)r.beatMs,
+                    qPrintable(AudioAnalyzer::camelot(r.key, r.minor)), qPrintable(AudioAnalyzer::keyName(r.key, r.minor)), r.keyConf,
+                    r.loudness, r.lra, r.peak, r.energy, r.brightness, r.onsetRate,
+                    (long long)r.lengthMs, (long long)r.startMs, (long long)r.endMs, (long long)r.introMs, (long long)r.outroMs, sec);
+    }
+    if (files > 1)
+        std::printf("%d Dateien in %.2f s (%.2f s pro Datei)\n", files, total, total / files);
+    return 0;
+}
+
+// halcyon --recommend TRACK_ID [TRACK_ID...] [--db FILE] [--count N] [--mode 0|1|2]
+// What the recommendations would pick after these tracks (for tuning and bug reports).
+int runHeadlessRecommend(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("halcyon"));
+    QCommandLineParser p;
+    p.addOption({QStringLiteral("recommend"), QStringLiteral("Empfehlungen zeigen.")});
+    p.addOption({QStringLiteral("db"), QStringLiteral("Datenbankdatei."), QStringLiteral("file")});
+    p.addOption({QStringLiteral("count"), QStringLiteral("Anzahl."), QStringLiteral("n"), QStringLiteral("15")});
+    p.addOption({QStringLiteral("mode"), QStringLiteral("0 weiter, 1 ähnlich, 2 nur neue."), QStringLiteral("m"), QStringLiteral("0")});
+    p.addOption({QStringLiteral("automix"), QStringLiteral("Tempo und Tonart stärker beachten.")});
+    p.addOption({QStringLiteral("relearn"), QStringLiteral("Vorher alles neu aus dem Hörverlauf lernen.")});
+    p.addPositionalArgument(QStringLiteral("ids"), QStringLiteral("Titel-IDs"));
+    p.process(app);
+    if (p.isSet(QStringLiteral("db")))
+        Database::setPath(p.value(QStringLiteral("db")));
+    Database::migrate();
+    Recommender::Context c;
+    for (const QString &a : p.positionalArguments())
+        c.seeds << a.toLongLong();
+    c.count = p.value(QStringLiteral("count")).toInt();
+    c.mode = p.value(QStringLiteral("mode")).toInt();
+    c.automix = p.isSet(QStringLiteral("automix"));
+    DbConnection db = Database::open();
+    if (p.isSet(QStringLiteral("relearn")))
+        Recommender::relearn(db);
+    {
+        Stmt src(db, "SELECT id FROM sources WHERE kind = 'jellyfin'");
+        while (src.step())
+            c.online << src.i64(0); // offline here: no way to know, take them all
+    }
+    auto show = [&](qint64 id, const char *prefix) {
+        Stmt s(db, "SELECT t.title, t.artist, t.genre, t.year, a.bpm, a.key, a.minor, a.energy FROM tracks t "
+                   "LEFT JOIN analysis a ON a.track_id = t.id WHERE t.id = ?");
+        s.bind(1, id);
+        if (s.step())
+            std::printf("%s%6lld  %-28s %-22s %-14s %4d  %5.1f BPM %-3s E %.2f\n", prefix, (long long)id, qPrintable(s.str(0).left(28)),
+                        qPrintable(s.str(1).left(22)), qPrintable(s.str(2).left(14)), s.i32(3), s.dbl(4),
+                        qPrintable(AudioAnalyzer::camelot(s.isNull(5) ? -1 : s.i32(5), s.i32(6))), s.dbl(7));
+    };
+    for (qint64 id : c.seeds)
+        show(id, "Start ");
+    QElapsedTimer t;
+    t.start();
+    const QVector<qint64> picks = Recommender::pick(c);
+    const qint64 ms = t.elapsed();
+    for (qint64 id : picks)
+        show(id, "      ");
+    std::printf("%d Titel in %lld ms\n", int(picks.size()), (long long)ms);
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -69,6 +164,10 @@ int main(int argc, char *argv[])
     for (int i = 1; i < argc; ++i)
         if (qstrcmp(argv[i], "--scan") == 0)
             return runHeadlessScan(argc, argv);
+        else if (qstrcmp(argv[i], "--analyze") == 0)
+            return runHeadlessAnalyze(argc, argv);
+        else if (qstrcmp(argv[i], "--recommend") == 0)
+            return runHeadlessRecommend(argc, argv);
 
     gst_init(&argc, &argv);
 
@@ -117,11 +216,14 @@ int main(int argc, char *argv[])
     // Before anything counts tracks: hide Jellyfin copies of local tracks?
     QueryBuilder::setHideDuplicates(QSettings().value(QStringLiteral("jellyfin/preferLocal"), true).toBool());
 
+    AnalysisService analysis;
     PlayQueue queue;
     Player player(&queue);
     Library library(&player, &queue);
     Theme theme;
     Memory memory;
+    analysis.setScanner(library.scanner());
+    Recommender recommender(&player, &queue, &library);
     Jellyfin jellyfin(&player, &library);
     QObject::connect(&jellyfin, &Jellyfin::message, &library, &Library::message);
     QObject::connect(library.scanner(), &Scanner::finished, &jellyfin, &Jellyfin::localLibraryChanged);
@@ -156,6 +258,8 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Theme", &theme);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Memory", &memory);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Jellyfin", &jellyfin);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Analysis", &analysis);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Recommend", &recommender);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");

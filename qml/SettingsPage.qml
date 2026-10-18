@@ -4,12 +4,15 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Halcyon
 
-// Settings in four tabs: general (library, playback, views), theme (pick a skin,
-// then that skin's own options), Jellyfin and about.
+// Settings in five tabs: general (library, playback, views), theme (pick a skin,
+// then that skin's own options), mix (transitions, recommendations, analysis),
+// Jellyfin and about.
 Item {
     id: page
     property string pageId: "settings"
     readonly property int colWidth: Math.min(920, flick.width - 72)
+    // --ui-test scroll
+    function scrollStep() { flick.contentY = Math.min(Math.max(0, flick.contentHeight - flick.height), flick.contentY + 300) }
 
     Flickable {
         id: flick
@@ -35,7 +38,7 @@ Item {
             Row {
                 spacing: 6
                 Repeater {
-                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Jellyfin"), qsTr("Über")]
+                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Mix"), qsTr("Jellyfin"), qsTr("Über")]
                     AbstractButton {
                         id: tab
                         readonly property bool on: window.settingsTab === index
@@ -215,17 +218,6 @@ Item {
                 }
 
                 Section {
-                    title: qsTr("Autoplay")
-                    text: qsTr("Wenn die Warteschlange zu Ende geht, hängt der Player passende Titel an: gleiches Genre und ähnliche Zeit, ein paar vom selben Künstler, nichts aus den letzten zwei Tagen. Das ist die erste, einfache Stufe; später kommen hier die Empfehlungen aus deinem Hörverlauf und der Klanganalyse dazu. Schalter auch in der Warteschlange (Stern-Symbol).")
-                    HToggle {
-                        width: col.width
-                        label: qsTr("Autoplay: am Ende mit passender Musik weitermachen")
-                        checked: Queue.autoplay
-                        onToggled: Queue.autoplay = checked
-                    }
-                }
-
-                Section {
                     title: qsTr("Leistung")
                     text: qsTr("Für ältere Rechner: Effekte lassen sich hier und in den Theme-Einstellungen zurückfahren.")
                     HToggle {
@@ -254,7 +246,7 @@ Item {
                     }
                     HToggle {
                         width: col.width
-                        label: qsTr("Wellenform zum Spulen berechnen (einmal pro Titel, im Hintergrund)")
+                        label: qsTr("Wellenform zum Spulen anzeigen (entsteht bei der Audioanalyse)")
                         checked: window.waveform
                         onToggled: window.waveform = checked
                     }
@@ -388,9 +380,17 @@ Item {
                 }
             }
 
-            // =============== Jellyfin ===============
+            // =============== Mix ===============
             Loader {
                 active: window.settingsTab === 2
+                visible: active
+                width: col.width
+                sourceComponent: MixSettings { width: col.width }
+            }
+
+            // =============== Jellyfin ===============
+            Loader {
+                active: window.settingsTab === 3
                 visible: active
                 width: col.width
                 sourceComponent: JellyfinSettings { width: col.width }
@@ -398,7 +398,7 @@ Item {
 
             // =============== Über ===============
             Column {
-                visible: window.settingsTab === 3
+                visible: window.settingsTab === 4
                 width: col.width
                 spacing: 24
 

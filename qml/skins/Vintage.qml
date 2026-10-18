@@ -254,7 +254,7 @@ Item {
                         }
                         Text {
                             width: parent.width
-                            text: Player.album + (Player.year > 0 ? " (" + Player.year + ")" : "") + (Player.format !== "" ? "  ·  " + Player.format : "")
+                            text: Player.album + (Player.year > 0 ? " (" + Player.year + ")" : "") + (Player.format !== "" ? "  ·  " + Player.formatInfo : "")
                             elide: Text.ElideRight
                             font.family: "Barlow"
                             font.pixelSize: 13

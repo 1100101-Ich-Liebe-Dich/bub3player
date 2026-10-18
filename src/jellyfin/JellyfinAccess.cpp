@@ -19,6 +19,19 @@ namespace JellyfinAccess {
 namespace {
 QReadWriteLock g_lock;
 QHash<qint64, Server> g_servers;
+QHash<qint64, bool> g_online;
+}
+
+void setOnline(qint64 sourceId, bool online)
+{
+    QWriteLocker l(&g_lock);
+    g_online.insert(sourceId, online);
+}
+
+bool isOnline(qint64 sourceId)
+{
+    QReadLocker l(&g_lock);
+    return g_servers.contains(sourceId) && g_online.value(sourceId, true);
 }
 
 void set(qint64 sourceId, const Server &s)

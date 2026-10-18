@@ -565,7 +565,7 @@ Item {
                         Text {
                             id: chipText
                             anchors.centerIn: parent
-                            text: Player.format
+                            text: Player.formatInfo
                             font.family: Theme.uiFont
                             font.pixelSize: 12
                             font.weight: Font.Bold

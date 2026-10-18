@@ -158,6 +158,7 @@ Item {
         HMenuItem { text: qsTr("Abspielen"); onTriggered: Library.playList(tracks, menu.row, false) }
         HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueList(tracks, menu.row, true) }
         HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueList(tracks, menu.row, false) }
+        HMenuItem { text: qsTr("Mehr wie dieser Titel (Radio)"); onTriggered: Recommend.startRadioFromList(tracks, menu.row) }
         HMenuItem {
             text: qsTr("Album öffnen")
             enabled: !page.albumMode
