@@ -69,6 +69,8 @@ public:
     Q_INVOKABLE void playSpec(const QVariantMap &spec, bool shuffle = false);
 
     void startupScan();
+    // Something other than the scanner changed tracks (e.g. a Jellyfin sync).
+    void notifyExternalChange();
 
 signals:
     void rootsChanged();

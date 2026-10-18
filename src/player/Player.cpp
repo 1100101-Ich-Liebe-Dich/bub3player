@@ -2,6 +2,7 @@
 
 #include "core/CoverProvider.h"
 #include "core/Database.h"
+#include "jellyfin/JellyfinAccess.h"
 #include "library/TrackCache.h"
 #include "player/PlayQueue.h"
 
@@ -80,7 +81,7 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
         emit waveformChanged();
         // Prepare the next track while nothing else is going on.
         const qint64 next = m_queue->nextId();
-        if (next > 0 && !values.isEmpty())
+        if (next > 0 && !values.isEmpty() && !TrackCache::instance().get(next).isRemote())
             m_wave.request(next, TrackCache::instance().pathOf(next), 0, TrackCache::instance().get(next).mtime);
     });
     m_playbin = gst_element_factory_make("playbin", "halcyon");
@@ -210,6 +211,9 @@ Player::~Player()
 
 QByteArray Player::uriFor(qint64 id) const
 {
+    const TrackRow r = TrackCache::instance().get(id);
+    if (r.isRemote())
+        return JellyfinAccess::streamUrl(r.sourceId, r.remoteId);
     const QString path = TrackCache::instance().pathOf(id);
     return path.isEmpty() ? QByteArray() : QUrl::fromLocalFile(path).toEncoded();
 }
@@ -273,8 +277,12 @@ G_GNUC_END_IGNORE_DEPRECATIONS
         if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_STATE_CHANGED && GST_MESSAGE_SRC(msg) != GST_OBJECT(self->m_playbin))
             break;
         gst_message_ref(msg);
-        QMetaObject::invokeMethod(self, [self, msg] {
-            self->handleMessage(msg);
+        // A failing stream usually posts several errors in a row; only the first
+        // one of the current load may skip to the next track.
+        const int gen = self->m_loadGen.load();
+        QMetaObject::invokeMethod(self, [self, msg, gen] {
+            if (GST_MESSAGE_TYPE(msg) != GST_MESSAGE_ERROR || gen == self->m_loadGen.load())
+                self->handleMessage(msg);
             gst_message_unref(msg);
         }, Qt::QueuedConnection);
         break;
@@ -360,8 +368,12 @@ void Player::handleMessage(GstMessage *msg)
         GError *err = nullptr;
         gchar *dbg = nullptr;
         gst_message_parse_error(msg, &err, &dbg);
-        m_error = tr("Wiedergabefehler: %1").arg(QString::fromUtf8(err ? err->message : "unbekannt"));
-        qWarning() << m_error << (dbg ? dbg : "");
+        if (TrackCache::instance().get(m_playingId).isRemote())
+            m_error = tr("Titel vom Jellyfin-Server konnte nicht geladen werden. Ist der Server erreichbar?");
+        else
+            m_error = tr("Wiedergabefehler: %1").arg(QString::fromUtf8(err ? err->message : "unbekannt"));
+        qWarning() << "Wiedergabefehler:" << (err ? err->message : "") << (dbg ? dbg : "");
+        ++m_loadGen; // ignore the rest of this stream's errors
         g_clear_error(&err);
         g_free(dbg);
         emit errorChanged();
@@ -534,6 +546,8 @@ void Player::requestWaveform()
     }
     if (m_playingId > 0 && m_wave.enabled()) {
         const TrackRow r = TrackCache::instance().get(m_playingId);
+        if (r.isRemote()) // streamed: no extra download just for the waveform
+            return;
         m_wave.request(m_playingId, TrackCache::instance().pathOf(m_playingId), 0, r.mtime);
     }
 }

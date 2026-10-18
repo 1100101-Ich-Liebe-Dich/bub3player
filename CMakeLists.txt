@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 0.4.1 LANGUAGES CXX)
+project(Halcyon VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Qml Concurrent DBus Svg ShaderTools)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Qml Concurrent DBus Svg ShaderTools Network)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.18)
 pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.11)
@@ -33,6 +33,9 @@ add_executable(halcyon
   src/player/PlayQueue.h       src/player/PlayQueue.cpp
   src/player/Player.h          src/player/Player.cpp
   src/player/Waveform.h        src/player/Waveform.cpp
+  src/jellyfin/JellyfinAccess.h src/jellyfin/JellyfinAccess.cpp
+  src/jellyfin/JellyfinSync.h  src/jellyfin/JellyfinSync.cpp
+  src/jellyfin/Jellyfin.h      src/jellyfin/Jellyfin.cpp
   src/player/Mpris.h           src/player/Mpris.cpp
   src/ui/Memory.h              src/ui/Memory.cpp
   src/ui/Theme.h               src/ui/Theme.cpp
@@ -49,8 +52,9 @@ file(GLOB FONT_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS asse
 qt_add_resources(halcyon "fonts" PREFIX "/fonts" BASE assets/fonts FILES ${FONT_FILES})
 
 target_include_directories(halcyon PRIVATE src)
+target_compile_definitions(halcyon PRIVATE HALCYON_VERSION="${PROJECT_VERSION}")
 target_link_libraries(halcyon PRIVATE
-  Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Qml Qt6::Concurrent Qt6::DBus Qt6::Svg
+  Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Qml Qt6::Concurrent Qt6::DBus Qt6::Svg Qt6::Network
   PkgConfig::GST PkgConfig::TAGLIB PkgConfig::SQLITE)
 target_compile_options(halcyon PRIVATE -Wall -Wextra -Wno-unused-parameter)
 

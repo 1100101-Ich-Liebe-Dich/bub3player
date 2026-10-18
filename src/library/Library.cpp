@@ -150,6 +150,13 @@ QVariantMap Library::viewById(const QString &id) const
     return {};
 }
 
+void Library::notifyExternalChange()
+{
+    TrackCache::instance().invalidate();
+    refreshStats();
+    emit changed();
+}
+
 void Library::maybeAutoplay()
 {
     if (!m_queue->autoplay() || m_queue->repeat() != 0 || m_player->state() != 1)
@@ -187,8 +194,10 @@ QVector<qint64> Library::autoplayPicks(qint64 seed, int count)
         auto take = [&](const char *where, int n, auto bindFn) {
             if (int(out.size()) >= count)
                 return;
-            const QString sql = QStringLiteral("SELECT id FROM tracks WHERE tags_read = 1 AND last_played < ?1 AND (%1) "
-                                               "ORDER BY random() LIMIT %2").arg(QLatin1String(where)).arg(n * 3);
+            const QString sql = QStringLiteral("SELECT id FROM tracks WHERE tags_read = 1 AND last_played < ?1 AND (%1)%3 "
+                                               "ORDER BY random() LIMIT %2")
+                                    .arg(QLatin1String(where)).arg(n * 3)
+                                    .arg(QueryBuilder::hideDuplicates() ? QStringLiteral(" AND dup = 0") : QString());
             Stmt s(db, sql);
             s.bind(1, cutoff);
             bindFn(s);
@@ -225,7 +234,8 @@ void Library::refreshStats()
 {
     try {
         DbConnection &db = TrackCache::instance().db();
-        m_trackCount = db.scalar("SELECT COUNT(*) FROM tracks");
+        m_trackCount = db.scalar(QueryBuilder::hideDuplicates() ? "SELECT COUNT(*) FROM tracks WHERE dup = 0"
+                                                                : "SELECT COUNT(*) FROM tracks");
         m_folderCount = db.scalar("SELECT COUNT(*) FROM folders");
     } catch (const std::exception &e) {
         qWarning() << e.what();

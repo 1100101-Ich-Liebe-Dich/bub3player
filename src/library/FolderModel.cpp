@@ -1,5 +1,6 @@
 #include "library/FolderModel.h"
 
+#include "core/Database.h"
 #include "library/Library.h"
 #include <QCollator>
 #include <algorithm>
@@ -126,17 +127,19 @@ void FolderModel::reload()
             m_crumbs = trail;
         }
 
-        // At the top level, show the library roots with their full path.
+        // At the top level, show the library roots: local ones with their full
+        // path, Jellyfin libraries with their name ("Server · Library").
         Stmt fs(db, "SELECT f.id, f.name, f.path, "
                     "(SELECT COUNT(*) FROM folders c WHERE c.parent_id = f.id), "
                     "(SELECT COUNT(*) FROM tracks t WHERE t.folder_id = f.id), "
-                    "(SELECT MIN(t.id) FROM tracks t WHERE t.folder_id = f.id) "
-                    "FROM folders f WHERE f.parent_id = ? AND f.source_id = 1");
+                    "(SELECT MIN(t.id) FROM tracks t WHERE t.folder_id = f.id), "
+                    "f.source_id "
+                    "FROM folders f WHERE f.parent_id = ?");
         fs.bind(1, m_folderId);
         while (fs.step()) {
             Folder f;
             f.id = fs.i64(0);
-            f.name = m_folderId == 0 ? fs.str(2) : fs.str(1);
+            f.name = m_folderId == 0 && fs.i64(6) == Database::LocalSource ? fs.str(2) : fs.str(1);
             f.subfolders = fs.i32(3);
             f.tracks = fs.i32(4);
             f.coverId = fs.i64(5);

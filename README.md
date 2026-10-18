@@ -3,7 +3,7 @@
 *Projekt präsentiert von [www.BAUENUNDBOOTEN.de](https://www.bauenundbooten.de)*
 
 Musikplayer für Linux, gebaut für **sehr große lokale Bibliotheken** (1 Mio+ Titel) und
-später auch für **Jellyfin**. Interner Projektname: **Halcyon**.
+für **Jellyfin**. Interner Projektname: **Halcyon**.
 C++20, Qt 6 / QML, GStreamer, TagLib, SQLite.
 
 ![Alle Themes](docs/screenshots/alle-themes.jpg)
@@ -40,6 +40,26 @@ Bilder: [Soft](docs/screenshots/soft-bibliothek.jpg), [Soft Großansicht mit Wol
 [Klassik](docs/screenshots/klassik.jpg), [Theme-Einstellungen](docs/screenshots/theme-einstellungen.jpg)
 
 ## Was schon geht
+
+**Neu in 0.5: Jellyfin** (Einstellungen → Jellyfin)
+- **Anmelden** mit Benutzer und Passwort oder per **Quick Connect** (Code in der Jellyfin-App
+  bestätigen). Gespeichert wird nur der Zugangsschlüssel des Servers, nie das Passwort; widerrufen
+  lässt er sich in Jellyfin unter Dashboard → Geräte. Mehrere Server gehen auch.
+- **Bibliotheken auswählen**: alle Musikbibliotheken des Servers, einzeln an- und abschaltbar.
+- **Abgleich in dieselbe Datenbank**: Jellyfin-Titel erscheinen in allen Ansichten, in der Suche,
+  bei Autoplay und in der **Ordneransicht** als eigene Bibliothek („Server · Musik“) mit der
+  Ordnerstruktur vom Server. Der erste Abgleich holt 1000 Titel pro Anfrage, danach nur noch
+  Geänderte (`MinDateLastSaved`); Gelöschtes wird über einen Zählervergleich erkannt. Abgleich beim
+  Start, alle 6 Stunden, täglich oder nur von Hand. Fällt der Server aus, bleibt alles stehen.
+- **Streaming**: „Original“ spielt die unveränderte Datei (lückenlos, ReplayGain bleibt), oder
+  320/192/128 kbit/s: dann wandelt der Server zu große Dateien in MP3 um. Spulen geht im Original
+  überall. Cover kommen vom Server in der gerade nötigen Größe und landen im Cover-Cache.
+- **Rückmeldung an den Server**: Start, Fortschritt alle 10 s, Pause, Ende. Jellyfin zählt damit
+  Wiedergaben und „Zuletzt gespielt“, im Dashboard ist BuB3Player als Gerät sichtbar. Abschaltbar.
+- **Lokale Titel bevorzugen**: Was es lokal und auf dem Server gibt (gleicher Titel, Album,
+  Album-Künstler, Länge ±3 s), wird nur einmal gezeigt und lokal gespielt.
+- Zum Ausprobieren ohne eigenen Server: `tools/mock-jellyfin.py --audio <ordner>` (Benutzer
+  `demo`, Passwort `demo`, Quick-Connect-Code wird nach 3 s bestätigt).
 
 **Neu in 0.4:**
 - **Wellenform zum Spulen** (Klassik, Aurora, Synthwave): Jeder Titel wird einmal im Hintergrund
@@ -233,11 +253,13 @@ wird aus dem Schema erzeugt (Typen `palette`, `bool`, `range`, `choice`).
 src/core      Datenbank (Schema, WAL, FTS5), Scanner, TagReader, Cover- und Icon-Provider
 src/library   Abfragen (QueryBuilder), Listen-/Gruppen-/Ordnermodelle, Ansichten, Library-API für QML
 src/player    GStreamer-Player, Warteschlange, MPRIS
+src/jellyfin  Jellyfin: Anmeldung, Abgleich (seitenweise im Hintergrund), Streaming-Adressen, Rückmeldung
 src/ui        Theme-System
 qml/          gemeinsame Seiten und Bausteine
 qml/skins/    die acht Themes (Aufbau, Effekte, Player, Großansicht)
 skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
 themes/       Farbschemata für Klassik
+tools/        mock-jellyfin.py: kleiner Test-Server mit der Jellyfin-API
 shaders/      Aurora-Licht, Milchglas, Kugeln, Neumorphism, Synthwave-Szene, HUD, Glitch,
               Holz/Metall/Kunststoff, Tapete, Vinyl, CD, Scheinwerfer, ASCII, Bildröhre …
 ```
@@ -254,8 +276,9 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 1. **Phase 1 – fertig:** lokale Bibliothek, Scanner, Ansichten, Wiedergabe
 1b. **Themes – fertig:** Klassik, Soft, Glas, Aurora, Vintage, Synthwave, Hi-Fi Turm, Terminal,
     jedes mit eigenen Einstellungen; Wellenform zum Spulen, Autoplay (einfach)
-2. **Phase 2 – Jellyfin:** Anmeldung, inkrementeller Abgleich in dieselbe Datenbank
-   (Tabelle `sources` ist schon da), Streaming, Ordneransicht über Jellyfin-Pfade, Scrobbling
+2. **Phase 2 – Jellyfin – fertig (0.5):** Anmeldung (Passwort, Quick Connect), Bibliotheken
+   wählen, inkrementeller Abgleich in dieselbe Datenbank, Streaming, Ordneransicht über
+   Jellyfin-Pfade, Rückmeldung an den Server, Doppelte ausblenden
 3. **Phase 3 – Empfehlungen:** aus dem Hörverlauf (zusammen gehört, Skips, Tageszeit),
    „Mehr wie dieser Titel“, endlose Radio-Warteschlange. Andockpunkt ist schon da:
    `Library::autoplayPicks()` – heute Genre/Zeit/Künstler, später die Empfehlungen

@@ -6,7 +6,7 @@
 namespace {
 const char *Columns = "t.id, t.folder_id, t.added_at, t.mtime, t.last_played, t.title, t.artist, t.album, t.aa, "
                       "t.genre, t.codec, t.filename, t.year, t.track_no, t.disc_no, t.duration_ms, t.bitrate, "
-                      "t.sample_rate, t.bits, t.play_count";
+                      "t.sample_rate, t.bits, t.play_count, t.source_id, COALESCE(t.remote_id, '')";
 
 TrackRow readRow(const Stmt &s)
 {
@@ -31,6 +31,8 @@ TrackRow readRow(const Stmt &s)
     r.sampleRate = s.i32(17);
     r.bits = s.i32(18);
     r.playCount = s.i32(19);
+    r.sourceId = s.i64(20);
+    r.remoteId = s.str(21);
     r.valid = true;
     return r;
 }

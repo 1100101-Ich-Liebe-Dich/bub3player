@@ -257,6 +257,15 @@ ApplicationWindow {
     }
 
     // Scripted states for automated screenshots (--ui-test).
+    Timer { id: seekTimer; property real to: 0; interval: 4000; onTriggered: Player.seek(to) }
+    Connections {
+        target: Jellyfin
+        enabled: typeof uiTest !== "undefined" && uiTest.indexOf("jf-login") >= 0
+        function onProbeResult(ok, url) {
+            if (ok && uiTest.indexOf("jf-quick") >= 0) Jellyfin.startQuickConnect(url)
+            else if (ok) Jellyfin.login(url, "demo", "demo")
+        }
+    }
     Timer {
         id: uiTestTimer
         interval: 900
@@ -271,6 +280,11 @@ ApplicationWindow {
             if (a.indexOf("album") >= 0 && stack.currentItem && stack.currentItem.openFirst)
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
+            if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(2)
+            var sk = a.match(/seek=(\d+)/)
+            if (sk) seekTimer.to = Number(sk[1]), seekTimer.start()
+            var jl = a.match(/jf-login=([^ ]+)/)
+            if (jl) Jellyfin.probe(jl[1])
             if (a.indexOf("cycle") >= 0) cycleTimer.start()
             if (a.indexOf("scroll") >= 0) scrollTimer.start()
             if (a.indexOf("skip") >= 0) skipTimer.start()

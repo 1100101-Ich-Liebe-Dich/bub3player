@@ -3,14 +3,17 @@
 #include "core/Database.h"
 #include "core/Paths.h"
 #include "core/TagReader.h"
+#include "jellyfin/JellyfinAccess.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QImageReader>
 #include <QMutex>
+#include <QRegularExpression>
 #include <QRunnable>
 #include <QSet>
 #include <QStandardPaths>
@@ -23,6 +26,7 @@ namespace {
 QMutex g_mutex;
 QHash<qint64, QString> g_folderCover; // folder id -> image path ("" = none)
 QSet<QString> g_noArt;                // source keys known to have no art
+QHash<qint64, qint64> g_offlineUntil; // Jellyfin source -> retry time (ms since epoch)
 
 QString cacheDir()
 {
@@ -90,6 +94,8 @@ struct Source
     QString key;      // stable cache key without size
     QString file;     // folder image, or audio file for embedded art
     bool embedded = false;
+    qint64 remoteSource = 0; // Jellyfin: server, item id and image tag
+    QString remoteItem, remoteTag;
 };
 
 bool resolve(qint64 trackId, Source &src)
@@ -98,7 +104,7 @@ bool resolve(qint64 trackId, Source &src)
     thread_local std::unique_ptr<Stmt> q;
     if (!db.isOpen()) {
         db = Database::open(2048);
-        q = std::make_unique<Stmt>(db, "SELECT f.id, f.path, t.filename, t.mtime FROM tracks t "
+        q = std::make_unique<Stmt>(db, "SELECT f.id, f.path, t.filename, t.mtime, t.source_id, t.image_ref FROM tracks t "
                                        "JOIN folders f ON f.id = t.folder_id WHERE t.id = ?");
     }
     q->bind(1, trackId);
@@ -110,7 +116,24 @@ bool resolve(qint64 trackId, Source &src)
     const QString folder = q->str(1);
     const QString file = folder + QLatin1Char('/') + q->str(2);
     const qint64 mtime = q->i64(3);
+    const qint64 sourceId = q->i64(4);
+    const QString imageRef = q->str(5);
     q->reset();
+
+    if (sourceId != Database::LocalSource) {
+        // Jellyfin: "<itemId>:<imageTag>". The tag changes when the image does.
+        const int colon = imageRef.indexOf(QLatin1Char(':'));
+        if (imageRef.isEmpty() || colon <= 0)
+            return false;
+        src = {};
+        src.remoteSource = sourceId;
+        src.remoteItem = imageRef.left(colon);
+        src.remoteTag = imageRef.mid(colon + 1);
+        QString tagKey = src.remoteTag.left(16);
+        tagKey.remove(QRegularExpression(QStringLiteral("[^A-Za-z0-9]")));
+        src.key = QStringLiteral("j%1_%2_%3").arg(sourceId).arg(src.remoteItem.left(40), tagKey);
+        return true;
+    }
 
     QString folderImage;
     bool known = false;
@@ -136,9 +159,14 @@ bool resolve(qint64 trackId, Source &src)
     };
     if (!folderImage.isEmpty()) {
         const qint64 im = QFileInfo(folderImage).lastModified().toSecsSinceEpoch();
-        src = {QStringLiteral("f%1_%2").arg(hash(folderImage)).arg(im), folderImage, false};
+        src = {};
+        src.key = QStringLiteral("f%1_%2").arg(hash(folderImage)).arg(im);
+        src.file = folderImage;
     } else {
-        src = {QStringLiteral("t%1_%2").arg(hash(file)).arg(mtime), file, true};
+        src = {};
+        src.key = QStringLiteral("t%1_%2").arg(hash(file)).arg(mtime);
+        src.file = file;
+        src.embedded = true;
     }
     return true;
 }
@@ -161,7 +189,31 @@ QImage produce(const Source &src, int bucket, QString *outPath)
     }
 
     QImage img;
-    if (src.embedded) {
+    if (src.remoteSource > 0) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        {
+            QMutexLocker lock(&g_mutex);
+            if (g_offlineUntil.value(src.remoteSource) > now)
+                return {}; // server unreachable a moment ago: don't block the decoder threads
+        }
+        JellyfinAccess::Server server;
+        if (!JellyfinAccess::get(src.remoteSource, server))
+            return {};
+        int status = 0;
+        QByteArray bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, src.remoteItem, src.remoteTag, bucket),
+                                                   server.token, 8000, &status);
+        if (status == 0 || status >= 500) {
+            QMutexLocker lock(&g_mutex);
+            g_offlineUntil.insert(src.remoteSource, now + 60000);
+            return {};
+        }
+        if (!bytes.isEmpty()) {
+            QBuffer buf(&bytes);
+            buf.open(QIODevice::ReadOnly);
+            QImageReader reader(&buf);
+            img = scaleSquare(reader, bucket);
+        }
+    } else if (src.embedded) {
         QByteArray bytes = TagReader::embeddedCover(src.file);
         if (!bytes.isEmpty()) {
             QBuffer buf(&bytes);

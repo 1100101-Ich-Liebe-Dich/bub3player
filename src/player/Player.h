@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include <QByteArray>
 #include <QColor>
 #include <QElapsedTimer>
@@ -190,6 +192,7 @@ private:
     double m_preamp = 0.0;
     bool m_spectrumEnabled = false;
     int m_consecutiveErrors = 0;
+    std::atomic<int> m_loadGen{0}; // bumped on errors: later errors of the same stream are stale
 
     qint64 m_playingId = 0;
     QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error;
