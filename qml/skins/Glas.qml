@@ -91,6 +91,7 @@ Item {
     Item {
         id: coverTex
         width: 48; height: 48
+        visible: skin.canShade
         Rectangle { anchors.fill: parent; color: skin.cols.b1 }
         Image {
             anchors.fill: parent
@@ -101,7 +102,7 @@ Item {
             smooth: true
         }
     }
-    ShaderEffectSource { id: coverSrc; width: 48; height: 48; sourceItem: coverTex; hideSource: true; smooth: true }
+    ShaderEffectSource { id: coverSrc; width: 48; height: 48; sourceItem: coverTex; hideSource: true; smooth: true; visible: skin.canShade }
 
     ShaderEffect {
         id: orbsSoft
@@ -682,7 +683,7 @@ Item {
         light: window.skin ? window.skin.mouse : Qt.point(-9999, -9999)
         radius: window.skin ? window.skin.corner : 28
         blur: window.skin ? window.skin.frost : 0.75
-        tint: "#ffffff"
+        tint: GraphicsInfo.api === GraphicsInfo.Software ? Theme.panel : "#ffffff"
         tintAmount: window.skin ? window.skin.tint : 0.16
         reflex: Theme.opt.reflex !== false
         shadowAlpha: 0.32

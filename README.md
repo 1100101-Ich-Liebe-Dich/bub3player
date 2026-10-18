@@ -6,33 +6,37 @@ Musikplayer für Linux, gebaut für **sehr große lokale Bibliotheken** (1 Mio+ 
 später auch für **Jellyfin**. Interner Projektname: **Halcyon**.
 C++20, Qt 6 / QML, GStreamer, TagLib, SQLite.
 
-![Aurora](docs/screenshots/aurora-grossansicht.jpg)
+![Alle Themes](docs/screenshots/alle-themes.jpg)
 
 ## Themes
 
-Vier Themes, die sich komplett unterscheiden: eigener Aufbau, eigene Effekte, eigene
+Acht Themes, die sich komplett unterscheiden: eigener Aufbau, eigene Effekte, eigene
 Einstellungen. Inhalte und Funktionen sind in allen gleich. Umschalten: Einstellungen → Theme
 (oder `Strg + T`), jedes Theme merkt sich seine Einstellungen für sich.
 
 | Theme | Was es ausmacht | Eigene Einstellungen |
 |---|---|---|
 | **Klassik** | Ruhige Seitenleiste, Leuchten aus dem Cover | 7 Farbschemata, Akzent aus Cover, Leuchten |
-| **Aurora** | Fließendes Licht in den Cover-Farben (Shader), echtes Milchglas mit irisierenden Kanten, Lichtreflex folgt der Maus, schwebendes Dock mit Fortschrittsring, Großansicht mit drehender Cover-Scheibe, 3D-Neigung und Rundum-Spektrum. Reagiert auf die Musik. | Glas hell/dunkel, Lichtfarben (Cover, Polarlicht, Abendrot, Tiefsee, Bonbon), Leuchtkraft, Geschwindigkeit, Musik-Reaktion, Unschärfe, Tönung, Eckenradius, Lichtpunkte, Reflex, Körnung, Scheibe, Animation |
-| **Synthwave** | Retro-Sonne, Sterne, Berge und ein Neon-Gitter, das im Takt rast. HUD-Panels mit abgeschrägten Ecken, LED-Spektrum, Glitch beim Titelwechsel, schwebendes Cover mit Spiegelung | Farbwelten (Outrun, Sonnenbrand, Matrix, Eiszeit), Gitter-Tempo, Takt-Puls, Scanlines, Sonne, Sterne, Berge, Glitch, Neon-Leuchten, Animation |
-| **Studio** | Hi-Fi-Receiver: Plattenspieler mit dem Cover als Label (33⅓/45), Tonarm wandert mit dem Titel, VU-Meter mit gefederten Zeigern, Leuchtanzeige (VFD) mit Punkt-Spektrum, Hardware-Tasten mit LEDs, Lautstärke-Drehknopf. Großansicht = die ganze Anlage | Gehäuse (Nussbaum, Aluminium, Carbon, Klavierlack), VU-Meter (klassisch, Bernstein, LED), Anzeigefarbe, Drehzahl, Zeiger-Trägheit, Tonarm, kompakter Receiver, Raumlicht hell/dunkel |
+| **Soft** | Neumorphism: Karten und Tasten wachsen weich aus der Fläche oder sind hineingedrückt. Runde Tasten, eingelassene Regler, Großansicht als Drehscheibe mit Fortschrittsring (Knopf ziehen zum Spulen) | Wolke, Sand, Mint, Nacht; Tiefe, Eckenradius, Akzent aus Cover, Spektrum |
+| **Glas** | Glassmorphism: schwebende Milchglas-Karten über glänzenden Kugeln und einem Ring, die langsam treiben und leicht der Maus folgen. Navigation oben als Glasleiste, Player und Warteschlange immer rechts, Großansicht als große Glaskarte | Kugelfarben (Beere, Eis, Sonne, aus dem Cover), Unschärfe, Glas-Helligkeit, Kugelgröße, Bewegung, Cover im Hintergrund, Parallaxe, Lichtreflex, Eckenradius, Animation |
+| **Aurora** | Fließendes Licht in den Cover-Farben, Milchglas mit irisierenden Kanten, Dock mit Fortschrittsring, Großansicht mit drehender Cover-Scheibe und Rundum-Spektrum. Reagiert auf die Musik | Glas hell/dunkel, Lichtfarben, Leuchtkraft, Geschwindigkeit, Musik-Reaktion, Unschärfe, Tönung, Eckenradius, Lichtpunkte, Reflex, Körnung, Scheibe, Animation |
+| **Vintage** | 60er/70er-Wohnzimmer: Tapete, Möbel aus Holz, Plattenspieler mit Stroboskop-Punkten und Tonarm, abgegriffene Plattenhülle. Receiver mit beleuchteter Senderskala (der rote Zeiger ist die Spielposition), glühenden Lämpchen, Kipphebeln, Klaviertasten, VU-Metern und gerändelten Knöpfen (TUNING spult). Taste PHONO öffnet den großen Plattenspieler mit Rückseite der Hülle | Nussbaum & Orange, Teak & Avocado, Palisander & Petrol; Frontplatte (Silber, Champagner, Schwarz), Skalenlicht, Tapete (Kreise, Wellen, Blumen, Holzvertäfelung, schlicht), Raumlicht, VU-Meter, Zeiger-Trägheit, 33⅓/45, Tonarm, Aufglühen |
+| **Synthwave** | Retro-Sonne, Neon-Gitter im Takt, HUD-Panels, LED-Spektrum, Glitch beim Titelwechsel | Farbwelten, Gitter-Tempo, Takt-Puls, Scanlines, Sonne, Sterne, Berge, Glitch, Neon, Animation |
+| **Hi-Fi Turm** | 90er-Minianlage: Leuchtdisplay mit 14-Segment-Lauftext, Zeit, Disc-Anzeige und 20-Band-Spektrum mit Spitzenwert, Lautstärkerad mit LED-Kranz, CD-Wechsler mit regenbogenschillernder CD, Doppel-Kassettendeck mit handbeschriftetem Etikett, drehenden Spulen und Bandwickel, der mit dem Titel wandert, Zählwerk, Lauflicht. Großansicht: Turm in der Mitte, Boxen mit pumpenden Bässen und LED-Ringen, Scheinwerfer als Lichtorgel, Spiegelkugel | Displayfarbe (Türkis, Orange, Grün, Rot), Displayanzeige, Demo/Blinken, Dimmer, Lichtshow, Spiegelkugel, LED-Ringe, Animation |
+| **Terminal** | Textmodus auf einer Bildröhre: Kästen aus Linien, Cover als ASCII-Art, Spektrum aus Blockzeichen, Fortschritt als `[====>····]`, Tasten in eckigen Klammern, Tastenhilfe unten, Startsequenz, Scanlines | Phosphor-Grün, Bernstein, Papierweiß, Brotkasten (8-Bit); Scanlines, Bildrand, Flimmern, ASCII-Raster, ASCII in Farbe, Startsequenz |
 
 Für ältere Rechner: Einstellungen → Allgemein → **Leistung** (Sparmodus, Animationen im
 Hintergrund anhalten, Musik-Analyse aus) und in jedem animierten Theme „Animation: Sparsam/Aus“.
 Ohne GPU-Beschleunigung schalten alle Themes automatisch auf einfache Flächen um.
+Wer vorher „Studio“ benutzt hat, landet automatisch im neuen Vintage-Theme.
 
-Weitere Bilder: [Aurora Bibliothek](docs/screenshots/aurora-bibliothek.jpg),
-[Aurora Perlmutt](docs/screenshots/aurora-perlmutt.jpg),
-[Synthwave](docs/screenshots/synthwave-bibliothek.jpg),
-[Synthwave Großansicht](docs/screenshots/synthwave-grossansicht.jpg),
-[Studio](docs/screenshots/studio-bibliothek.jpg),
-[Studio Großansicht](docs/screenshots/studio-grossansicht.jpg),
-[Studio Aluminium](docs/screenshots/studio-aluminium.jpg),
-[Klassik](docs/screenshots/klassik.jpg),
+Bilder: [Soft](docs/screenshots/soft-bibliothek.jpg), [Soft Nacht Großansicht](docs/screenshots/soft-nacht-grossansicht.jpg),
+[Glas](docs/screenshots/glas-bibliothek.jpg), [Glas Großansicht](docs/screenshots/glas-grossansicht.jpg),
+[Vintage](docs/screenshots/vintage-bibliothek.jpg), [Vintage Plattenspieler](docs/screenshots/vintage-plattenspieler.jpg),
+[Hi-Fi Turm](docs/screenshots/turm-bibliothek.jpg), [Turm Großansicht](docs/screenshots/turm-grossansicht.jpg),
+[Turm Orange](docs/screenshots/turm-orange.jpg), [Terminal](docs/screenshots/terminal-bibliothek.jpg),
+[Terminal Bernstein](docs/screenshots/terminal-bernstein.jpg), [Aurora](docs/screenshots/aurora-grossansicht.jpg),
+[Synthwave](docs/screenshots/synthwave-grossansicht.jpg), [Klassik](docs/screenshots/klassik.jpg),
 [Theme-Einstellungen](docs/screenshots/theme-einstellungen.jpg)
 
 ## Was schon geht
@@ -197,10 +201,11 @@ src/library   Abfragen (QueryBuilder), Listen-/Gruppen-/Ordnermodelle, Ansichten
 src/player    GStreamer-Player, Warteschlange, MPRIS
 src/ui        Theme-System
 qml/          gemeinsame Seiten und Bausteine
-qml/skins/    die vier Themes (Aufbau, Effekte, Player, Großansicht)
+qml/skins/    die acht Themes (Aufbau, Effekte, Player, Großansicht)
 skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
 themes/       Farbschemata für Klassik
-shaders/      Aurora-Licht, Milchglas, Synthwave-Szene, HUD, Glitch, Holz/Metall/Carbon, Vinyl …
+shaders/      Aurora-Licht, Milchglas, Kugeln, Neumorphism, Synthwave-Szene, HUD, Glitch,
+              Holz/Metall/Kunststoff, Tapete, Vinyl, CD, Scheinwerfer, ASCII, Bildröhre …
 ```
 
 Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
@@ -213,7 +218,8 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 ## Fahrplan
 
 1. **Phase 1 – fertig:** lokale Bibliothek, Scanner, Ansichten, Wiedergabe
-1b. **Themes – fertig:** Klassik, Aurora, Synthwave, Studio mit eigenen Einstellungen
+1b. **Themes – fertig:** Klassik, Soft, Glas, Aurora, Vintage, Synthwave, Hi-Fi Turm, Terminal,
+    jedes mit eigenen Einstellungen
 2. **Phase 2 – Jellyfin:** Anmeldung, inkrementeller Abgleich in dieselbe Datenbank
    (Tabelle `sources` ist schon da), Streaming, Ordneransicht über Jellyfin-Pfade, Scrobbling
 3. **Phase 3 – Empfehlungen:** aus dem Hörverlauf (zusammen gehört, Skips, Tageszeit),
@@ -226,5 +232,6 @@ vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
 ## Lizenzen
 
 Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow,
-Barlow Condensed, VT323 – alle SIL Open Font License (`assets/fonts/`).
+Barlow Condensed, VT323, Nunito, Righteous, IBM Plex Mono, DSEG7/DSEG14 – SIL Open Font
+License; Permanent Marker – Apache 2.0 (`assets/fonts/`).
 Icons: Pfade aus Material Icons (Apache 2.0).

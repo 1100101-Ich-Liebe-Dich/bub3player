@@ -46,7 +46,7 @@ Rectangle {
             Layout.rightMargin: 14
             Layout.bottomMargin: 14
             height: 38
-            radius: 19
+            radius: Theme.radius >= 6 ? 19 : Theme.radius
             readonly property string kind: Theme.style.controls || "flat"
             color: kind === "neu" ? "transparent"
                  : kind === "glass" ? Qt.rgba(1, 1, 1, search.activeFocus ? 0.18 : 0.1)

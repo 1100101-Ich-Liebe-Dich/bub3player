@@ -12,6 +12,8 @@ Item {
     property int requestSize: 256
     property string label: ""          // used for the placeholder colour and initial
     property bool showInitial: true
+    property bool duotone: Theme.style.coverDuotone === true
+    readonly property bool useShader: c.canShade && (c.radius > 0 || c.duotone)
     readonly property bool loaded: img.status === Image.Ready && img.implicitWidth > 1
     readonly property bool canShade: GraphicsInfo.api !== GraphicsInfo.Software
 
@@ -27,8 +29,8 @@ Item {
         radius: c.radius
         visible: !c.loaded
         gradient: Gradient {
-            GradientStop { position: 0; color: c.label === "" ? Theme.surfaceHover : Qt.hsla(c.hue(c.label), Theme.dark ? 0.32 : 0.35, Theme.dark ? 0.26 : 0.78, 1) }
-            GradientStop { position: 1; color: c.label === "" ? Theme.surface : Qt.hsla((c.hue(c.label) + 0.08) % 1, Theme.dark ? 0.38 : 0.4, Theme.dark ? 0.16 : 0.68, 1) }
+            GradientStop { position: 0; color: c.label === "" || c.duotone ? Theme.surfaceHover : Qt.hsla(c.hue(c.label), Theme.dark ? 0.32 : 0.35, Theme.dark ? 0.26 : 0.78, 1) }
+            GradientStop { position: 1; color: c.label === "" || c.duotone ? Theme.surface : Qt.hsla((c.hue(c.label) + 0.08) % 1, Theme.dark ? 0.38 : 0.4, Theme.dark ? 0.16 : 0.68, 1) }
         }
         Text {
             visible: c.showInitial && c.width >= 40
@@ -50,15 +52,18 @@ Item {
         cache: true
         smooth: true
         fillMode: Image.PreserveAspectCrop
-        visible: c.loaded && (!c.canShade || c.radius <= 0)
+        visible: c.loaded && !c.useShader
     }
 
     ShaderEffect {
         anchors.fill: parent
-        visible: c.loaded && c.canShade && c.radius > 0
+        visible: c.loaded && c.useShader
         property variant source: img
         property real radius: c.radius
         property size itemSize: Qt.size(width, height)
+        property real duo: c.duotone ? 1 : 0
+        property color duoDark: Theme.bg
+        property color duoLight: Theme.text
         fragmentShader: "qrc:/shaders/rounded.frag.qsb"
     }
 }

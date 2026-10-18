@@ -1,0 +1,33 @@
+{
+  "id": "tower",
+  "order": 7,
+  "name": "Hi-Fi Turm",
+  "tagline": "90er-Minianlage: Leuchtdisplay mit Spektrum, CD-Wechsler, Doppel-Kassettendeck, Boxen mit pumpenden Bässen, Lichtshow.",
+  "qml": "qrc:/qml/skins/Tower.qml",
+  "fonts": { "ui": "Barlow", "display": "Barlow Condensed", "mono": "VT323" },
+  "radius": 8,
+  "ambient": 0.0,
+  "dynamicAccent": false,
+  "swatch": ["#0B0C0E", "#45E3FF", "#FF7A3A"],
+  "style": { "titleSize": 42, "titleUpper": true, "titleSpacing": 1.5, "titleWeight": 800 },
+  "palettes": [
+    { "id": "schwarz", "name": "Schwarz", "dark": true,
+      "colors": { "bg": "#0B0C0E", "panel": "#131417", "surface": "#1B1D21", "surfaceHover": "#24272C",
+                  "border": "#2E3238", "text": "#E8ECF0", "textDim": "#9AA3AD", "textFaint": "#5F6873",
+                  "accent": "#45E3FF", "accent2": "#FF7A3A", "onAccent": "#03181D" } }
+  ],
+  "settings": [
+    { "key": "display", "type": "choice", "label": "Displayfarbe", "default": "cyan",
+      "options": [ { "value": "cyan", "label": "Türkis" }, { "value": "amber", "label": "Orange" },
+                   { "value": "green", "label": "Grün" }, { "value": "red", "label": "Rot" } ] },
+    { "key": "mode", "type": "choice", "label": "Displayanzeige (Taste DISPLAY)", "default": "0",
+      "options": [ { "value": "0", "label": "Titel, Zeit und Spektrum" }, { "value": "1", "label": "Großes Spektrum" }, { "value": "2", "label": "Uhr" } ] },
+    { "key": "demo", "type": "bool", "label": "Demo-Lauftext und Blinken (Taste DEMO)", "default": true },
+    { "key": "dimmer", "type": "bool", "label": "Display gedimmt (Taste DIMMER)", "default": false },
+    { "key": "lightshow", "type": "bool", "label": "Lichtshow in der Großansicht", "default": true },
+    { "key": "mirrorball", "type": "bool", "label": "Spiegelkugel", "default": true },
+    { "key": "speakerLeds", "type": "bool", "label": "LED-Ringe an den Boxen", "default": true },
+    { "key": "fps", "type": "choice", "label": "Animation", "default": "30",
+      "options": [ { "value": "60", "label": "Flüssig" }, { "value": "30", "label": "Sparsam" }, { "value": "0", "label": "Aus" } ] }
+  ]
+}

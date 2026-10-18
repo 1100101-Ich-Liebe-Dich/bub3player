@@ -1,0 +1,42 @@
+{
+  "id": "terminal",
+  "order": 8,
+  "name": "Terminal",
+  "tagline": "Bildröhre und Textmodus: Cover als ASCII-Art, Spektrum aus Blockzeichen, Startsequenz, Scanlines. Für Nerds.",
+  "qml": "qrc:/qml/skins/Terminal.qml",
+  "fonts": { "ui": "IBM Plex Mono", "display": "VT323", "mono": "IBM Plex Mono" },
+  "radius": 0,
+  "ambient": 0.0,
+  "dynamicAccent": false,
+  "swatch": ["#020A04", "#5CFF8F", "#1F7A40"],
+  "style": { "titleSize": 54, "titleUpper": false, "titleSpacing": 0, "titleWeight": 400, "buttonRadius": 0, "coverDuotone": true },
+  "palettes": [
+    { "id": "phosphor", "name": "Phosphor-Grün", "dark": true,
+      "colors": { "bg": "#020A04", "panel": "#041208", "surface": "#08200F", "surfaceHover": "#0C3018",
+                  "border": "#1D6B3A", "text": "#6BFF9B", "textDim": "#3CC46E", "textFaint": "#237A45",
+                  "accent": "#B8FFD0", "accent2": "#33FF66", "onAccent": "#021006" } },
+    { "id": "bernstein", "name": "Bernstein", "dark": true,
+      "colors": { "bg": "#0A0600", "panel": "#110B02", "surface": "#1C1203", "surfaceHover": "#2A1B04",
+                  "border": "#6B4A10", "text": "#FFB52E", "textDim": "#C88A12", "textFaint": "#7A5508",
+                  "accent": "#FFE0A0", "accent2": "#FFB000", "onAccent": "#120A00" } },
+    { "id": "papierweiss", "name": "Papierweiß", "dark": true,
+      "colors": { "bg": "#0A0A0C", "panel": "#101014", "surface": "#18181C", "surfaceHover": "#222228",
+                  "border": "#4A4A52", "text": "#E9E9EF", "textDim": "#A8A8B2", "textFaint": "#66666F",
+                  "accent": "#FFFFFF", "accent2": "#9FD0FF", "onAccent": "#000000" } },
+    { "id": "brotkasten", "name": "Brotkasten (8-Bit)", "dark": true,
+      "colors": { "bg": "#40318D", "panel": "#40318D", "surface": "#4B3D9E", "surfaceHover": "#5849AE",
+                  "border": "#7869C4", "text": "#B2AAFF", "textDim": "#958BEA", "textFaint": "#7266CC",
+                  "accent": "#E6E2FF", "accent2": "#A59EFF", "onAccent": "#2A1F80" } }
+  ],
+  "settings": [
+    { "key": "palette", "type": "palette", "label": "Bildschirm", "default": "phosphor" },
+    { "key": "scan", "type": "range", "label": "Scanlines", "min": 0.0, "max": 1.0, "step": 0.05, "default": 0.55, "percent": true },
+    { "key": "vignette", "type": "range", "label": "Dunkler Bildrand", "min": 0.0, "max": 1.0, "step": 0.05, "default": 0.6, "percent": true },
+    { "key": "flicker", "type": "bool", "label": "Flimmern und Rollbalken", "default": false },
+    { "key": "cell", "type": "range", "label": "ASCII-Raster", "min": 5, "max": 14, "step": 1, "default": 7, "unit": "px" },
+    { "key": "asciiColor", "type": "bool", "label": "ASCII-Cover in Farbe", "default": false },
+    { "key": "boot", "type": "bool", "label": "Startsequenz", "default": true },
+    { "key": "fps", "type": "choice", "label": "Animation (Flimmern)", "default": "30",
+      "options": [ { "value": "60", "label": "Flüssig" }, { "value": "30", "label": "Sparsam" }, { "value": "0", "label": "Aus" } ] }
+  ]
+}

@@ -207,6 +207,21 @@ ApplicationWindow {
             uiTestTimer.start()
     }
 
+    // --ui-test cycle: switch through all skins (tests loading and teardown).
+    Timer {
+        id: cycleTimer
+        property int i: 0
+        interval: 1600
+        repeat: true
+        onTriggered: {
+            var list = Theme.skins
+            if (i >= list.length * 2) { stop(); return }
+            Theme.setSkin(list[i % list.length].id)
+            if (i % 3 === 1) window.nowPlayingOpen = true
+            ++i
+        }
+    }
+
     // Scripted states for automated screenshots (--ui-test).
     Timer {
         id: uiTestTimer
@@ -220,6 +235,7 @@ ApplicationWindow {
             if (a.indexOf("album") >= 0 && stack.currentItem && stack.currentItem.openFirst)
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
+            if (a.indexOf("cycle") >= 0) cycleTimer.start()
             if (a.indexOf("search") >= 0) {
                 if (window.skin && window.skin.setSearchText) window.skin.setSearchText("nord")
                 window.search("nord")
