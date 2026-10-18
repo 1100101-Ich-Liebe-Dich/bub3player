@@ -1,0 +1,13 @@
+{
+  "id": "oled",
+  "name": "OLED Schwarz",
+  "dark": true,
+  "radius": 6,
+  "ambient": 0.0,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#000000", "panel": "#000000", "surface": "#0E0E0E", "surfaceHover": "#1A1A1A",
+    "border": "#1F1F1F", "text": "#F2F2F2", "textDim": "#9A9A9A", "textFaint": "#5A5A5A",
+    "accent": "#9DB4FF", "onAccent": "#0A1030"
+  }
+}

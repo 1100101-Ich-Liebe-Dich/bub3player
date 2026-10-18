@@ -1,0 +1,13 @@
+{
+  "id": "polarlicht",
+  "name": "Polarlicht",
+  "dark": true,
+  "radius": 14,
+  "ambient": 0.7,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#140E22", "panel": "#1A1230", "surface": "#22193B", "surfaceHover": "#2C2149",
+    "border": "#33284F", "text": "#EEE9F8", "textDim": "#A69CC0", "textFaint": "#6B6187",
+    "accent": "#5EE6C3", "onAccent": "#06221B"
+  }
+}

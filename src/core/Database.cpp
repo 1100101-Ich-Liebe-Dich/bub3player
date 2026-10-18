@@ -1,0 +1,244 @@
+#include "core/Database.h"
+#include "core/Paths.h"
+
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QDebug>
+
+namespace {
+QString g_path;
+bool g_hasFts = false;
+
+const int SchemaVersion = 1;
+
+const char *SchemaV1 = R"SQL(
+CREATE TABLE IF NOT EXISTS sources (
+  id        INTEGER PRIMARY KEY,
+  kind      TEXT NOT NULL,           -- 'local' | 'jellyfin'
+  name      TEXT NOT NULL,
+  url       TEXT NOT NULL DEFAULT '',
+  user_id   TEXT NOT NULL DEFAULT '',
+  token     TEXT NOT NULL DEFAULT '',
+  last_sync INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO sources(id, kind, name) VALUES (1, 'local', 'Lokale Musik');
+
+CREATE TABLE IF NOT EXISTS folders (
+  id        INTEGER PRIMARY KEY,
+  source_id INTEGER NOT NULL DEFAULT 1,
+  parent_id INTEGER NOT NULL DEFAULT 0,
+  path      TEXT NOT NULL UNIQUE,
+  name      TEXT NOT NULL,
+  mtime     INTEGER NOT NULL DEFAULT 0,
+  seen      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id, name);
+
+CREATE TABLE IF NOT EXISTS tracks (
+  id           INTEGER PRIMARY KEY,
+  source_id    INTEGER NOT NULL DEFAULT 1,
+  folder_id    INTEGER NOT NULL DEFAULT 0,
+  filename     TEXT NOT NULL DEFAULT '',
+  remote_id    TEXT,
+  size         INTEGER NOT NULL DEFAULT 0,
+  mtime        INTEGER NOT NULL DEFAULT 0,
+  added_at     INTEGER NOT NULL DEFAULT 0,
+  tags_read    INTEGER NOT NULL DEFAULT 0,  -- 0 pending, 1 ok, 2 unreadable
+  title        TEXT NOT NULL DEFAULT '',
+  artist       TEXT NOT NULL DEFAULT '',
+  album        TEXT NOT NULL DEFAULT '',
+  album_artist TEXT NOT NULL DEFAULT '',
+  aa           TEXT NOT NULL DEFAULT '',    -- effective album artist
+  genre        TEXT NOT NULL DEFAULT '',
+  composer     TEXT NOT NULL DEFAULT '',
+  year         INTEGER NOT NULL DEFAULT 0,
+  track_no     INTEGER NOT NULL DEFAULT 0,
+  disc_no      INTEGER NOT NULL DEFAULT 0,
+  duration_ms  INTEGER NOT NULL DEFAULT 0,
+  bitrate      INTEGER NOT NULL DEFAULT 0,
+  sample_rate  INTEGER NOT NULL DEFAULT 0,
+  channels     INTEGER NOT NULL DEFAULT 0,
+  bits         INTEGER NOT NULL DEFAULT 0,
+  codec        TEXT NOT NULL DEFAULT '',
+  play_count   INTEGER NOT NULL DEFAULT 0,
+  skip_count   INTEGER NOT NULL DEFAULT 0,
+  last_played  INTEGER NOT NULL DEFAULT 0,
+  rating       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_tracks_folder  ON tracks(folder_id, filename);
+CREATE INDEX IF NOT EXISTS idx_tracks_pending ON tracks(folder_id, id) WHERE tags_read = 0;
+
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS plays (
+  id          INTEGER PRIMARY KEY,
+  track_id    INTEGER NOT NULL,
+  played_at   INTEGER NOT NULL,
+  listened_ms INTEGER NOT NULL,
+  completed   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plays_track ON plays(track_id);
+CREATE INDEX IF NOT EXISTS idx_plays_time  ON plays(played_at);
+)SQL";
+
+// Secondary indexes for sorting and grouping. Dropped during a bulk import (every
+// insert would otherwise update all of them) and rebuilt in one pass afterwards.
+const char *SortIndexesV1 = R"SQL(
+CREATE INDEX IF NOT EXISTS idx_tracks_album   ON tracks(aa COLLATE NOCASE, album COLLATE NOCASE, disc_no, track_no, year);
+CREATE INDEX IF NOT EXISTS idx_tracks_title   ON tracks(title COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_tracks_artist  ON tracks(artist COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_tracks_genre   ON tracks(genre COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_tracks_year    ON tracks(year);
+CREATE INDEX IF NOT EXISTS idx_tracks_added   ON tracks(added_at);
+CREATE INDEX IF NOT EXISTS idx_tracks_mtime   ON tracks(mtime);
+CREATE INDEX IF NOT EXISTS idx_tracks_played  ON tracks(last_played);
+CREATE INDEX IF NOT EXISTS idx_tracks_remote  ON tracks(source_id, remote_id);
+)SQL";
+const char *SortIndexNames[] = {"idx_tracks_album", "idx_tracks_title", "idx_tracks_artist", "idx_tracks_genre", "idx_tracks_year", "idx_tracks_added", "idx_tracks_mtime", "idx_tracks_played", "idx_tracks_remote"};
+
+const char *FtsTableV1 = R"SQL(
+CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
+  title, artist, album, aa, genre, composer,
+  content='tracks', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2', prefix='2 3');
+)SQL";
+
+const char *FtsTriggersV1 = R"SQL(
+CREATE TRIGGER IF NOT EXISTS tracks_ai AFTER INSERT ON tracks BEGIN
+  INSERT INTO tracks_fts(rowid, title, artist, album, aa, genre, composer)
+  VALUES (new.id, new.title, new.artist, new.album, new.aa, new.genre, new.composer);
+END;
+CREATE TRIGGER IF NOT EXISTS tracks_ad AFTER DELETE ON tracks BEGIN
+  INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album, aa, genre, composer)
+  VALUES ('delete', old.id, old.title, old.artist, old.album, old.aa, old.genre, old.composer);
+END;
+CREATE TRIGGER IF NOT EXISTS tracks_au AFTER UPDATE OF title, artist, album, aa, genre, composer ON tracks BEGIN
+  INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album, aa, genre, composer)
+  VALUES ('delete', old.id, old.title, old.artist, old.album, old.aa, old.genre, old.composer);
+  INSERT INTO tracks_fts(rowid, title, artist, album, aa, genre, composer)
+  VALUES (new.id, new.title, new.artist, new.album, new.aa, new.genre, new.composer);
+END;
+)SQL";
+} // namespace
+
+namespace Database {
+
+QString path()
+{
+    if (g_path.isEmpty()) {
+        g_path = Paths::dataDir() + QStringLiteral("/library.db");
+    }
+    return g_path;
+}
+
+void setPath(const QString &p)
+{
+    g_path = QFileInfo(p).absoluteFilePath();
+    QDir().mkpath(QFileInfo(g_path).absolutePath());
+}
+
+DbConnection open(int cacheKiB)
+{
+    sqlite3 *raw = nullptr;
+    const QByteArray p = path().toUtf8();
+    const int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX;
+    if (sqlite3_open_v2(p.constData(), &raw, flags, nullptr) != SQLITE_OK) {
+        const std::string msg = raw ? sqlite3_errmsg(raw) : "out of memory";
+        if (raw)
+            sqlite3_close_v2(raw);
+        throw SqlError("Datenbank kann nicht geöffnet werden: " + msg);
+    }
+    DbConnection db(raw);
+    sqlite3_busy_timeout(raw, 10000);
+    db.exec("PRAGMA journal_mode=WAL");
+    db.exec("PRAGMA synchronous=NORMAL");
+    db.exec("PRAGMA foreign_keys=OFF");
+    db.exec("PRAGMA temp_store=MEMORY");
+    db.exec(QStringLiteral("PRAGMA cache_size=-%1").arg(cacheKiB).toUtf8().constData());
+    // Memory-mapped reads help a lot on big libraries; kept modest for 32-bit/old boxes.
+    db.exec(sizeof(void *) >= 8 ? "PRAGMA mmap_size=268435456" : "PRAGMA mmap_size=33554432");
+    return db;
+}
+
+void migrate()
+{
+    DbConnection db = open();
+    const qint64 version = db.scalar("PRAGMA user_version");
+    if (version > SchemaVersion)
+        qWarning() << "Datenbank stammt von einer neueren Version" << version;
+
+    db.exec("BEGIN");
+    db.exec(SchemaV1);
+    db.exec(SortIndexesV1); // also restores them after an interrupted bulk import
+    try {
+        db.exec(FtsTableV1);
+        // An interrupted bulk import leaves the index stale; triggers stay off
+        // until the scanner rebuilds it (deleting from a stale index can corrupt it).
+        if (meta(db, "fts_dirty") != QLatin1String("1"))
+            db.exec(FtsTriggersV1);
+        g_hasFts = true;
+    } catch (const SqlError &e) {
+        qWarning() << "FTS5 nicht verfügbar, Suche nutzt LIKE:" << e.what();
+        g_hasFts = false;
+    }
+    db.exec(QStringLiteral("PRAGMA user_version=%1").arg(SchemaVersion).toUtf8().constData());
+    db.exec("COMMIT");
+    db.exec("PRAGMA optimize");
+}
+
+bool hasFts()
+{
+    return g_hasFts;
+}
+
+void dropSortIndexes(DbConnection &db)
+{
+    for (const char *name : SortIndexNames)
+        db.exec(QStringLiteral("DROP INDEX IF EXISTS %1").arg(QLatin1String(name)).toUtf8().constData());
+}
+
+void createSortIndexes(DbConnection &db)
+{
+    db.exec(SortIndexesV1);
+}
+
+void dropFtsTriggers(DbConnection &db)
+{
+    if (!g_hasFts)
+        return;
+    setMeta(db, "fts_dirty", "1");
+    db.exec("DROP TRIGGER IF EXISTS tracks_ai; DROP TRIGGER IF EXISTS tracks_ad; DROP TRIGGER IF EXISTS tracks_au;");
+}
+
+void restoreFtsTriggers(DbConnection &db)
+{
+    if (!g_hasFts)
+        return;
+    db.exec(FtsTriggersV1);
+    if (meta(db, "fts_dirty") == QLatin1String("1")) {
+        db.exec("INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild')");
+        setMeta(db, "fts_dirty", "0");
+    }
+}
+
+bool ftsDirty(DbConnection &db)
+{
+    return g_hasFts && meta(db, "fts_dirty") == QLatin1String("1");
+}
+
+QString meta(DbConnection &db, const char *key)
+{
+    Stmt s(db, "SELECT value FROM meta WHERE key=?");
+    s.bind(1, QString::fromLatin1(key));
+    return s.step() ? s.str(0) : QString();
+}
+
+void setMeta(DbConnection &db, const char *key, const QString &value)
+{
+    Stmt s(db, "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+    s.bind(1, QString::fromLatin1(key)).bind(2, value);
+    s.exec();
+}
+
+} // namespace Database

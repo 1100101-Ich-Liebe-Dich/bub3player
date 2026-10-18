@@ -1,0 +1,13 @@
+{
+  "id": "fjord",
+  "name": "Fjord",
+  "dark": true,
+  "radius": 12,
+  "ambient": 0.4,
+  "fonts": { "ui": "Manrope", "display": "Manrope" },
+  "colors": {
+    "bg": "#232A35", "panel": "#28303C", "surface": "#2F3846", "surfaceHover": "#384353",
+    "border": "#3B4656", "text": "#E5EAF0", "textDim": "#A3AEBD", "textFaint": "#6E7A8B",
+    "accent": "#8EC1E8", "onAccent": "#0D2133"
+  }
+}

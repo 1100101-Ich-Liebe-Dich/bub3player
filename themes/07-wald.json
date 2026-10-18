@@ -1,0 +1,13 @@
+{
+  "id": "wald",
+  "name": "Wald",
+  "dark": true,
+  "radius": 16,
+  "ambient": 0.45,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#0F1813", "panel": "#131F18", "surface": "#1A2920", "surfaceHover": "#22352A",
+    "border": "#263A2E", "text": "#E6EFE7", "textDim": "#9BB0A0", "textFaint": "#62786A",
+    "accent": "#C2DE6C", "onAccent": "#1A2205"
+  }
+}

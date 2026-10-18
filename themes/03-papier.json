@@ -1,0 +1,13 @@
+{
+  "id": "papier",
+  "name": "Papier",
+  "dark": false,
+  "radius": 8,
+  "ambient": 0.25,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#F1F2EF", "panel": "#E7E9E5", "surface": "#FFFFFF", "surfaceHover": "#E2E5E0",
+    "border": "#D3D7D0", "text": "#1B2130", "textDim": "#566072", "textFaint": "#8A93A3",
+    "accent": "#2E55D6", "onAccent": "#FFFFFF"
+  }
+}

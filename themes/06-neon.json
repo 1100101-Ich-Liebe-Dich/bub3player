@@ -1,0 +1,13 @@
+{
+  "id": "neon",
+  "name": "Neon",
+  "dark": true,
+  "radius": 4,
+  "ambient": 0.8,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#10061C", "panel": "#160A26", "surface": "#1E0F33", "surfaceHover": "#2A1545",
+    "border": "#3A1C5C", "text": "#F7ECFF", "textDim": "#B79BD0", "textFaint": "#775C93",
+    "accent": "#FF4FD8", "onAccent": "#2A0022"
+  }
+}

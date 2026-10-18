@@ -1,0 +1,13 @@
+{
+  "id": "tiefsee",
+  "name": "Tiefsee",
+  "dark": true,
+  "radius": 10,
+  "ambient": 0.55,
+  "fonts": { "ui": "Manrope", "display": "Bricolage Grotesque" },
+  "colors": {
+    "bg": "#0C1422", "panel": "#101A2C", "surface": "#162238", "surfaceHover": "#1D2B45",
+    "border": "#22314D", "text": "#E7ECF5", "textDim": "#93A1BA", "textFaint": "#5C6A84",
+    "accent": "#F2B661", "onAccent": "#1B1205"
+  }
+}
