@@ -100,7 +100,7 @@ Rectangle {
                 Text {
                     id: npFmt
                     anchors.centerIn: parent
-                    text: Player.format
+                    text: Player.formatInfo
                     font.family: Theme.uiFont
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

@@ -24,10 +24,6 @@ Library::Library(Player *player, PlayQueue *queue, QObject *parent)
     : QObject(parent), m_scanner(new Scanner(this)), m_player(player), m_queue(queue)
 {
     s_instance = this;
-    // Autoplay: check whenever the queue or playback state changes (queued, so
-    // the queue has settled first).
-    connect(m_queue, &PlayQueue::upcomingChanged, this, &Library::maybeAutoplay, Qt::QueuedConnection);
-    connect(m_player, &Player::stateChanged, this, &Library::maybeAutoplay, Qt::QueuedConnection);
     m_roots = m_settings.value(QStringLiteral("library/roots")).toStringList();
     connect(m_scanner, &Scanner::libraryChanged, this, [this] {
         TrackCache::instance().invalidate();
@@ -155,79 +151,6 @@ void Library::notifyExternalChange()
     TrackCache::instance().invalidate();
     refreshStats();
     emit changed();
-}
-
-void Library::maybeAutoplay()
-{
-    if (!m_queue->autoplay() || m_queue->repeat() != 0 || m_player->state() != 1)
-        return;
-    const int count = m_queue->count();
-    if (count == 0 || m_queue->currentRow() < count - 2)
-        return;
-    const qint64 seed = m_queue->lastId();
-    if (seed <= 0 || seed == m_autoplaySeed)
-        return;
-    m_autoplaySeed = seed;
-    const QVector<qint64> picks = autoplayPicks(seed, 8);
-    if (picks.isEmpty())
-        return;
-    m_queue->append(picks);
-    emit message(tr("Autoplay: %n passende Titel angehängt", nullptr, int(picks.size())));
-}
-
-// First, simple version: tracks that fit the last one in the queue (same genre
-// and era, a few by the same artist), not played in the last two days and not
-// already queued. The recommendation engine (phase 3) will replace this list.
-QVector<qint64> Library::autoplayPicks(qint64 seed, int count)
-{
-    QVector<qint64> out;
-    try {
-        DbConnection &db = TrackCache::instance().db();
-        Stmt row(db, "SELECT aa, genre, year FROM tracks WHERE id = ?");
-        row.bind(1, seed);
-        if (!row.step())
-            return out;
-        const QString aa = row.str(0), genre = row.str(1);
-        const int year = row.i32(2);
-        QSet<qint64> seen(m_queue->ids().cbegin(), m_queue->ids().cend());
-        const qint64 cutoff = QDateTime::currentSecsSinceEpoch() - 2 * 24 * 3600;
-        auto take = [&](const char *where, int n, auto bindFn) {
-            if (int(out.size()) >= count)
-                return;
-            const QString sql = QStringLiteral("SELECT id FROM tracks WHERE tags_read = 1 AND last_played < ?1 AND (%1)%3 "
-                                               "ORDER BY random() LIMIT %2")
-                                    .arg(QLatin1String(where)).arg(n * 3)
-                                    .arg(QueryBuilder::hideDuplicates() ? QStringLiteral(" AND dup = 0") : QString());
-            Stmt s(db, sql);
-            s.bind(1, cutoff);
-            bindFn(s);
-            int added = 0;
-            while (s.step() && added < n && int(out.size()) < count) {
-                const qint64 id = s.i64(0);
-                if (seen.contains(id))
-                    continue;
-                seen.insert(id);
-                out << id;
-                ++added;
-            }
-        };
-        if (!genre.isEmpty() && year > 0)
-            take("genre = ?2 COLLATE NOCASE AND year BETWEEN ?3 AND ?4", 5,
-                 [&](Stmt &s) { s.bind(2, genre); s.bind(3, year - 5); s.bind(4, year + 5); });
-        if (!aa.isEmpty())
-            take("aa = ?2 COLLATE NOCASE", 2, [&](Stmt &s) { s.bind(2, aa); });
-        if (!genre.isEmpty())
-            take("genre = ?2 COLLATE NOCASE", count, [&](Stmt &s) { s.bind(2, genre); });
-        if (year > 0)
-            take("year BETWEEN ?2 AND ?3", count, [&](Stmt &s) { s.bind(2, year - 5); s.bind(3, year + 5); });
-        take("1", count, [](Stmt &) {});
-    } catch (const std::exception &e) {
-        qWarning() << "Autoplay:" << e.what();
-    }
-    // Same-artist picks should not come in a row: spread them.
-    if (out.size() > 3)
-        std::swap(out[1], out[out.size() - 1]);
-    return out;
 }
 
 void Library::refreshStats()

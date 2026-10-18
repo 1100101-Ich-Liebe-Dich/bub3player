@@ -10,7 +10,7 @@ namespace {
 QString g_path;
 bool g_hasFts = false;
 
-const int SchemaVersion = 2;
+const int SchemaVersion = 3;
 
 const char *SchemaV1 = R"SQL(
 CREATE TABLE IF NOT EXISTS sources (
@@ -185,6 +185,61 @@ void migrateV2(DbConnection &db)
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_remote_u ON tracks(source_id, remote_id) WHERE remote_id IS NOT NULL");
 }
 
+// V3: audio analysis (tempo, key, loudness, transitions) and what the
+// recommendations learn from the listening history.
+const char *SchemaV3 = R"SQL(
+CREATE TABLE IF NOT EXISTS analysis (
+  track_id    INTEGER PRIMARY KEY,
+  version     INTEGER NOT NULL,
+  mtime       INTEGER NOT NULL DEFAULT 0,   -- tracks.mtime at analysis time (stale if different)
+  status      INTEGER NOT NULL DEFAULT 0,   -- 0 ok, 1 unreadable, 2 only partly analysed (very long)
+  analysed_at INTEGER NOT NULL DEFAULT 0,
+  length_ms   INTEGER NOT NULL DEFAULT 0,   -- decoded length
+  start_ms    INTEGER NOT NULL DEFAULT 0,   -- first sound (leading silence ends)
+  end_ms      INTEGER NOT NULL DEFAULT 0,   -- last sound (trailing silence starts)
+  intro_ms    INTEGER NOT NULL DEFAULT 0,   -- quiet intro / fade-in reaches full level
+  outro_ms    INTEGER NOT NULL DEFAULT 0,   -- fade-out / quiet ending starts
+  bpm         REAL NOT NULL DEFAULT 0,
+  bpm_conf    REAL NOT NULL DEFAULT 0,
+  beat_ms     INTEGER NOT NULL DEFAULT 0,   -- position of the first beat
+  key         INTEGER NOT NULL DEFAULT -1,  -- 0 = C ... 11 = B, -1 unknown
+  minor       INTEGER NOT NULL DEFAULT 0,
+  key_conf    REAL NOT NULL DEFAULT 0,
+  loudness    REAL NOT NULL DEFAULT 0,      -- integrated loudness, LUFS
+  peak        REAL NOT NULL DEFAULT 0,      -- sample peak, dBFS
+  lra         REAL NOT NULL DEFAULT 0,      -- loudness range, LU
+  energy      REAL NOT NULL DEFAULT 0,      -- 0..1
+  brightness  REAL NOT NULL DEFAULT 0,      -- spectral centroid, Hz
+  onset_rate  REAL NOT NULL DEFAULT 0       -- note onsets per second
+);
+CREATE INDEX IF NOT EXISTS idx_analysis_bpm ON analysis(bpm);
+CREATE TRIGGER IF NOT EXISTS tracks_ad_analysis AFTER DELETE ON tracks BEGIN
+  DELETE FROM analysis WHERE track_id = old.id;
+END;
+
+-- Artists heard close together (both directions stored), learned from plays.
+CREATE TABLE IF NOT EXISTS artist_links (
+  a       TEXT NOT NULL,
+  b       TEXT NOT NULL,
+  w       REAL NOT NULL,
+  updated INTEGER NOT NULL,
+  PRIMARY KEY (a, b)
+) WITHOUT ROWID;
+
+-- Per artist: how often played / skipped, and when during the day.
+CREATE TABLE IF NOT EXISTS artist_stats (
+  artist    TEXT PRIMARY KEY,               -- key (lower case, without "feat. ...")
+  name      TEXT NOT NULL DEFAULT '',       -- as written in the tags
+  plays     INTEGER NOT NULL DEFAULT 0,
+  skips     INTEGER NOT NULL DEFAULT 0,
+  last      INTEGER NOT NULL DEFAULT 0,
+  night     INTEGER NOT NULL DEFAULT 0,     -- 0-6 h
+  morning   INTEGER NOT NULL DEFAULT 0,     -- 6-12 h
+  afternoon INTEGER NOT NULL DEFAULT 0,     -- 12-18 h
+  evening   INTEGER NOT NULL DEFAULT 0      -- 18-24 h
+) WITHOUT ROWID;
+)SQL";
+
 void migrate()
 {
     DbConnection db = open();
@@ -195,6 +250,17 @@ void migrate()
     db.exec("BEGIN");
     db.exec(SchemaV1);
     migrateV2(db);
+    db.exec(SchemaV3);
+    {   // test builds of 0.6 created artist_stats without a name
+        bool hasName = false;
+        Stmt s(db, "PRAGMA table_info(artist_stats)");
+        while (s.step())
+            hasName = hasName || s.str(1) == QLatin1String("name");
+        if (!hasName)
+            db.exec("ALTER TABLE artist_stats ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+    }
+    if (version < 3)
+        setMeta(db, "learn_rebuild", "1"); // learn from the existing play history once
     db.exec(SortIndexesV1); // also restores them after an interrupted bulk import
     try {
         db.exec(FtsTableV1);

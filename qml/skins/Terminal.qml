@@ -274,7 +274,7 @@ Item {
                 Text {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: "album: " + Player.album + (Player.year > 0 ? "  jahr: " + Player.year : "") + (Player.format !== "" ? "  format: " + Player.format : "")
+                    text: "album: " + Player.album + (Player.year > 0 ? "  jahr: " + Player.year : "") + (Player.format !== "" ? "  format: " + Player.format : "") + (Player.bpm > 0 ? "  bpm: " + Math.round(Player.bpm) : "") + (Player.musicalKey !== "" ? "  tonart: " + Player.musicalKey : "")
                     font.family: skin.mono; font.pixelSize: skin.fs
                     color: Theme.textDim
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: window.openCurrentAlbum() }

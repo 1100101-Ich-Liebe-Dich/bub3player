@@ -26,7 +26,10 @@ Rectangle {
         Text {
             x: 24
             y: 50
-            text: Queue.count > 0 ? qsTr("Titel %1 von %2").arg(Library.formatCount(Queue.currentRow + 1)).arg(Library.formatCount(Queue.count)) : qsTr("Leer")
+            width: head.width - 120
+            elide: Text.ElideRight
+            text: (Queue.radio !== "" ? Queue.radio + " · " : "")
+                  + (Queue.count > 0 ? qsTr("Titel %1 von %2").arg(Library.formatCount(Queue.currentRow + 1)).arg(Library.formatCount(Queue.count)) : qsTr("Leer"))
             font.family: Theme.uiFont
             font.pixelSize: 13
             color: Theme.textDim
@@ -70,19 +73,41 @@ Rectangle {
                 Qt.callLater(function () { list.positionViewAtIndex(Queue.currentRow, mode) })
         }
         Component.onCompleted: showCurrent(ListView.Beginning)
-        footer: Item {
+        footer: Column {
             width: list.width
-            height: Queue.autoplay && Queue.count > 0 ? 54 : 0
-            visible: height > 0
+            topPadding: visible ? 12 : 0
+            bottomPadding: visible ? 14 : 0
+            spacing: 8
+            visible: Queue.count > 0 && (autoLine.visible || mixLine.visible)
             Row {
+                id: autoLine
                 x: 24
-                anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
-                Icon { anchors.verticalCenter: parent.verticalCenter; name: "sparkle"; size: 16; color: Theme.accent }
+                visible: Queue.autoplay || Queue.radio !== ""
+                Icon { anchors.verticalCenter: parent.verticalCenter; name: Queue.radio !== "" ? "radio" : "sparkle"; size: 16; color: Theme.accent }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
+                    width: list.width - 72
+                    wrapMode: Text.Wrap
                     text: Queue.repeat !== 0 ? qsTr("Autoplay pausiert, solange Wiederholen an ist")
+                        : Queue.radio !== "" ? qsTr("Radio: danach geht es passend weiter")
                                              : qsTr("Autoplay: danach geht es passend weiter")
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                    color: Theme.textDim
+                }
+            }
+            Row {
+                id: mixLine
+                x: 24
+                spacing: 8
+                visible: Player.transition !== 0 && Player.nextTransition !== ""
+                Icon { anchors.verticalCenter: parent.verticalCenter; name: "shuffle"; size: 16; color: Theme.textDim }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: list.width - 72
+                    wrapMode: Text.Wrap
+                    text: qsTr("Nächster Übergang: %1").arg(Player.nextTransition)
                     font.family: Theme.uiFont
                     font.pixelSize: 12
                     color: Theme.textDim
@@ -152,8 +177,17 @@ Rectangle {
                 id: tail
                 anchors.right: parent.right
                 anchors.rightMargin: 18
-                width: 44
+                width: model.isAuto ? 62 : 44
                 height: parent.height
+                Icon {
+                    // picked by autoplay / radio
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: model.isAuto && !mouse.containsMouse
+                    name: "sparkle"
+                    size: 13
+                    color: Theme.alpha(Theme.accent, 0.8)
+                }
                 Text {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter

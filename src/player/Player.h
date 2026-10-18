@@ -4,25 +4,36 @@
 
 #include <QByteArray>
 #include <QColor>
-#include <QElapsedTimer>
 #include <QMutex>
 #include <QObject>
 #include <QTimer>
 #include <QVariantList>
 #include <QVector>
 
-#include "player/Waveform.h"
-
 typedef struct _GstElement GstElement;
 typedef struct _GstMessage GstMessage;
 typedef struct _GstBus GstBus;
+typedef struct _GstControlSource GstControlSource;
 
 class PlayQueue;
 
-// GStreamer playback (playbin): gapless via about-to-finish, ReplayGain via
-// rgvolume + rglimiter (never clips), optional spectrum for the visualizer.
-// Every optional element is probed first: a missing plugin disables a feature,
-// it never breaks playback.
+// GStreamer playback on two decks (two playbins). One deck plays; the other
+// prepares the next track for a transition and afterwards lets the previous
+// track fade out. Without transitions everything runs on one deck, gapless
+// via about-to-finish, exactly as before.
+//
+// Transitions (setting "Übergänge"):
+//   0 gapless   - no fades, no gaps
+//   1 crossfade - fixed equal-power crossfade of `fadeSeconds`
+//   2 automix   - uses the audio analysis: skips silence, starts the blend
+//                 where the outgoing track fades or ends, blends longer when
+//                 the tempos match and on a beat, keeps a natural fade-in
+// Consecutive tracks of the same album always stay gapless (if enabled).
+//
+// ReplayGain via rgvolume + rglimiter (never clips). Tracks without
+// ReplayGain tags get their gain from the analysed loudness (else -6 dB).
+// Every optional element is probed first: a missing plugin disables a
+// feature, it never breaks playback.
 class Player : public QObject
 {
     Q_OBJECT
@@ -58,9 +69,21 @@ class Player : public QObject
     Q_PROPERTY(double energy READ energy NOTIFY levelsChanged)
     Q_PROPERTY(double beat READ beat NOTIFY levelsChanged)
     Q_PROPERTY(int analysisHz READ analysisHz WRITE setAnalysisHz NOTIFY analysisHzChanged) // spectrum/level update rate
-    // Loudness envelope of the current track for the seek bar (Waveform::Buckets values 0..1, empty until ready).
+    // Loudness envelope of the current track for the seek bar (480 values 0..1, empty until ready).
     Q_PROPERTY(QVariantList waveform READ waveform NOTIFY waveformChanged)
     Q_PROPERTY(bool waveformEnabled READ waveformEnabled WRITE setWaveformEnabled NOTIFY waveformChanged)
+    // From the audio analysis of the current track (0 / "" until known).
+    Q_PROPERTY(double bpm READ bpm NOTIFY trackInfoChanged)
+    Q_PROPERTY(QString musicalKey READ musicalKey NOTIFY trackInfoChanged)  // "8A · a-Moll"
+    Q_PROPERTY(QString formatInfo READ formatInfo NOTIFY trackInfoChanged)  // "FLAC 24/96 · 124 BPM · 8A" for big views
+    // Transitions
+    Q_PROPERTY(int transition READ transition WRITE setTransition NOTIFY settingsChanged)  // 0 gapless, 1 crossfade, 2 automix
+    Q_PROPERTY(int fadeSeconds READ fadeSeconds WRITE setFadeSeconds NOTIFY settingsChanged)
+    Q_PROPERTY(bool albumGapless READ albumGapless WRITE setAlbumGapless NOTIFY settingsChanged)
+    Q_PROPERTY(bool skipSilence READ skipSilence WRITE setSkipSilence NOTIFY settingsChanged)
+    Q_PROPERTY(bool loudnessMatch READ loudnessMatch WRITE setLoudnessMatch NOTIFY settingsChanged)
+    Q_PROPERTY(bool blending READ blending NOTIFY blendingChanged)           // a transition is audible right now
+    Q_PROPERTY(QString nextTransition READ nextTransition NOTIFY planChanged) // "Überblenden, 6 s" / "Lückenlos (Album)"
 
 public:
     explicit Player(PlayQueue *queue, QObject *parent = nullptr);
@@ -89,13 +112,13 @@ public:
     bool spectrumEnabled() const { return m_spectrumEnabled; }
     void setSpectrumEnabled(bool on);
     QVariantList spectrum() const { return m_spectrumOut; }
-    bool spectrumAvailable() const { return m_spectrumEl != nullptr; }
-    bool replayGainAvailable() const { return m_rgEl != nullptr; }
+    bool spectrumAvailable() const { return m_deck[0].spectrumRg || m_deck[0].spectrumPlain; }
+    bool replayGainAvailable() const { return m_deck[0].rgRg != nullptr; }
     QString error() const { return m_error; }
     QVariantList coverPalette() const { return m_coverPalette; }
     bool levelsEnabled() const { return m_levelsEnabled; }
     void setLevelsEnabled(bool on);
-    bool levelsAvailable() const { return m_levelRg || m_levelPlain; }
+    bool levelsAvailable() const { return m_deck[0].levelRg || m_deck[0].levelPlain; }
     double levelL() const { return m_levelL; }
     double levelR() const { return m_levelR; }
     double peakL() const { return m_peakL; }
@@ -105,10 +128,26 @@ public:
     int analysisHz() const { return m_analysisHz; }
     void setAnalysisHz(int hz);
     QVariantList waveform() const { return m_waveform; }
-    bool waveformEnabled() const { return m_wave.enabled(); }
+    bool waveformEnabled() const { return m_waveEnabled; }
     void setWaveformEnabled(bool on);
+    double bpm() const { return m_bpm; }
+    QString musicalKey() const { return m_key; }
+    QString formatInfo() const;
+    int transition() const { return m_transition; }
+    void setTransition(int mode);
+    int fadeSeconds() const { return m_fadeSec; }
+    void setFadeSeconds(int s);
+    bool albumGapless() const { return m_albumGapless; }
+    void setAlbumGapless(bool on);
+    bool skipSilence() const { return m_skipSilence; }
+    void setSkipSilence(bool on);
+    bool loudnessMatch() const { return m_loudnessMatch; }
+    void setLoudnessMatch(bool on);
+    bool blending() const { return m_tail >= 0; }
+    QString nextTransition() const;
 
-    Q_INVOKABLE void playCurrent();
+    // interruptIsSkip: the track playing now counts as skipped (not when a radio starts from it)
+    Q_INVOKABLE void playCurrent(bool interruptIsSkip = true);
     Q_INVOKABLE void playRow(int queueRow);
     Q_INVOKABLE void toggle();
     Q_INVOKABLE void play();
@@ -139,47 +178,112 @@ signals:
     void beatHit();
     void analysisHzChanged();
     void waveformChanged();
+    void trackInfoChanged();
+    void blendingChanged();
+    void planChanged();
+    // A track ended and counted: as a play, or as a skip (skipped early by the listener).
+    // Recommendations learn from it.
+    void trackFinished(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped);
 
 public:
+    struct Deck;
     // GStreamer callbacks (called from streaming threads).
-    static void onAboutToFinish(GstElement *playbin, void *self);
-    static int onBusSync(GstBus *bus, GstMessage *msg, void *self);
+    static void onAboutToFinish(GstElement *playbin, void *deck);
+    static int onBusSync(GstBus *bus, GstMessage *msg, void *deck);
+
+    struct Deck
+    {
+        Player *owner = nullptr;
+        int index = 0;
+        GstElement *playbin = nullptr;
+        GstElement *binRg = nullptr, *binPlain = nullptr;
+        GstElement *rgRg = nullptr;                          // rgvolume (ReplayGain chain only)
+        GstElement *spectrumRg = nullptr, *spectrumPlain = nullptr;
+        GstElement *levelRg = nullptr, *levelPlain = nullptr;
+        GstElement *faderRg = nullptr, *faderPlain = nullptr;
+        GstControlSource *ctlRg = nullptr, *ctlPlain = nullptr;
+        // the chain in use
+        GstElement *spectrum = nullptr, *level = nullptr, *fader = nullptr, *rg = nullptr;
+        GstControlSource *ctl = nullptr;
+        bool controlled = false;                             // fader follows a curve right now
+        std::atomic<int> gen{0};                             // bumped on errors: later errors of the same stream are stale
+        qint64 trackId = 0;
+        // ReplayGain fallback for tracks without tags (dB), applied when a stream starts
+        std::atomic<double> gainNow{-6.0}, gainNext{-6.0};
+        std::atomic<bool> expectAdvance{false};             // gapless: next stream belongs to the next track
+    };
 
 private:
-    void handleMessage(GstMessage *msg);
+    // Planned transition from the current to the next track.
+    struct Plan
+    {
+        bool valid = false;
+        qint64 nextId = 0;
+        bool gapless = true;
+        QString reason;          // shown in the queue
+        qint64 startMs = 0;      // position in the current track where the blend starts
+        qint64 outMs = 0;        // fade-out length of the current track
+        bool holdOut = false;    // the track fades by itself: hold, then drop at the end
+        qint64 nextStartMs = 0;  // where the next track starts (leading silence skipped)
+        qint64 inMs = 0;         // fade-in length of the next track (0 = starts at full level)
+    };
+
+    void handleMessage(int deck, GstMessage *msg);
     void handleSpectrum(const QVector<float> &mags);
     void handleLevels(const QVector<double> &rms, const QVector<double> &peak);
     void resetLevels();
 
+    bool initDeck(Deck &d, int index);
+    void freeDeck(Deck &d);
+    GstElement *buildFilterBin(Deck &d, bool withRg);
+    void selectFilterBin(Deck &d);
+    Deck &active() { return m_deck[m_active]; }
+    Deck &other() { return m_deck[1 - m_active]; }
+
     bool load(qint64 id, bool startPlaying, qint64 seekMs = 0);
     void setState(int s);
     void updateMeta(qint64 id);
+    void updateTrackInfo();
     void armNext();
     void applyVolume();
     void applyReplayGain();
-    GstElement *buildFilterBin(bool withRg, GstElement **rgOut, GstElement **spectrumOut, GstElement **levelOut);
-    void selectFilterBin();
-    void pollPosition();
+    void updatePosition();         // position + listening time
+    void pollPosition();           // ... plus transitions (timer)
     void finishTrack(bool skipped);
     QByteArray uriFor(qint64 id) const;
+    double fallbackGain(qint64 id);
+
+    // transitions
+    void plan();
+    void prepareNext();
+    void cancelPrepared();
+    void startBlend();
+    void stopTail();
+    void setFader(Deck &d, double value);
+    void setCurve(Deck &d, const QVector<QPair<qint64, double>> &points);
+    bool canSeek(qint64 id) const;
 
     PlayQueue *m_queue;
-    GstElement *m_playbin = nullptr;
-    GstElement *m_rgEl = nullptr;
-    GstElement *m_spectrumEl = nullptr; // spectrum of the active chain
-    GstElement *m_binRg = nullptr, *m_binPlain = nullptr;
-    GstElement *m_spectrumRg = nullptr, *m_spectrumPlain = nullptr;
-    GstElement *m_levelEl = nullptr, *m_levelRg = nullptr, *m_levelPlain = nullptr;
+    Deck m_deck[2];
+    std::atomic<int> m_active{0};
+    int m_tail = -1;               // deck fading out, -1 none
+    qint64 m_tailEndMs = 0;        // ... until this position
+    int m_prepared = 0;            // other deck: 0 idle, 1 loading, 2 seeking, 3 ready
+    qint64 m_preparedId = 0;
+    Plan m_plan;
+    bool m_curveOnActive = false;  // fade-out curve already installed on the playing deck
+    qint64 m_fadeInEndMs = 0;      // the playing deck's fade-in curve ends here
+    qint64 m_prepareFailedId = 0;  // could not be prepared: no blend into it
+
     bool m_levelsEnabled = false;
     double m_levelL = 0, m_levelR = 0, m_peakL = 0, m_peakR = 0, m_energy = 0, m_beat = 0, m_avgEnergy = 0;
     int m_beatCooldown = 0;
     int m_analysisHz = 30;
     QVariantList m_coverPalette;
 
-    QMutex m_mutex; // guards m_nextUri/m_nextId/m_expectAdvance (streaming thread)
+    QMutex m_mutex; // guards m_nextUri / m_nextId (streaming thread)
     QByteArray m_nextUri;
     qint64 m_nextId = 0;
-    bool m_expectAdvance = false;
     bool m_switching = false;
 
     QTimer m_posTimer;
@@ -192,16 +296,23 @@ private:
     double m_preamp = 0.0;
     bool m_spectrumEnabled = false;
     int m_consecutiveErrors = 0;
-    std::atomic<int> m_loadGen{0}; // bumped on errors: later errors of the same stream are stale
+    bool m_wantPlay = false;
+    bool m_handingOver = false;    // startBlend: queue already advanced, track info not yet       // the last load was meant to play (not a paused restore)
+
+    int m_transition = 0;
+    int m_fadeSec = 6;
+    bool m_albumGapless = true;
+    bool m_skipSilence = true;
+    bool m_loudnessMatch = true;
 
     qint64 m_playingId = 0;
-    QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error;
+    QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error, m_key;
     int m_year = 0;
+    double m_bpm = 0;
     QColor m_coverColor;
 
-    Waveform m_wave;
+    bool m_waveEnabled = true;
     QVariantList m_waveform;
-    void requestWaveform();
 
     QVector<float> m_bars;
     QVariantList m_spectrumOut;

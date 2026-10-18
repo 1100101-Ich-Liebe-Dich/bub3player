@@ -105,6 +105,9 @@ ApplicationWindow {
         case "settings":
             stack.replace(null, settingsPage, {})
             break
+        case "foryou":
+            stack.replace(null, forYouPage, { pageId: v.id })
+            break
         }
     }
     function openSettings(tab) {
@@ -138,7 +141,9 @@ ApplicationWindow {
                 subtitle: g.subtitle
             })
         } else {
-            openTracks(g.title, g.subtitle, { filters: spec.filters, sort: groupBy === "addedMonth" ? "added" : "album", desc: groupBy === "addedMonth" }, 0, false)
+            openTracks(g.title, g.subtitle, { filters: spec.filters,
+                                              sort: groupBy === "addedMonth" ? "added" : groupBy === "tempo" ? "bpm" : "album",
+                                              desc: groupBy === "addedMonth" }, 0, false)
         }
     }
     function search(text) {
@@ -172,6 +177,7 @@ ApplicationWindow {
     Component { id: groupsPage; GroupsPage {} }
     Component { id: foldersPage; FoldersPage {} }
     Component { id: settingsPage; SettingsPage {} }
+    Component { id: forYouPage; ForYouPage {} }
 
     // ---------- the skin ----------
     Loader {
@@ -230,6 +236,9 @@ ApplicationWindow {
         onTriggered: Theme.setSkin(target)
     }
 
+    // --ui-test blendloop: jump near the end every 9 s, so a transition follows (automix tests)
+    Timer { id: blendTimer; interval: 9000; repeat: true; onTriggered: if (Player.duration > 20000) Player.seek(Player.duration - 9000) }
+
     // --ui-test skip: next track every 1.5 s (track change / waveform / cover tests)
     Timer { id: skipTimer; interval: 1500; repeat: true; onTriggered: Player.next() }
 
@@ -257,6 +266,20 @@ ApplicationWindow {
     }
 
     // Scripted states for automated screenshots (--ui-test).
+    // "pauseat=MS playat=MS nextat=MS": player actions at fixed times (transition tests)
+    Component {
+        id: actTimer
+        Timer {
+            property string act
+            running: true
+            onTriggered: {
+                if (act === "pause") Player.pause()
+                else if (act === "play") Player.play()
+                else if (act === "next") Player.next()
+                destroy()
+            }
+        }
+    }
     Timer { id: seekTimer; property real to: 0; interval: 4000; onTriggered: Player.seek(to) }
     Connections {
         target: Jellyfin
@@ -275,12 +298,23 @@ ApplicationWindow {
                 Library.playSpec({ sort: "album" }, false)
             else if (a.indexOf("play") >= 0)
                 Library.playSpec({ sort: "album", filters: [{ field: "bits", op: "ge", value: 24 }] }, false)
+            var acts = ["pause", "play", "next"]
+            for (var ai = 0; ai < acts.length; ++ai) {
+                var re = new RegExp(acts[ai] + "at=(\\d+)", "g"), mm
+                while ((mm = re.exec(a)) !== null)
+                    actTimer.createObject(window, { interval: Number(mm[1]), act: acts[ai] })
+            }
+            var rd = a.match(/radio=(\d+)/)
+            if (rd) Recommend.startRadio(Number(rd[1]))
+            var rw = a.match(/row=(\d+)/)
+            if (rw) Player.playRow(Number(rw[1]))
             if (a.indexOf("queue") >= 0) window.queueOpen = true
             if (a.indexOf("now-playing") >= 0) window.nowPlayingOpen = true
             if (a.indexOf("album") >= 0 && stack.currentItem && stack.currentItem.openFirst)
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
-            if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(2)
+            if (a.indexOf("mix-tab") >= 0) window.openSettings(2)
+            if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(3)
             var sk = a.match(/seek=(\d+)/)
             if (sk) seekTimer.to = Number(sk[1]), seekTimer.start()
             var jl = a.match(/jf-login=([^ ]+)/)
@@ -288,6 +322,7 @@ ApplicationWindow {
             if (a.indexOf("cycle") >= 0) cycleTimer.start()
             if (a.indexOf("scroll") >= 0) scrollTimer.start()
             if (a.indexOf("skip") >= 0) skipTimer.start()
+            if (a.indexOf("blendloop") >= 0) blendTimer.start()
             var sw = a.match(/swap-(\w+)/)
             if (sw) swapTimer.target = sw[1], swapTimer.start()
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }

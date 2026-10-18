@@ -7,7 +7,8 @@ AbstractButton {
     property string label
     checkable: true
     implicitWidth: track.width + 12 + labelText.implicitWidth
-    implicitHeight: 32
+    // Long labels wrap (when a width is set) instead of being cut off.
+    implicitHeight: Math.max(32, labelText.height + 12)
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
     Accessible.name: label
@@ -17,7 +18,7 @@ AbstractButton {
             id: track
             readonly property string kind: Theme.style.controls || "flat"
             width: 42; height: 24; radius: Math.min(12, Theme.radius + 6)
-            anchors.verticalCenter: parent.verticalCenter
+            y: 4
             color: kind === "neu" ? "transparent"
                  : kind === "glass" ? (tg.checked ? Theme.alpha(Theme.accent, 0.85) : Qt.rgba(1, 1, 1, tg.hovered ? 0.24 : 0.16))
                  : (tg.checked ? Theme.accent : Theme.alpha(Theme.text, tg.hovered ? 0.24 : 0.17))
@@ -53,8 +54,10 @@ AbstractButton {
             anchors.left: track.right
             anchors.leftMargin: 12
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+            y: 6
             text: tg.label
+            wrapMode: Text.Wrap
+            maximumLineCount: 3
             elide: Text.ElideRight
             font.family: Theme.uiFont
             font.pixelSize: 14

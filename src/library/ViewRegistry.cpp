@@ -90,6 +90,7 @@ QVariantList builtIn()
         view("genres", "Genres", "tag", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("genre")}}, "tiles"),
         view("folders", "Ordner", "folder", lib, "folders", {}),
 
+        view("foryou", "Für dich", "heart", disc, "foryou", {}),
         view("recent", "Zuletzt hinzugefügt", "new", disc, "tracks",
              {{QStringLiteral("sort"), QStringLiteral("added")}, {QStringLiteral("desc"), true}}),
         view("added-month", "Nach Monat hinzugefügt", "calendar", disc, "groups",
@@ -100,6 +101,8 @@ QVariantList builtIn()
         view("file-age", "Dateien nach Alter", "file", disc, "tracks", {{QStringLiteral("sort"), QStringLiteral("mtime")}}),
         view("hires", "Hi-Res (24 bit)", "sparkle", disc, "tracks",
              {{QStringLiteral("filters"), QVariantList{filter("bits", "ge", 24)}}, {QStringLiteral("sort"), QStringLiteral("album")}}),
+        view("tempo", "Nach Tempo", "speed", disc, "groups", {{QStringLiteral("groupBy"), QStringLiteral("tempo")}}, "tiles"),
+        view("keys", "Nach Tonart", "piano", disc, "groups", {{QStringLiteral("groupBy"), QStringLiteral("key")}}, "tiles"),
 
         view("history", "Zuletzt gespielt", "history", hist, "tracks",
              {{QStringLiteral("filters"), QVariantList{filter("lastPlayed", "gt", 0)}},

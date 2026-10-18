@@ -20,6 +20,11 @@ void set(qint64 sourceId, const Server &s);
 void remove(qint64 sourceId);
 bool get(qint64 sourceId, Server &out);
 
+// Reachability as last seen by the app (unknown counts as online). Lets
+// recommendations leave out tracks of a server that is switched off.
+void setOnline(qint64 sourceId, bool online);
+bool isOnline(qint64 sourceId);
+
 QString deviceId();                       // stable per installation
 QString deviceName();
 QString clientVersion();
