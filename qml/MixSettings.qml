@@ -23,6 +23,16 @@ Column {
               : Player.transition === 1
                 ? qsTr("Überblenden: der nächste Titel wird gleichmäßig eingeblendet, während der laufende ausklingt (gleiche Lautheit über den ganzen Übergang).")
                 : qsTr("Automix: nutzt die Analyse jedes Titels. Stille am Anfang und Ende fällt weg, endet ein Titel mit eigenem Ausblenden, kommt der nächste mitten hinein, bei passendem Tempo wird länger und auf dem Schlag gemischt.")
+        Text {
+            visible: Player.bitPerfect
+            width: mx.width
+            wrapMode: Text.Wrap
+            text: qsTr("Bit-Perfect ist eingeschaltet (Einstellungen → Klang): Solange spielt alles lückenlos, ohne Überblenden.")
+            font.family: Theme.uiFont
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+            color: Theme.accent
+        }
         HSegmented {
             width: mx.width
             options: [qsTr("Lückenlos"), qsTr("Überblenden"), qsTr("Automix")]

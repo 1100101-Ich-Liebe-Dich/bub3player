@@ -59,7 +59,8 @@ src/core        Database (Schema + Migration, WAL, FTS5), Scanner (Zwei-Phasen-S
 src/library     Library (QML-API, Wurzelordner, Überwachung), QueryBuilder (Ansicht → SQL),
                 TrackListModel (nur IDs, seitenweise Zeilen, Auswahl als Bitset), GroupModel,
                 FolderModel, ViewRegistry (eingebaute + eigene Ansichten), PlaylistStore
-src/player      Player (zwei GStreamer-Decks, Überblenden/Automix), PlayQueue, MPRIS
+src/player      Player (zwei GStreamer-Decks, Überblenden/Automix, Filterkette je Deck),
+                AudioOutput (QML „Audio“: Ausgabegerät, Bit-Perfect, Equalizer), PlayQueue, MPRIS
 src/analysis    AudioAnalyzer (ein Durchgang: Lautheit, Tempo, Tonart, Wellenform …),
                 AnalysisService (Vorrang- und Hintergrund-Warteschlange)
 src/recommend   Recommender (Lernen aus dem Hörverlauf, Radio, Autoplay, „Für dich“)
@@ -93,6 +94,11 @@ derzeit 4), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
 - Scanner: Ordner mit Gerät (`folders.dev`); verschwundene Einhängepunkte und leere
   Einhängepunkte mit bekannter Musik gelten als „nicht da“ und werden nie gelöscht.
 - Jede optionale GStreamer-Komponente vorher prüfen; fehlt sie, fällt nur die Funktion weg.
+- **Der Standard-Ausgabeweg ist heilig** (Wunsch des Inhabers: „die Ausgabe geht perfekt“):
+  Mit „Systemstandard“ und ausgeschaltetem Equalizer setzt der Player kein `audio-sink` und kein
+  zusätzliches Element. Alles Neue kommt nur in die Kette, wenn es gewählt ist; Änderungen an der
+  Kette laufen über `Player::rebuildChains()` (anhalten, neu bauen, an derselben Stelle weiter).
+  Nach Änderungen am Player den Pipeline-Graphen mit `main` vergleichen (siehe Tests).
 - QML: keine `QtCore`-Imports (auf Debian/Ubuntu nicht immer installiert); Dialoge über
   `HDialog`, Menüs über `HMenu`/`HMenuItem`, Farben/Schriften nur über `Theme`.
 
@@ -113,8 +119,20 @@ Werkzeuge in `tools/`:
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
 
 `--ui-test "…"` steuert den Player für Tests (Liste in `tools/ui-test.sh` und `qml/Main.qml`,
-`uiTestTimer`), z. B. `playall now-playing`, `mix-tab`, `mkpl plopen=1 pledit`.
-Automix-Protokoll: `RULES="halcyon.mix.debug=true"`.
+`uiTestTimer`), z. B. `playall now-playing`, `mix-tab`, `klang-tab eqonat=2000`, `mkpl plopen=1 pledit`.
+Automix-Protokoll (auch Neuaufbau der Kette): `RULES="halcyon.mix.debug=true"`.
+
+Ton prüfen ohne Soundkarte:
+- `HALCYON_TEST_SINK="filesink location=/tmp/x.raw"` ersetzt das Ausgabegerät durch eine beliebige
+  GStreamer-Senke (auch Ketten: `capsfilter caps=audio/x-raw,format=S24LE ! filesink …`).
+  Bit-Perfect prüfen: `[audio] bitPerfect=true`, `hwDevice="hw:CARD=Test,DEV=0"` (Anführungszeichen,
+  sonst liest QSettings das Komma als Liste) und die Datei mit `ffmpeg -i titel.flac -f s32le`
+  vergleichen – sie muss bytegleich sein.
+- `GST_DEBUG_DUMP_DOT_DIR=DIR` schreibt die ganze Kette als Graph, sobald ein Titel spielt. Für den
+  Vergleich mit `main` dort dieselbe Zeile einbauen (Worktree), Graphen ohne Adressen und Nummern
+  vergleichen.
+- Geräteliste und Gerätewechsel: `pulseaudio` mit `module-null-sink` starten, mitschneiden mit
+  `parec -d NAME.monitor`.
 
 Typischer Ablauf vor einem PR:
 1. `cmake --build build` ohne Warnungen.
@@ -151,17 +169,23 @@ Typischer Ablauf vor einem PR:
   einmal 10 MB pro Minute.
 - `QString::arg` kennt kein `%%`.
 - Der Jellyfin-Test-Server: `pkill -f "[m]ock-jellyfin.py"` (mit Klammern, sonst trifft es die
-  eigene Shell).
+  eigene Shell). Genauso `pkill -f "[b]uild/halcyon"`.
+- playbin mit `NATIVE_AUDIO` und festem `audio-sink` nimmt nur Decoder, deren Ausgabe die Senke
+  direkt annimmt (die `audio-filter`-Kette zählt nicht) → „No decoder available“. Deshalb steckt
+  bei Bit-Perfect ein `audioconvert` (ohne Dither) mit der ALSA-Senke in einem Bin.
+- Eine neue Senke mit eigener Lautstärke (pulsesink) übernimmt die Lautstärke von playsink nur bei
+  einer Änderung; nach `rebuildChains` wird sie deshalb beim nächsten PAUSED/PLAYING neu gesetzt.
+- `level` meldet bei „not-negotiated“ GStreamer-CRITICALs (Division durch 0) – harmlos, nur im
+  Fehlerfall.
 
 ## Fahrplan
 
 - **1.0.0**: veröffentlicht nach Test des Inhabers (Playlists, Smart-Playlists, Ordnerüberwachung,
   AppImage sind drin).
+- **1.1.0**: Equalizer, Ausgabegerät, Bit-Perfect über ALSA (Reiter „Klang“). Das Repo bleibt
+  privat, bis der Inhaber alles getestet hat.
 - **Als Nächstes** (in der README schon als vorhanden beschrieben, vor dem öffentlich Schalten
   des Repos fertig bauen!):
-  - **Equalizer** (10 Bänder, Voreinstellungen, eigene Kurven, Vorverstärkung) und
-    **Ausgabegerät wählen** im Player, **Bit-Perfect über ALSA** (Signal unverändert an den DAC,
-    Abtastrate folgt dem Titel, keine Software-Lautstärke).
   - **Liedtexte**: aus Tags und `.lrc` neben der Datei, synchronisiert in der Großansicht
     (Klick auf Zeile springt), optional aus dem Netz über LRCLIB (nur wenn eingeschaltet).
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,

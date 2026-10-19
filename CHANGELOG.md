@@ -2,6 +2,33 @@
 
 Alle wichtigen Änderungen an BuB3Player. Die neueste Version steht oben.
 
+## 1.1.0 – Equalizer und Ausgabegerät
+
+Neuer Reiter **Einstellungen → Klang** (`Strg + E`), in allen acht Themes:
+
+- **10-Band-Equalizer** (31 Hz bis 16 kHz, ±12 dB in halben Schritten) mit 14 Voreinstellungen
+  (Mehr Bass, Leise hören, Rock, Klassik, Stimme und Hörbuch, Kleine Lautsprecher …), eigenen
+  gespeicherten Kurven und Vorverstärkung. Die automatische Vorverstärkung nimmt so viel zurück,
+  wie das lauteste Band anhebt: Nichts übersteuert. Regler ändern den Klang sofort, Doppelklick
+  setzt ein Band auf 0 dB.
+- **Ausgabegerät wählen**: alle Geräte des Soundservers (PulseAudio, auch PipeWire), ohne die
+  Systemeinstellungen anzufassen. Fehlt das Gerät (Kopfhörer abgezogen), spielt der Player über den
+  Systemstandard weiter und sagt es; die Wahl bleibt für den nächsten Start gespeichert.
+- **Bit-Perfect über ALSA**: Die Samples gehen unverändert an den DAC, die Abtastrate folgt dem
+  Titel. Lautstärke, ReplayGain, Equalizer und Übergänge sind dabei aus. Passt die Bittiefe nicht,
+  bekommt das Gerät die Samples verlustfrei in einem breiteren Behälter (16 in 32 bit); kann es die
+  Abtastrate nicht, rechnet ALSA um („plughw“), und der Player zeigt „nicht bit-perfect“.
+  Ist das Gerät belegt oder weg, geht es über den Systemstandard weiter.
+- Anzeige, was gerade ankommt und was beim Gerät landet (Bittiefe, Abtastrate, Kanäle).
+- **Die bisherige Ausgabe bleibt unangetastet**: Mit „Systemstandard“ und ausgeschaltetem
+  Equalizer ist die GStreamer-Kette Element für Element dieselbe wie in 1.0 (am Pipeline-Graphen
+  verglichen). Equalizer, Gerät und Bit-Perfect kommen nur in die Kette, wenn man sie wählt.
+- ReplayGain ist von „Allgemein“ nach „Klang“ umgezogen.
+- Kleinigkeiten: `--add-folder` nimmt auch relative Pfade, „1 Datei geprüft“ in der Einzahl.
+
+Für Tests: `HALCYON_TEST_SINK` ersetzt das Ausgabegerät durch eine beliebige GStreamer-Senke
+(z. B. `filesink`), `GST_DEBUG_DUMP_DOT_DIR` schreibt die Kette beim Abspielen als Graph.
+
 ## 1.0.0 – Erste stabile Version
 
 Alles aus den Versionen 0.1 bis 0.9 in einem Paket, ausgiebig getestet auf alter Hardware und

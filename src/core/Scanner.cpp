@@ -232,7 +232,8 @@ void Scanner::poll()
         } else if (m_stats.cancelled) {
             m_summary = tr("Scan abgebrochen");
         } else {
-            m_summary = tr("%1 Dateien geprüft: %2 neu, %3 geändert, %4 entfernt (%5 s)")
+            m_summary = (m_stats.files == 1 ? tr("%1 Datei geprüft: %2 neu, %3 geändert, %4 entfernt (%5 s)")
+                                            : tr("%1 Dateien geprüft: %2 neu, %3 geändert, %4 entfernt (%5 s)"))
                             .arg(de.toString(m_stats.files), de.toString(m_stats.added),
                                  de.toString(m_stats.changed), de.toString(m_stats.removed),
                                  de.toString(m_stats.totalSec, 'f', 1));

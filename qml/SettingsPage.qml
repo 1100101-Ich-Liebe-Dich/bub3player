@@ -4,9 +4,9 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Halcyon
 
-// Settings in five tabs: general (library, playback, views), theme (pick a skin,
-// then that skin's own options), mix (transitions, recommendations, analysis),
-// Jellyfin and about.
+// Settings in six tabs: general (library, performance, views), theme (pick a
+// skin, then that skin's own options), mix (transitions, recommendations,
+// analysis), sound (output, equalizer, ReplayGain), Jellyfin and about.
 Item {
     id: page
     property string pageId: "settings"
@@ -38,7 +38,7 @@ Item {
             Row {
                 spacing: 6
                 Repeater {
-                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Mix"), qsTr("Jellyfin"), qsTr("Über")]
+                    model: [qsTr("Allgemein"), qsTr("Theme"), qsTr("Mix"), qsTr("Klang"), qsTr("Jellyfin"), qsTr("Über")]
                     AbstractButton {
                         id: tab
                         readonly property bool on: window.settingsTab === index
@@ -238,35 +238,6 @@ Item {
                 }
 
                 Section {
-                    title: qsTr("Wiedergabe")
-                    text: Player.replayGainAvailable
-                          ? qsTr("ReplayGain gleicht die Lautstärke zwischen Titeln an. Ein Limiter verhindert Übersteuerung.")
-                          : qsTr("ReplayGain ist nicht verfügbar: Das GStreamer-Plugin rgvolume fehlt (gst-plugins-good).")
-                    Option {
-                        label: qsTr("ReplayGain")
-                        HSegmented {
-                            width: col.width
-                            enabled: Player.replayGainAvailable
-                            options: [qsTr("Aus"), qsTr("Titel"), qsTr("Album")]
-                            values: [0, 1, 2]
-                            current: Player.replayGain
-                            onPicked: (v) => Player.replayGain = v
-                        }
-                    }
-                    Option {
-                        label: qsTr("Vorverstärkung")
-                        value: Player.preamp.toFixed(1) + " dB"
-                        enabled: Player.replayGainAvailable && Player.replayGain > 0
-                        HSlider {
-                            width: Math.min(420, col.width)
-                            from: -10; to: 10; stepSize: 0.5
-                            value: Player.preamp
-                            onMoved: Player.preamp = value
-                        }
-                    }
-                }
-
-                Section {
                     title: qsTr("Leistung")
                     text: qsTr("Für ältere Rechner: Effekte lassen sich hier und in den Theme-Einstellungen zurückfahren.")
                     HToggle {
@@ -349,6 +320,7 @@ Item {
                                 [qsTr("Strg + J"), qsTr("Warteschlange")],
                                 [qsTr("Strg + L"), qsTr("Großansicht")],
                                 [qsTr("Strg + T"), qsTr("Theme wechseln")],
+                                [qsTr("Strg + E"), qsTr("Klang: Ausgabe und Equalizer")],
                                 [qsTr("Alt + ←"), qsTr("Zurück")],
                                 [qsTr("Esc"), qsTr("Großansicht schließen")],
                                 [qsTr("Strg + Q"), qsTr("Beenden")]
@@ -437,9 +409,17 @@ Item {
                 sourceComponent: MixSettings { width: col.width }
             }
 
-            // =============== Jellyfin ===============
+            // =============== Klang ===============
             Loader {
                 active: window.settingsTab === 3
+                visible: active
+                width: col.width
+                sourceComponent: SoundSettings { width: col.width }
+            }
+
+            // =============== Jellyfin ===============
+            Loader {
+                active: window.settingsTab === 4
                 visible: active
                 width: col.width
                 sourceComponent: JellyfinSettings { width: col.width }
@@ -447,7 +427,7 @@ Item {
 
             // =============== Über ===============
             Column {
-                visible: window.settingsTab === 4
+                visible: window.settingsTab === 5
                 width: col.width
                 spacing: 24
 
