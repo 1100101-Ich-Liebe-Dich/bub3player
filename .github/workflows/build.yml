@@ -26,6 +26,8 @@ jobs:
       - name: Abhängigkeiten
         run: |
           sudo apt-get update
+          # the runner image ships libunwind-14-dev, which blocks libgstreamer1.0-dev
+          sudo apt-get remove -y libunwind-14-dev || true
           dist/appimage/ci-run.sh "Pakete" sudo apt-get install -y --no-install-recommends \
             ninja-build patchelf file xvfb xauth \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
