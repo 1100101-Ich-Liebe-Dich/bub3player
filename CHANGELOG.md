@@ -2,6 +2,23 @@
 
 Alle wichtigen Änderungen an BuB3Player. Die neueste Version steht oben.
 
+## 1.0.0 – Erste stabile Version
+
+Alles aus den Versionen 0.1 bis 0.9 in einem Paket, ausgiebig getestet auf alter Hardware und
+mit einer Bibliothek von einer Million Titeln:
+
+- Bibliothek für 1 Mio+ Titel mit Zwei-Phasen-Scanner, Volltextsuche und vielen Ansichten
+- acht komplett verschiedene Themes
+- Wiedergabe lückenlos, mit Überblenden oder Automix; ReplayGain und Lautheitsausgleich
+- Audioanalyse (Tempo, Tonart, Lautheit, Energie) im Hintergrund
+- Empfehlungen, Radio, Autoplay und „Für dich“ – gelernt nur auf dem eigenen Rechner
+- Jellyfin in derselben Bibliothek
+- Playlists, Smart-Playlists, M3U, Ordnerüberwachung
+- AppImage für alle Distributionen ab glibc 2.35
+
+Für Mitentwickler: `CLAUDE.md` beschreibt Vorgaben, Aufbau, Tests und Fahrplan, `tools/` enthält
+die Testwerkzeuge (Vorführ-Bibliothek, Riesen-Bibliothek, Klick- und Speichertests).
+
 ## 0.9.0 – Playlists, Ordnerüberwachung, AppImage
 
 - **Playlists**: anlegen, umbenennen, löschen; Titel, Alben, Künstler, Genres, Ordner, Suchergebnisse
