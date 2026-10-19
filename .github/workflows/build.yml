@@ -59,7 +59,7 @@ jobs:
           name: BuB3Player-AppImage
           path: |
             build-appimage/BuB3Player-x86_64.AppImage
-            build-appimage/start.png
+            build-appimage/*.png
           retention-days: 14
 
       - name: An das Release hängen

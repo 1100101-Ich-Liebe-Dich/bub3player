@@ -16,7 +16,23 @@ GST_DEBUG=2 ./squashfs-root/AppRun --analyze ton.wav > analyse.txt 2>&1
 cat analyse.txt | tail -20
 grep -q "LUFS" analyse.txt || { echo "FEHLER: Analyse ohne Ergebnis"; fail=1; }
 echo "== Start"
-xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --screenshot "$OLDPWD/start.png" --screenshot-delay 5000 > start.txt 2>&1
+out=$OLDPWD
+xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --screenshot "$out/start.png" --screenshot-delay 5000 > start.txt 2>&1
 tail -20 start.txt
-[ -s "$OLDPWD/start.png" ] || { echo "FEHLER: kein Bild vom Start"; fail=1; }
+[ -s "$out/start.png" ] || { echo "FEHLER: kein Bild vom Start"; fail=1; }
+
+echo "== Alle Themes, Playlists, Dialoge"
+for skin in klassik soft glas aurora vintage synthwave tower terminal; do
+    xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --skin $skin \
+        --ui-test "mkpl plopen=1 pledit" --screenshot "$out/$skin.png" --screenshot-delay 4500 >> start.txt 2>&1
+    [ -s "$out/$skin.png" ] || { echo "FEHLER: Theme $skin startet nicht"; fail=1; }
+done
+# QML problems (e.g. with another Qt version than the one it was written with)
+qml=$(grep -E "qrc:/|QML|ReferenceError|TypeError" start.txt | sort | uniq -c | sort -rn | head -40)
+if [ -n "$qml" ]; then
+    echo "$qml"
+    msg=$(echo "$qml" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+    echo "::warning title=QML-Meldungen::$msg"
+    grep -qE "is not a type|is not installed|unavailable|failed to load|ReferenceError|TypeError" start.txt && fail=1
+fi
 exit $fail
