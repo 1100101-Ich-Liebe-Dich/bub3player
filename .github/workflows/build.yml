@@ -21,12 +21,12 @@ jobs:
     # (2.35) or newer, i.e. Ubuntu 22.04, Debian 12, Fedora 36, Mint 21 and up.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Abhängigkeiten
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          dist/appimage/ci-run.sh "Pakete" sudo apt-get install -y --no-install-recommends \
             ninja-build patchelf file xvfb xauth \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
@@ -44,19 +44,20 @@ jobs:
           cache: true
 
       - name: AppImage bauen
-        run: dist/appimage/build-appimage.sh
+        run: dist/appimage/ci-run.sh "AppImage bauen" dist/appimage/build-appimage.sh
 
       - name: Ausprobieren
         working-directory: build-appimage
         run: |
           ./BuB3Player-x86_64.AppImage --appimage-extract > /dev/null
           export XDG_CONFIG_HOME=$PWD/t/cfg XDG_DATA_HOME=$PWD/t/data XDG_CACHE_HOME=$PWD/t/cache
-          QT_QPA_PLATFORM=offscreen ./squashfs-root/AppRun --help
+          run=../dist/appimage/ci-run.sh
+          $run "Hilfe" env QT_QPA_PLATFORM=offscreen ./squashfs-root/AppRun --help
           # a 3 s test tone, analysed through the bundled GStreamer
           python3 -c "import wave,math,struct; w=wave.open('ton.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b''.join(struct.pack('<hh',*(2*[int(9000*math.sin(2*math.pi*440*i/44100))])) for i in range(44100*3))); w.close()"
-          ./squashfs-root/AppRun --analyze ton.wav | tee analyse.txt
+          $run "Audioanalyse" ./squashfs-root/AppRun --analyze ton.wav | tee analyse.txt
           grep -q "LUFS" analyse.txt
-          xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --screenshot start.png --screenshot-delay 5000
+          $run "Start" xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --screenshot start.png --screenshot-delay 5000
           test -s start.png
 
       - name: Hochladen
