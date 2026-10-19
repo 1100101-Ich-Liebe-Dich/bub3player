@@ -139,9 +139,11 @@ ApplicationWindow {
         if (groupBy === "album") {
             openTracks(g.title, g.subtitle + (g.year > 0 ? ", " + g.year : ""), spec, g.coverId, true)
         } else if (groupBy === "albumArtist" || groupBy === "artist" || groupBy === "genre" || groupBy === "decade" || groupBy === "year") {
-            // Drill into the albums of that artist / genre / era.
+            // Drill into the albums of that artist / genre / era (an artist with their picture).
+            var isArtist = groupBy === "albumArtist" || groupBy === "artist"
             stack.push(groupsPage, {
                 view: { id: "", name: g.title, layout: "grid",
+                        heroCover: isArtist ? g.coverId : 0, heroArtist: isArtist ? g.title : "",
                         spec: Object.assign({}, spec, { groupBy: "album", groupSort: groupBy === "albumArtist" || groupBy === "artist" ? "year" : "name" }) },
                 subtitle: g.subtitle
             })
@@ -393,9 +395,11 @@ ApplicationWindow {
             if (a.indexOf("pledit") >= 0) editLater.start()
             if (a.indexOf("plnew") >= 0) playlistUi.newPlaylist()
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
-            if (a.indexOf("search") >= 0) {
-                if (window.skin && window.skin.setSearchText) window.skin.setSearchText("nord")
-                window.search("nord")
+            if (a.indexOf("search") >= 0) { // "search" or "search=wort"
+                var sq = a.match(/search=(\S+)/)
+                var term = sq ? sq[1] : "nord"
+                if (window.skin && window.skin.setSearchText) window.skin.setSearchText(term)
+                window.search(term)
             }
         }
     }

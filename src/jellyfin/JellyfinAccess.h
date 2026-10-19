@@ -33,6 +33,7 @@ QByteArray authHeader(const QString &token = {});
 
 QByteArray streamUrl(qint64 sourceId, const QString &itemId);
 QUrl imageUrl(qint64 sourceId, const QString &itemId, const QString &tag, int size);
+QUrl artistImageUrl(qint64 sourceId, const QString &artist, int size);
 
 // Blocking GET for worker threads (covers). status: HTTP status, 0 = no connection.
 QByteArray httpGet(const QUrl &url, const QString &token, int timeoutMs, int *status);

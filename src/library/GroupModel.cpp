@@ -198,17 +198,54 @@ QVariantMap GroupModel::get(int row) const
     return m;
 }
 
-int GroupModel::indexForLetter(const QString &letter) const
+namespace {
+// "A".."Z" for a name, "#" for digits and signs; "Ä" counts as "A", "É" as "E".
+QChar initialOf(const QString &name)
 {
-    const QString l = letter.toUpper();
+    for (const QChar c : name.left(4).normalized(QString::NormalizationForm_KD)) {
+        if (c.isSpace() || c.category() == QChar::Mark_NonSpacing)
+            continue;
+        const QChar u = c.toUpper();
+        return u >= QLatin1Char('A') && u <= QLatin1Char('Z') ? u : QLatin1Char('#');
+    }
+    return QLatin1Char('#');
+}
+} // namespace
+
+QString GroupModel::initials() const
+{
+    QString out;
+    for (const Group &g : m_groups) {
+        const QChar c = initialOf(jumpKey(g));
+        if (!out.contains(c))
+            out += c;
+    }
+    return out;
+}
+
+QString GroupModel::jumpKey(const Group &g) const
+{
     // Albums sorted by name are ordered by artist, so jump by the artist's initial.
     const bool byArtist = m_spec.value(QStringLiteral("groupBy"), QStringLiteral("album")).toString() == QLatin1String("album")
                           && m_spec.value(QStringLiteral("groupSort"), QStringLiteral("name")).toString() == QLatin1String("name");
+    return byArtist ? g.key1.toString() : g.title;
+}
+
+int GroupModel::indexForLetter(const QString &letter) const
+{
+    // The first group with that initial wherever the database sorted it (umlauts,
+    // signs); without one the first of the next letter that has groups.
+    const QChar l = letter.isEmpty() ? QLatin1Char('#') : letter.at(0).toUpper();
+    int best = -1;
+    QChar bestInitial;
     for (int i = 0; i < m_groups.size(); ++i) {
-        const QString key = byArtist ? m_groups[i].key1.toString() : m_groups[i].title;
-        const QString first = key.left(1).toUpper();
-        if (l == QLatin1String("#") ? !first.isEmpty() && !first[0].isLetter() : first >= l)
+        const QChar c = initialOf(jumpKey(m_groups[i]));
+        if (c == l)
             return i;
+        if (c > l && (best < 0 || c < bestInitial)) {
+            best = i;
+            bestInitial = c;
+        }
     }
-    return int(m_groups.size()) - 1;
+    return best >= 0 ? best : int(m_groups.size()) - 1;
 }

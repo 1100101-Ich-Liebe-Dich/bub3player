@@ -19,7 +19,7 @@ Item {
     readonly property string layout: view.layout || "grid"
     readonly property bool round: groupBy === "albumArtist" || groupBy === "artist"
     property string groupSort: baseSpec.groupSort || "name"
-    readonly property bool letterJump: groupSort === "name" && layout === "grid" && groups.count > 40
+    readonly property bool letterJump: (groupSort === "name" || groupSort === "title") && layout === "grid" && groups.count > 40
 
     GroupModel {
         id: groups
@@ -84,6 +84,8 @@ Item {
             inset: 8
             title: page.view.name || ""
             subtitle: page.subtitle
+            coverId: page.view.heroCover || 0
+            artist: page.view.heroArtist || ""
             showBack: page.showBack
             loading: groups.loading
             onBack: page.StackView.view.pop()
@@ -150,6 +152,7 @@ Item {
                     radius: page.round ? width / 2 : Theme.radius
                     requestSize: 256
                     coverId: page.layout === "grid" ? model.coverId : 0
+                    artist: page.round ? (model.title || "") : ""
                     label: model.title || ""
                     scale: hover.containsMouse ? 1.02 : 1
                     Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -221,6 +224,7 @@ Item {
                     radius: Theme.radius - 2
                     requestSize: 128
                     coverId: page.layout !== "grid" ? model.coverId : 0
+                    artist: page.round ? (model.title || "") : ""
                     label: model.title || ""
                     showInitial: false
                 }
@@ -270,32 +274,72 @@ Item {
         }
     }
 
-    // A–Z jump bar
-    Column {
+    // A–Z jump bar: click a letter or drag along the bar. Letters without groups are faint.
+    Item {
+        id: jumpBar
         visible: page.letterJump
+        readonly property var letters: ["#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+        readonly property real step: Math.min(18, (page.height - 80) / letters.length)
+        property string current: ""
         anchors.right: parent.right
-        anchors.rightMargin: 14
+        anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 0
-        Repeater {
-            model: ["#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
-            Text {
-                width: 20
-                height: Math.min(18, (page.height - 80) / 27)
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                text: modelData
-                font.family: Theme.uiFont
-                font.pixelSize: 11
-                font.weight: Font.DemiBold
-                color: jump.containsMouse ? Theme.accent : Theme.textFaint
-                MouseArea {
-                    id: jump
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: grid.positionViewAtIndex(groups.indexForLetter(modelData), GridView.Beginning)
+        width: 24
+        height: step * letters.length
+
+        function jumpAt(y) {
+            var i = Math.max(0, Math.min(letters.length - 1, Math.floor(y / step)))
+            if (letters[i] === current) return
+            current = letters[i]
+            grid.pinnedTop = false // a late header resize must not pull the view back up
+            grid.positionViewAtIndex(groups.indexForLetter(current), GridView.Beginning)
+        }
+
+        Column {
+            Repeater {
+                model: jumpBar.letters
+                Text {
+                    width: jumpBar.width
+                    height: jumpBar.step
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: modelData
+                    font.family: Theme.uiFont
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    readonly property bool has: groups.initials.indexOf(modelData) >= 0
+                    color: jumpArea.pressed && jumpBar.current === modelData ? Theme.accent
+                         : jumpArea.containsMouse && Math.floor((jumpArea.mouseY - 4) / jumpBar.step) === index ? Theme.accent
+                         : has ? Theme.textDim : Theme.alpha(Theme.textFaint, 0.45)
                 }
+            }
+        }
+        MouseArea {
+            id: jumpArea
+            anchors.fill: parent
+            anchors.margins: -4
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            preventStealing: true
+            onPressed: (m) => { jumpBar.current = ""; jumpBar.jumpAt(m.y - 4) }
+            onPositionChanged: (m) => { if (pressed) jumpBar.jumpAt(m.y - 4) }
+        }
+        // the letter, big, while dragging
+        Rectangle {
+            visible: jumpArea.pressed && jumpBar.current !== ""
+            anchors.right: parent.left
+            anchors.rightMargin: 14
+            y: Math.max(0, Math.min(jumpBar.height - height, jumpBar.letters.indexOf(jumpBar.current) * jumpBar.step - height / 2))
+            width: 56; height: 56
+            radius: Math.min(28, Theme.radius + 10)
+            color: Theme.accent
+            Text {
+                anchors.centerIn: parent
+                text: jumpBar.current
+                font.family: Theme.displayFont
+                font.pixelSize: 28
+                font.weight: Font.Bold
+                color: Theme.onAccent
             }
         }
     }

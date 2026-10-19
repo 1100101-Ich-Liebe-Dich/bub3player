@@ -124,6 +124,13 @@ QString likeEscape(QString s)
 
 std::atomic<bool> g_hideDuplicates{false};
 
+// "limit" for groups: only the first N (search rows).
+QString groupLimit(const QVariantMap &spec)
+{
+    const int limit = spec.value(QStringLiteral("limit")).toInt();
+    return limit > 0 ? QStringLiteral(" LIMIT %1").arg(limit) : QString();
+}
+
 bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds, QString &error, bool *analysis)
 {
     const qint64 playlist = spec.value(QStringLiteral("playlist")).toLongLong();
@@ -229,17 +236,30 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
 
     const QString search = spec.value(QStringLiteral("search")).toString().trimmed();
     if (!search.isEmpty()) {
+        // searchIn: only the album artist ("artist") or album and album artist ("album"),
+        // for the artist and album rows above the search results.
+        const QString in = spec.value(QStringLiteral("searchIn")).toString();
+        const QStringList cols = in == QLatin1String("artist") ? QStringList{QStringLiteral("aa")}
+                                 : in == QLatin1String("album") ? QStringList{QStringLiteral("album"), QStringLiteral("aa")}
+                                                                : QStringList{QStringLiteral("title"), QStringLiteral("artist"),
+                                                                              QStringLiteral("album"), QStringLiteral("aa")};
         if (Database::hasFts()) {
-            const QString q = ftsQuery(search);
+            QString q = ftsQuery(search);
             if (!q.isEmpty()) {
+                if (!in.isEmpty())
+                    q = QStringLiteral("{%1} : (%2)").arg(cols.join(QLatin1Char(' ')), q);
                 where << QStringLiteral("t.id IN (SELECT rowid FROM tracks_fts WHERE tracks_fts MATCH ?)");
                 binds << q;
             }
         } else {
             for (const QString &w : search.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts)) {
-                where << QStringLiteral("(t.title LIKE ? ESCAPE '\\' OR t.artist LIKE ? ESCAPE '\\' OR t.album LIKE ? ESCAPE '\\' OR t.aa LIKE ? ESCAPE '\\')");
+                QStringList any;
                 const QString p = QStringLiteral("%%1%").arg(likeEscape(w));
-                binds << p << p << p << p;
+                for (const QString &c : cols) {
+                    any << QStringLiteral("t.%1 LIKE ? ESCAPE '\\'").arg(c);
+                    binds << p;
+                }
+                where << QStringLiteral("(") + any.join(QStringLiteral(" OR ")) + QStringLiteral(")");
             }
         }
     }
@@ -361,7 +381,8 @@ Built groups(const QVariantMap &spec)
         const bool needAdded = gsort == QLatin1String("added");
         b.sql = QStringLiteral("SELECT t.aa, t.album, COUNT(*), MIN(t.id), MAX(t.year), %1 FROM tracks t%2%3 "
                                "GROUP BY t.aa COLLATE NOCASE, t.album COLLATE NOCASE ORDER BY %4")
-                    .arg(needAdded ? QStringLiteral("MAX(t.added_at)") : QStringLiteral("0"), join, whereSql, order);
+                    .arg(needAdded ? QStringLiteral("MAX(t.added_at)") : QStringLiteral("0"), join, whereSql, order)
+                + groupLimit(spec);
         return b;
     }
 
@@ -409,7 +430,8 @@ Built groups(const QVariantMap &spec)
     if (timeLike && gsort != QLatin1String("count"))
         order = QStringLiteral("(%1 = 0), ").arg(expr) + order;       // "Ohne Jahr" last
     b.sql = QStringLiteral("SELECT %1, NULL, COUNT(*), MIN(t.id), 0, 0 FROM tracks t%2%3 GROUP BY 1%4 ORDER BY %5")
-                .arg(expr, join, whereSql, coll, order);
+                .arg(expr, join, whereSql, coll, order)
+            + groupLimit(spec);
     return b;
 }
 

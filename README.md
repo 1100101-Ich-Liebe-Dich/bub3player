@@ -269,7 +269,13 @@ Jahrzehnt, Tempo, Tonart und Energie.
   meistgespielt, lange nicht gehört, nie gespielt.
 - **Jede Liste sortierbar** nach Titel, Künstler, Album, Jahr, Hinzugefügt, Genre, Format, Dauer,
   Wiedergaben, Tempo, Energie, Dateipfad …
+- **Künstlerbilder** aus dem Ordner des Künstlers: Liegt die Musik als `MUSIK/KÜNSTLER/ALBUM/…`
+  oder `MUSIK/KÜNSTLER/EPs/ALBUM/…`, nimmt der Player das Bild im Künstler-Ordner (`artist.jpg`,
+  `folder.jpg`, `poster.jpg` …). Bei Jellyfin das Künstlerbild des Servers. Ohne Bild: das Cover.
+- **A–Z-Leiste** bei Alben und Künstlern: Buchstaben anklicken oder an der Leiste entlangziehen.
 - **Volltextsuche** über alles, mit Präfixsuche und ohne Rücksicht auf Akzente – in unter 0,1 s.
+  Oben passende **Künstler**, darunter passende **Alben** (jeweils zum Seitwärtsblättern), dann
+  die Titel.
 - **Eigene Ansichten** als kleine JSON-Datei ([siehe unten](#-für-bastler)).
 
 <p align="center">
@@ -320,6 +326,8 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
   an, Sample für Sample wie in der Datei – kein Soundserver, keine Software-Lautstärke, nichts
   umgerechnet. Die Einstellungen zeigen, was gerade beim Gerät ankommt („24 Bit · 96 kHz → Gerät:
   32 Bit · 96 kHz ✓“). Kann das Gerät eine Abtastrate nicht, rechnet der Player sie um und sagt es.
+  Weil der Ton dann ohne Lautstärkeregler mit voller Stärke ankommt, fragt der Player vor dem
+  Einschalten nach: erst Verstärker, DAC oder Kopfhörer leise stellen, dann bestätigen.
 - Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
   was GStreamer abspielt.
 

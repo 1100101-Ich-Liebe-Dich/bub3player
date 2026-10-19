@@ -12,6 +12,7 @@ class GroupModel : public QAbstractListModel
     Q_PROPERTY(QVariantMap spec READ spec WRITE setSpec NOTIFY specChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
+    Q_PROPERTY(QString initials READ initials NOTIFY countChanged) // letters that have groups ("#ABC…")
 
 public:
     enum Roles { Key1Role = Qt::UserRole + 1, Key2Role, TitleRole, SubtitleRole, CountRole, CoverIdRole, YearRole, InitialRole };
@@ -42,6 +43,7 @@ public:
     Q_INVOKABLE QVariantMap get(int row) const;
     // Index of the first group whose title starts with the letter (for the A–Z jump bar).
     Q_INVOKABLE int indexForLetter(const QString &letter) const;
+    QString initials() const;
 
 signals:
     void specChanged();
@@ -50,6 +52,7 @@ signals:
 
 private:
     void apply(int generation, QVector<Group> groups);
+    QString jumpKey(const Group &g) const;
 
     QVariantMap m_spec;
     QVector<Group> m_groups;

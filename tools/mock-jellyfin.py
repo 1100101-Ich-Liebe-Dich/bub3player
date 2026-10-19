@@ -225,6 +225,11 @@ class H(BaseHTTPRequestHandler):
             ext = os.path.splitext(f)[1].lower()
             ctype = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".m4a": "audio/mp4"}.get(ext, "application/octet-stream")
             return self.send_file(f, ctype)
+        m = re.fullmatch(r"/artists/([^/]+)/images/primary(/\d+)?", p)
+        if m:  # artist pictures: one of the images, chosen by the name
+            if not images:
+                return self.empty(404)
+            return self.send_file(images[sum(map(ord, m.group(1))) % len(images)], "image/jpeg")
         m = re.fullmatch(r"/items/([0-9a-f]+)/images/primary(/\d+)?", p)
         if m:
             if not images:

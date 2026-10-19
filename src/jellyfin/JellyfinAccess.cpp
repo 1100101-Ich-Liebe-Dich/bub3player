@@ -136,6 +136,24 @@ QUrl imageUrl(qint64 sourceId, const QString &itemId, const QString &tag, int si
     return u;
 }
 
+QUrl artistImageUrl(qint64 sourceId, const QString &artist, int size)
+{
+    Server s;
+    if (!get(sourceId, s) || artist.isEmpty())
+        return {};
+    QUrl u(s.url);
+    // /Artists/{name}/Images/Primary/0 – the name as one path segment
+    u.setPath(u.path() + QStringLiteral("/Artists/") + QString::fromLatin1(QUrl::toPercentEncoding(artist))
+                  + QStringLiteral("/Images/Primary/0"),
+              QUrl::StrictMode);
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("fillWidth"), QString::number(size));
+    q.addQueryItem(QStringLiteral("fillHeight"), QString::number(size));
+    q.addQueryItem(QStringLiteral("quality"), QStringLiteral("90"));
+    u.setQuery(q);
+    return u;
+}
+
 QByteArray httpGet(const QUrl &url, const QString &token, int timeoutMs, int *status)
 {
     QNetworkAccessManager nam;

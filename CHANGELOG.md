@@ -2,6 +2,25 @@
 
 Alle wichtigen Änderungen an BuB3Player. Die neueste Version steht oben.
 
+## 1.2.0 – Künstlerbilder, neue Suche
+
+- **Künstlerbilder**: Künstler zeigen ihr eigenes Bild statt eines Albumcovers – aus dem Ordner
+  des Künstlers über den Alben (`MUSIK/KÜNSTLER/ALBUM/…`, auch eine Ebene tiefer wie
+  `MUSIK/KÜNSTLER/EPs/ALBUM/…`): `artist.jpg`, `folder.jpg`, `poster.jpg` usw. Der Ordner muss
+  wie der Künstler heißen (Groß-/Kleinschreibung, Akzente, Satzzeichen und „The“ egal), so landet
+  kein Albumcover als Künstlerbild. Bei Jellyfin kommt das Künstlerbild vom Server. Ohne Bild
+  bleibt es beim Cover. Die Seite eines Künstlers zeigt sein Bild groß und rund.
+- **Suche**: Über den Titeln stehen jetzt passende **Künstler** und passende **Alben**, jeweils in
+  einer Reihe zum Seitwärtsblättern (Pfeile, Ziehen, Umschalt + Mausrad). Klick öffnet,
+  Rechtsklick spielt ab oder reiht ein.
+- **A–Z-Leiste** springt jetzt zuverlässig: Ein späteres Neuladen der Liste (Scan,
+  Ordnerüberwachung) zog die Ansicht vorher wieder nach oben. Umlaute zählen beim Buchstaben ohne
+  Punkte („Ä“ unter A), Buchstaben ohne Einträge sind blass, an der Leiste entlangziehen blättert
+  durch, der Buchstabe wird dabei groß angezeigt. Auch bei Alben nach Albumtitel sortiert.
+- **Bit-Perfect mit Bestätigung**: Nach dem Einschalten erscheint ein zweiter Schalter. Erst wenn
+  man bestätigt, dass Verstärker, DAC oder Kopfhörer leise gestellt sind, geht Bit-Perfect an –
+  der Ton kommt dabei ohne Lautstärkeregler mit voller Stärke an.
+
 ## 1.1.0 – Equalizer und Ausgabegerät
 
 Neuer Reiter **Einstellungen → Klang** (`Strg + E`), in allen acht Themes:

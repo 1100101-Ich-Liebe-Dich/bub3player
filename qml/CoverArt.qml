@@ -13,6 +13,7 @@ import Halcyon
 Item {
     id: c
     property var coverId: 0
+    property string artist: ""         // set: the artist's picture (album art of coverId if there is none)
     property real radius: 6
     property int requestSize: 256
     property string label: ""          // used for the placeholder colour and initial
@@ -63,7 +64,9 @@ Item {
     Image {
         id: img
         anchors.fill: parent
-        source: c.coverId > 0 && c.shown && c.shownPx > 0 ? "image://cover/" + c.coverId : ""
+        source: c.coverId > 0 && c.shown && c.shownPx > 0
+                ? (c.artist !== "" ? "image://cover/artist/" + c.coverId + "/" + encodeURIComponent(c.artist) : "image://cover/" + c.coverId)
+                : ""
         sourceSize: Qt.size(c.decodeSize, c.decodeSize)
         asynchronous: true
         cache: true

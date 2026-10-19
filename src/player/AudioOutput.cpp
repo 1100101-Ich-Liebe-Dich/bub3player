@@ -127,7 +127,9 @@ void AudioOutput::loadHwDevices()
     // /proc/asound/pcm: "00-00: name : name : playback 1".
     m_hwDevices.clear();
     QHash<QString, QString> cardId, cardName;
-    QFile cards(QStringLiteral("/proc/asound/cards"));
+    // Tests: HALCYON_TEST_ASOUND=DIR with "cards" and "pcm" like /proc/asound.
+    const QString base = qEnvironmentVariable("HALCYON_TEST_ASOUND", QStringLiteral("/proc/asound"));
+    QFile cards(base + QStringLiteral("/cards"));
     if (cards.open(QIODevice::ReadOnly)) {
         static const QRegularExpression re(QStringLiteral("^\\s*(\\d+)\\s+\\[(\\S+)\\s*\\]:\\s*.*?\\s-\\s(.*)$"));
         for (const QByteArray &line : cards.readAll().split('\n')) {
@@ -138,7 +140,7 @@ void AudioOutput::loadHwDevices()
             }
         }
     }
-    QFile pcm(QStringLiteral("/proc/asound/pcm"));
+    QFile pcm(base + QStringLiteral("/pcm"));
     if (pcm.open(QIODevice::ReadOnly)) {
         for (const QByteArray &raw : pcm.readAll().split('\n')) {
             const QString line = QString::fromUtf8(raw);
