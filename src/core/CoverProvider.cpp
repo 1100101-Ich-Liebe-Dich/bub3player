@@ -12,11 +12,15 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QImageReader>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QMutex>
 #include <QRegularExpression>
 #include <QRunnable>
 #include <QSet>
 #include <QStandardPaths>
+#include <QUrl>
 #include <atomic>
 #include <cmath>
 #include <memory>
@@ -26,6 +30,7 @@ namespace {
 QMutex g_mutex;
 QHash<qint64, QString> g_folderCover; // folder id -> image path ("" = none)
 QSet<QString> g_noArt;                // source keys known to have no art
+QHash<QString, QString> g_artistImage; // track folder + artist -> image path ("" = none)
 QHash<qint64, qint64> g_offlineUntil; // Jellyfin source -> retry time (ms since epoch)
 
 QString cacheDir()
@@ -96,17 +101,161 @@ struct Source
     bool embedded = false;
     qint64 remoteSource = 0; // Jellyfin: server, item id and image tag
     QString remoteItem, remoteTag;
+    QString remoteArtist;    // Jellyfin: the artist's picture instead of the item's
 };
+
+QString hashOf(const QString &s)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(s.toUtf8(), QCryptographicHash::Sha1).toHex().left(20));
+}
+
+// Artist and folder names compare without case, accents, punctuation and a
+// leading or trailing "The": "AC/DC" = "ACDC", "Cure, The" = "The Cure", "Björk" = "Bjork".
+QString nameKey(const QString &name)
+{
+    const QString d = name.normalized(QString::NormalizationForm_KD).toCaseFolded();
+    QString out;
+    for (const QChar c : d)
+        if (c.isLetterOrNumber())
+            out += c;
+    const QString t = name.trimmed();
+    if (out.size() > 3 && t.startsWith(QLatin1String("the "), Qt::CaseInsensitive))
+        out.remove(0, 3);
+    else if (out.size() > 3 && t.endsWith(QLatin1String(", the"), Qt::CaseInsensitive))
+        out.chop(3);
+    return out;
+}
+
+QStringList imagesIn(const QDir &dir)
+{
+    return dir.entryList({QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"), QStringLiteral("*.png"), QStringLiteral("*.webp"),
+                          QStringLiteral("*.JPG"), QStringLiteral("*.JPEG"), QStringLiteral("*.PNG"), QStringLiteral("*.WEBP")},
+                         QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
+}
+
+// The picture in an artist's own folder: artist.jpg, folder.jpg, … or the only image there.
+QString pickArtistImage(const QDir &dir, const QString &artist)
+{
+    const QStringList images = imagesIn(dir);
+    if (images.isEmpty())
+        return {};
+    const QStringList preferred = {QStringLiteral("artist"), QStringLiteral("folder"), QStringLiteral("poster"),
+                                   QStringLiteral("cover"), QStringLiteral("thumb"), artist};
+    for (const QString &want : preferred)
+        for (const QString &f : images)
+            if (nameKey(QFileInfo(f).completeBaseName()) == nameKey(want))
+                return dir.filePath(f);
+    return images.size() == 1 ? dir.filePath(images.first()) : QString();
+}
+
+// "artist.jpg" (any case, jpg/jpeg/png/webp) in a folder – looked up by name,
+// a big folder (the library root) is never listed for it.
+QString probeArtistFile(const QDir &dir)
+{
+    for (const char *base : {"artist", "Artist", "ARTIST"})
+        for (const char *ext : {"jpg", "jpeg", "png", "webp", "JPG", "JPEG", "PNG", "WEBP"}) {
+            const QString f = dir.filePath(QStringLiteral("%1.%2").arg(QLatin1String(base), QLatin1String(ext)));
+            if (QFileInfo::exists(f))
+                return f;
+        }
+    return {};
+}
+
+// MUSIK/KÜNSTLER/ALBUM/titel.mp3 or MUSIK/KÜNSTLER/EPs/ALBUM/CD1/titel.mp3: of the
+// three folders above the track's, the outermost one named like the artist (so
+// MUSIK/Metallica/Metallica/CD1 finds the artist's folder, not the album's). The
+// track's own folder only counts for loose tracks right in the artist's folder,
+// and then only with an artist.jpg. No folder of that name, no picture: an
+// image in a folder like "Sammlung" or "Various Artists" belongs to nobody in particular.
+QString findArtistImage(const QString &trackFolder, const QString &artist)
+{
+    const QString want = nameKey(artist);
+    if (want.isEmpty())
+        return {};
+    QDir d(trackFolder);
+    QString outer;
+    int outerLevel = 0;
+    for (int level = 1; level <= 3 && d.cdUp(); ++level)
+        if (nameKey(d.dirName()) == want) {
+            outer = d.absolutePath();
+            outerLevel = level;
+        }
+    // ".../Metallica/CD1": right above a disc folder is the album (a self-titled one),
+    // its cover.jpg is no artist picture – only an artist.jpg there counts.
+    static const QRegularExpression disc(QStringLiteral("^(cd|disc|disk|dis[ck]o|platte|seite|side)\\s*[0-9a-d]{1,2}\\b"),
+                                         QRegularExpression::CaseInsensitiveOption);
+    if (outerLevel == 1 && disc.match(QDir(trackFolder).dirName()).hasMatch())
+        return probeArtistFile(QDir(outer));
+    if (!outer.isEmpty())
+        return pickArtistImage(QDir(outer), artist);
+    d = QDir(trackFolder);
+    return nameKey(d.dirName()) == want ? probeArtistFile(d) : QString();
+}
+
+// One database connection per decoder thread for both lookups.
+DbConnection &coverDb()
+{
+    thread_local DbConnection db;
+    if (!db.isOpen())
+        db = Database::open(2048);
+    return db;
+}
+
+// The artist's picture for a track of the artist. False when there is none
+// (the caller falls back to the album art).
+bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
+{
+    DbConnection &db = coverDb();
+    thread_local std::unique_ptr<Stmt> q;
+    if (!q)
+        q = std::make_unique<Stmt>(db, "SELECT f.path, t.source_id FROM tracks t JOIN folders f ON f.id = t.folder_id WHERE t.id = ?");
+    q->bind(1, trackId);
+    if (!q->step()) {
+        q->reset();
+        return false;
+    }
+    const QString folder = q->str(0);
+    const qint64 sourceId = q->i64(1);
+    q->reset();
+    src = {};
+    if (sourceId != Database::LocalSource) {
+        src.remoteSource = sourceId;
+        src.remoteArtist = artist;
+        src.key = QStringLiteral("ja%1_%2").arg(sourceId).arg(hashOf(artist.toCaseFolded())); // refreshed weekly, see produce()
+        return true;
+    }
+    const QString cacheKey = folder + QChar(0x1f) + artist;
+    QString image;
+    bool known = false;
+    {
+        QMutexLocker lock(&g_mutex);
+        auto it = g_artistImage.constFind(cacheKey);
+        if (it != g_artistImage.constEnd()) {
+            known = true;
+            image = *it;
+        }
+    }
+    if (!known) {
+        image = findArtistImage(folder, artist);
+        QMutexLocker lock(&g_mutex);
+        if (g_artistImage.size() > 20000)
+            g_artistImage.clear();
+        g_artistImage.insert(cacheKey, image);
+    }
+    if (image.isEmpty())
+        return false;
+    src.key = QStringLiteral("a%1_%2").arg(hashOf(image)).arg(QFileInfo(image).lastModified().toSecsSinceEpoch());
+    src.file = image;
+    return true;
+}
 
 bool resolve(qint64 trackId, Source &src)
 {
-    thread_local DbConnection db;
+    DbConnection &db = coverDb();
     thread_local std::unique_ptr<Stmt> q;
-    if (!db.isOpen()) {
-        db = Database::open(2048);
+    if (!q)
         q = std::make_unique<Stmt>(db, "SELECT f.id, f.path, t.filename, t.mtime, t.source_id, t.image_ref FROM tracks t "
                                        "JOIN folders f ON f.id = t.folder_id WHERE t.id = ?");
-    }
     q->bind(1, trackId);
     if (!q->step()) {
         q->reset();
@@ -154,17 +303,14 @@ bool resolve(qint64 trackId, Source &src)
         g_folderCover.insert(folderId, folderImage);
     }
 
-    auto hash = [](const QString &s) {
-        return QString::fromLatin1(QCryptographicHash::hash(s.toUtf8(), QCryptographicHash::Sha1).toHex().left(20));
-    };
     if (!folderImage.isEmpty()) {
         const qint64 im = QFileInfo(folderImage).lastModified().toSecsSinceEpoch();
         src = {};
-        src.key = QStringLiteral("f%1_%2").arg(hash(folderImage)).arg(im);
+        src.key = QStringLiteral("f%1_%2").arg(hashOf(folderImage)).arg(im);
         src.file = folderImage;
     } else {
         src = {};
-        src.key = QStringLiteral("t%1_%2").arg(hash(file)).arg(mtime);
+        src.key = QStringLiteral("t%1_%2").arg(hashOf(file)).arg(mtime);
         src.file = file;
         src.embedded = true;
     }
@@ -179,13 +325,19 @@ QImage produce(const Source &src, int bucket, QString *outPath)
         if (g_noArt.contains(src.key))
             return {};
     }
+    // A Jellyfin artist picture has no tag to notice changes by: refreshed (same
+    // file) when older than a week; the old one stays if the server is away.
+    QImage old;
     if (QFileInfo::exists(cached)) {
         QImage img(cached);
-        if (!img.isNull()) {
+        const bool stale = !src.remoteArtist.isEmpty()
+                           && QFileInfo(cached).lastModified().secsTo(QDateTime::currentDateTime()) > 7 * 86400;
+        if (!img.isNull() && !stale) {
             if (outPath)
                 *outPath = cached;
             return img;
         }
+        old = img;
     }
 
     QImage img;
@@ -200,8 +352,26 @@ QImage produce(const Source &src, int bucket, QString *outPath)
         if (!JellyfinAccess::get(src.remoteSource, server))
             return {};
         int status = 0;
-        QByteArray bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, src.remoteItem, src.remoteTag, bucket),
-                                                   server.token, 8000, &status);
+        QByteArray bytes;
+        if (src.remoteArtist.isEmpty()) {
+            bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, src.remoteItem, src.remoteTag, bucket),
+                                            server.token, 8000, &status);
+        } else {
+            // The artist's item by name (works for "AC/DC" too), then its picture.
+            const QByteArray found = JellyfinAccess::httpGet(JellyfinAccess::artistSearchUrl(src.remoteSource, src.remoteArtist),
+                                                             server.token, 8000, &status);
+            QString id, tag;
+            for (const QJsonValue v : QJsonDocument::fromJson(found).object().value(QStringLiteral("Items")).toArray()) {
+                const QJsonObject o = v.toObject();
+                if (o.value(QStringLiteral("Name")).toString().compare(src.remoteArtist, Qt::CaseInsensitive) == 0) {
+                    id = o.value(QStringLiteral("Id")).toString();
+                    tag = o.value(QStringLiteral("ImageTags")).toObject().value(QStringLiteral("Primary")).toString();
+                    break;
+                }
+            }
+            if (!id.isEmpty() && !tag.isEmpty())
+                bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, id, tag, bucket), server.token, 8000, &status);
+        }
         if (status == 0 || status >= 500) {
             QMutexLocker lock(&g_mutex);
             g_offlineUntil.insert(src.remoteSource, now + 60000);
@@ -225,6 +395,11 @@ QImage produce(const Source &src, int bucket, QString *outPath)
         QImageReader reader(src.file);
         img = scaleSquare(reader, bucket);
     }
+    if (img.isNull() && !old.isNull()) {
+        if (outPath)
+            *outPath = cached;
+        return old;
+    }
     if (img.isNull()) {
         QMutexLocker lock(&g_mutex);
         if (g_noArt.size() > 50000)
@@ -240,7 +415,7 @@ QImage produce(const Source &src, int bucket, QString *outPath)
 class CoverResponse : public QQuickImageResponse, public QRunnable
 {
 public:
-    CoverResponse(qint64 id, QSize size) : m_id(id), m_size(size) { setAutoDelete(false); }
+    CoverResponse(qint64 id, QString artist, QSize size) : m_id(id), m_artist(std::move(artist)), m_size(size) { setAutoDelete(false); }
 
     QQuickTextureFactory *textureFactory() const override
     {
@@ -259,7 +434,10 @@ public:
             return;
         }
         const int want = std::max(m_size.width(), m_size.height());
-        m_image = CoverProvider::load(m_id, want > 0 ? want : 256);
+        if (!m_artist.isEmpty())
+            m_image = CoverProvider::loadArtist(m_id, m_artist, want > 0 ? want : 256);
+        if (m_image.isNull()) // no artist picture: the album art of the track
+            m_image = CoverProvider::load(m_id, want > 0 ? want : 256);
         if (m_image.isNull()) {
             // Transparent pixel: the QML placeholder underneath stays visible, no error spam.
             m_image = QImage(1, 1, QImage::Format_ARGB32);
@@ -270,6 +448,7 @@ public:
 
 private:
     qint64 m_id;
+    QString m_artist;
     QSize m_size;
     QImage m_image;
     std::atomic<bool> m_cancelled{false};
@@ -285,8 +464,17 @@ CoverProvider::CoverProvider()
 
 QQuickImageResponse *CoverProvider::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
-    const qint64 trackId = id.section(QLatin1Char('?'), 0, 0).toLongLong();
-    auto *r = new CoverResponse(trackId, requestedSize);
+    // "<trackId>" or "artist/<trackId>/<artist, percent-encoded>"
+    const QString path = id.section(QLatin1Char('?'), 0, 0);
+    qint64 trackId = 0;
+    QString artist;
+    if (path.startsWith(QLatin1String("artist/"))) {
+        trackId = path.section(QLatin1Char('/'), 1, 1).toLongLong();
+        artist = QUrl::fromPercentEncoding(path.section(QLatin1Char('/'), 2).toUtf8());
+    } else {
+        trackId = path.toLongLong();
+    }
+    auto *r = new CoverResponse(trackId, artist, requestedSize);
     m_pool.start(r);
     return r;
 }
@@ -298,6 +486,20 @@ QImage CoverProvider::load(qint64 trackId, int size)
     try {
         Source src;
         if (!resolve(trackId, src))
+            return {};
+        return produce(src, bucketFor(size), nullptr);
+    } catch (...) {
+        return {};
+    }
+}
+
+QImage CoverProvider::loadArtist(qint64 trackId, const QString &artist, int size)
+{
+    if (trackId <= 0 || artist.trimmed().isEmpty())
+        return {};
+    try {
+        Source src;
+        if (!resolveArtist(trackId, artist, src))
             return {};
         return produce(src, bucketFor(size), nullptr);
     } catch (...) {

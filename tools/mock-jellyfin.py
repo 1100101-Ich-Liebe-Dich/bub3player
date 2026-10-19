@@ -225,6 +225,12 @@ class H(BaseHTTPRequestHandler):
             ext = os.path.splitext(f)[1].lower()
             ctype = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".m4a": "audio/mp4"}.get(ext, "application/octet-stream")
             return self.send_file(f, ctype)
+        if p == "/artists":  # artist items by name: their picture is /Items/<id>/Images/Primary
+            term = q.get("searchterm", "").lower()
+            names = sorted({t.get("AlbumArtist") or "" for t in items.values()} - {""})
+            found = [{"Name": n, "Id": "%032x" % (sum(map(ord, n)) * 7919), "Type": "MusicArtist",
+                      "ImageTags": {"Primary": "a%x" % sum(map(ord, n))}} for n in names if term in n.lower()]
+            return self.send_json({"Items": found, "TotalRecordCount": len(found), "StartIndex": 0})
         m = re.fullmatch(r"/items/([0-9a-f]+)/images/primary(/\d+)?", p)
         if m:
             if not images:

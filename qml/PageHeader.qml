@@ -10,6 +10,7 @@ Item {
     property string subtitle
     property string detail
     property var coverId: 0
+    property string artist: ""     // round artist picture instead of the album art
     property bool showBack: false
     property bool loading: false
     property int inset: 36
@@ -37,9 +38,10 @@ Item {
         y: h.topSpace
         width: 188
         height: 188
-        radius: Theme.radius + 2
+        radius: h.artist !== "" ? width / 2 : Theme.radius + 2
         requestSize: 512
         coverId: h.coverId
+        artist: h.artist
         label: h.title
     }
 

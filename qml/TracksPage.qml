@@ -234,6 +234,13 @@ Item {
                 }
             }
             Loader {
+                // search: matching artists and albums first, then the tracks
+                active: page.isSearch
+                visible: active
+                width: parent.width
+                sourceComponent: SearchShelves { width: table.width; text: page.spec && page.spec.search ? page.spec.search : "" }
+            }
+            Loader {
                 width: parent.width
                 sourceComponent: tracks.count > 0 ? table.columnHeader : null
             }

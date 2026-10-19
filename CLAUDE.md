@@ -86,7 +86,10 @@ derzeit 4), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
   SQLite-Verbindung (eine Verbindung pro Thread, nie Statements zwischen Threads teilen).
 - Alles aus Ansichten/Nutzerdaten geht durch `QueryBuilder`: nur Felder/Operatoren aus der
   Whitelist, alle Werte gebunden. Spec-Schlüssel: `filters`, `match` (all/any), `require`,
-  `playlist`, `sort`, `desc`, `limit`, `seed`, `search`, `groupBy`, `groupSort`.
+  `playlist`, `sort`, `desc`, `limit` (auch für Gruppen), `seed`, `search`, `searchIn`
+  (`artist`/`album`: Suche nur in Albumkünstler bzw. Album + Albumkünstler), `groupBy`, `groupSort`.
+- Bilder: `image://cover/<trackId>` (Albumcover), `image://cover/artist/<trackId>/<Künstler>`
+  (Künstlerbild aus dem Künstler-Ordner bzw. von Jellyfin, sonst das Cover); `CoverArt.artist`.
 - Playlists: Schreiben nur im Writer-Thread (`PlaylistStore::writeAsync`, eine Reihenfolge,
   Rollback bei Fehler); Einträge werden über (Position, Titel-ID) geprüft. Einträge haben einen
   `hint` (Pfad, Titel, Künstler, Album, Länge), fehlende Titel bleiben als `track_id IS NULL`
@@ -133,6 +136,9 @@ Ton prüfen ohne Soundkarte:
   vergleichen.
 - Geräteliste und Gerätewechsel: `pulseaudio` mit `module-null-sink` starten, mitschneiden mit
   `parec -d NAME.monitor`.
+- Soundkarten für Bit-Perfect ohne Hardware: `HALCYON_TEST_ASOUND=DIR` mit Dateien `cards` und
+  `pcm` im Format von `/proc/asound`.
+- Suche testen: `--ui-test "search=wort"`.
 
 Typischer Ablauf vor einem PR:
 1. `cmake --build build` ohne Warnungen.
@@ -190,6 +196,8 @@ Typischer Ablauf vor einem PR:
   AppImage sind drin).
 - **1.1.0**: Equalizer, Ausgabegerät, Bit-Perfect über ALSA (Reiter „Klang“). Das Repo bleibt
   privat, bis der Inhaber alles getestet hat.
+- **1.2.0**: Künstlerbilder (Ordner/Jellyfin), Suche mit Künstler- und Albenreihe, A–Z-Leiste
+  repariert, Bit-Perfect nur mit Bestätigung (Lautstärke runter).
 - **Als Nächstes** (in der README schon als vorhanden beschrieben, vor dem öffentlich Schalten
   des Repos fertig bauen!):
   - **Liedtexte**: aus Tags und `.lrc` neben der Datei, synchronisiert in der Großansicht

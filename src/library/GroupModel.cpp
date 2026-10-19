@@ -12,6 +12,25 @@
 #include <QtConcurrent>
 
 namespace {
+// "A".."Z" for a name, "#" for digits and signs; "Ä" counts as "A", "É" as "E".
+QChar initialOf(const QString &name)
+{
+    for (const QChar c : name.left(4).normalized(QString::NormalizationForm_KD)) {
+        if (c.isSpace() || c.category() == QChar::Mark_NonSpacing)
+            continue;
+        const QChar u = c.toUpper();
+        return u >= QLatin1Char('A') && u <= QLatin1Char('Z') ? u : QLatin1Char('#');
+    }
+    return QLatin1Char('#');
+}
+} // namespace
+
+int GroupModel::jumpSlot(QChar c)
+{
+    return c >= QLatin1Char('A') && c <= QLatin1Char('Z') ? c.unicode() - 'A' + 1 : 0; // 0 = "#"
+}
+
+namespace {
 
 QString countText(int n)
 {
@@ -42,7 +61,7 @@ int GroupModel::rowCount(const QModelIndex &parent) const
 QHash<int, QByteArray> GroupModel::roleNames() const
 {
     return {{Key1Role, "key1"}, {Key2Role, "key2"}, {TitleRole, "title"}, {SubtitleRole, "subtitle"},
-            {CountRole, "count"}, {CoverIdRole, "coverId"}, {YearRole, "year"}, {InitialRole, "initial"}};
+            {CountRole, "count"}, {CoverIdRole, "coverId"}, {YearRole, "year"}};
 }
 
 QVariant GroupModel::data(const QModelIndex &index, int role) const
@@ -58,7 +77,6 @@ QVariant GroupModel::data(const QModelIndex &index, int role) const
     case CountRole: return g.count;
     case CoverIdRole: return g.coverId;
     case YearRole: return g.year;
-    case InitialRole: return g.title.isEmpty() ? QString() : g.title.left(1).toUpper();
     }
     return {};
 }
@@ -84,8 +102,11 @@ void GroupModel::reload()
     }
     const QueryBuilder::Built q = QueryBuilder::groups(m_spec);
     const QString by = m_spec.value(QStringLiteral("groupBy"), QStringLiteral("album")).toString();
+    // Albums sorted by name are ordered by artist: the A–Z bar jumps by the artist's initial.
+    const bool jumpByArtist = by == QLatin1String("album")
+                              && m_spec.value(QStringLiteral("groupSort"), QStringLiteral("name")).toString() == QLatin1String("name");
     QPointer<GroupModel> self(this);
-    (void)QtConcurrent::run([self, gen, q, by] {
+    (void)QtConcurrent::run([self, gen, q, by, jumpByArtist] {
         QVector<Group> groups;
         if (q.ok) {
             try {
@@ -141,17 +162,35 @@ void GroupModel::reload()
                 const int na = ca.chopped(1).toInt(), nb = cb.chopped(1).toInt();
                 return na != nb ? na < nb : ca.back() < cb.back();
             });
-        QMetaObject::invokeMethod(qApp, [self, gen, groups = std::move(groups)]() mutable {
+        // A–Z bar, worked out here and not in the UI thread: the first group of
+        // each initial, wherever the database sorted it (umlauts, signs).
+        Jump jump;
+        jump.first.fill(-1);
+        for (int i = 0; i < groups.size(); ++i) {
+            const Group &g = groups[i];
+            const QString raw = by == QLatin1String("album") && !jumpByArtist ? g.key2.toString() : g.key1.toString();
+            if (raw.trimmed().isEmpty())
+                continue; // "Unbekannt" sorts last: no letter for it
+            const QString key = jumpByArtist ? raw : g.title;
+            const int slot = jumpSlot(initialOf(key));
+            if (jump.first[slot] < 0) {
+                jump.first[slot] = i;
+                jump.initials += slot == 0 ? QLatin1Char('#') : QChar(QLatin1Char('A').unicode() + slot - 1);
+            }
+        }
+        QMetaObject::invokeMethod(qApp, [self, gen, groups = std::move(groups), jump]() mutable {
             if (self)
-                self->apply(gen, std::move(groups));
+                self->apply(gen, std::move(groups), jump);
         }, Qt::QueuedConnection);
     });
 }
 
-void GroupModel::apply(int generation, QVector<Group> groups)
+void GroupModel::apply(int generation, QVector<Group> groups, const Jump &jump)
 {
     if (generation != m_generation)
         return;
+    m_jumpFirst = jump.first;
+    m_initials = jump.initials;
     const bool sameShape = groups.size() == m_groups.size();
     if (sameShape && !groups.isEmpty()) {
         m_groups = std::move(groups);
@@ -190,6 +229,7 @@ QVariantMap GroupModel::get(int row) const
     if (row < 0 || row >= m_groups.size())
         return m;
     const Group &g = m_groups[row];
+    m.insert(QStringLiteral("key1"), g.key1);
     m.insert(QStringLiteral("title"), g.title);
     m.insert(QStringLiteral("subtitle"), g.subtitle);
     m.insert(QStringLiteral("count"), g.count);
@@ -200,15 +240,11 @@ QVariantMap GroupModel::get(int row) const
 
 int GroupModel::indexForLetter(const QString &letter) const
 {
-    const QString l = letter.toUpper();
-    // Albums sorted by name are ordered by artist, so jump by the artist's initial.
-    const bool byArtist = m_spec.value(QStringLiteral("groupBy"), QStringLiteral("album")).toString() == QLatin1String("album")
-                          && m_spec.value(QStringLiteral("groupSort"), QStringLiteral("name")).toString() == QLatin1String("name");
-    for (int i = 0; i < m_groups.size(); ++i) {
-        const QString key = byArtist ? m_groups[i].key1.toString() : m_groups[i].title;
-        const QString first = key.left(1).toUpper();
-        if (l == QLatin1String("#") ? !first.isEmpty() && !first[0].isLetter() : first >= l)
-            return i;
-    }
+    // Precomputed in reload(): the first group with that initial, else the next
+    // letter that has groups, else the end.
+    const int slot = jumpSlot(letter.isEmpty() ? QChar() : letter.at(0).toUpper());
+    for (int k = std::max(0, slot); k < JumpSlots; ++k)
+        if (m_jumpFirst[k] >= 0)
+            return m_jumpFirst[k];
     return int(m_groups.size()) - 1;
 }

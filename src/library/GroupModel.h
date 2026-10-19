@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <array>
 #include <QVariantMap>
 #include <QVector>
 
@@ -12,9 +13,10 @@ class GroupModel : public QAbstractListModel
     Q_PROPERTY(QVariantMap spec READ spec WRITE setSpec NOTIFY specChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
+    Q_PROPERTY(QString initials READ initials NOTIFY countChanged) // letters that have groups ("#ABC…")
 
 public:
-    enum Roles { Key1Role = Qt::UserRole + 1, Key2Role, TitleRole, SubtitleRole, CountRole, CoverIdRole, YearRole, InitialRole };
+    enum Roles { Key1Role = Qt::UserRole + 1, Key2Role, TitleRole, SubtitleRole, CountRole, CoverIdRole, YearRole };
 
     struct Group
     {
@@ -42,6 +44,7 @@ public:
     Q_INVOKABLE QVariantMap get(int row) const;
     // Index of the first group whose title starts with the letter (for the A–Z jump bar).
     Q_INVOKABLE int indexForLetter(const QString &letter) const;
+    QString initials() const { return m_initials; }
 
 signals:
     void specChanged();
@@ -49,10 +52,19 @@ signals:
     void loadingChanged();
 
 private:
-    void apply(int generation, QVector<Group> groups);
+    static constexpr int JumpSlots = 27; // "#", "A" … "Z"
+    struct Jump
+    {
+        std::array<int, JumpSlots> first; // first group of each initial, -1 none
+        QString initials;
+    };
+    static int jumpSlot(QChar c);
+    void apply(int generation, QVector<Group> groups, const Jump &jump);
 
     QVariantMap m_spec;
     QVector<Group> m_groups;
+    std::array<int, JumpSlots> m_jumpFirst{};
+    QString m_initials;
     bool m_loading = false;
     bool m_specSet = false;
     int m_generation = 0;

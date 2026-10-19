@@ -10,6 +10,8 @@ Column {
     spacing: 34
     // Format of the signal, polled while the tab is open.
     property var path: ({})
+    // Bit-perfect asked for, not confirmed yet (volume down at the amplifier first).
+    property bool bpArmed: false
 
     Component.onCompleted: Audio.refreshDevices()
 
@@ -68,11 +70,65 @@ Column {
         HToggle {
             width: snd.width
             label: qsTr("Bit-Perfect: unverändert direkt an den DAC (ALSA, am Soundserver vorbei)")
-            checked: Audio.bitPerfect
+            checked: Audio.bitPerfect || snd.bpArmed
             enabled: Audio.alsaAvailable && (Audio.bitPerfect || Audio.hwDevices.length > 0)
             onToggled: {
-                Audio.bitPerfect = checked
-                checked = Qt.binding(() => Audio.bitPerfect) // refused (no card): back off
+                // On: only asks for the confirmation below. Off: right away.
+                snd.bpArmed = checked && !Audio.bitPerfect
+                if (!checked)
+                    Audio.bitPerfect = false
+                checked = Qt.binding(() => Audio.bitPerfect || snd.bpArmed)
+            }
+        }
+        // Full level at the device from the first sample: confirm first.
+        Rectangle {
+            visible: snd.bpArmed && !Audio.bitPerfect
+            width: snd.width
+            height: confirmCol.implicitHeight + 28
+            radius: Math.min(12, Theme.radius + 2)
+            color: Theme.alpha(Theme.accent, 0.12)
+            border.width: 1
+            border.color: Theme.alpha(Theme.accent, 0.6)
+            Column {
+                id: confirmCol
+                x: 14; y: 14
+                width: parent.width - 28
+                spacing: 10
+                Row {
+                    spacing: 10
+                    width: parent.width
+                    Icon { name: "volume"; size: 22; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        width: parent.width - 32
+                        anchors.verticalCenter: parent.verticalCenter
+                        wrapMode: Text.Wrap
+                        text: qsTr("Erst leiser drehen!")
+                        font.family: Theme.uiFont
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        color: Theme.text
+                    }
+                }
+                Text {
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    text: qsTr("Bei Bit-Perfect regelt der Player die Lautstärke nicht mehr: Der Ton kommt mit voller Stärke beim Gerät an. Dreh deshalb vorher den Verstärker, den DAC oder den Kopfhörer ganz leise und danach langsam lauter. Wähle unten auch das richtige Gerät.")
+                    font.family: Theme.uiFont
+                    font.pixelSize: 13
+                    color: Theme.textDim
+                }
+                HToggle {
+                    width: parent.width
+                    label: qsTr("Ich habe Verstärker, DAC bzw. Kopfhörer leise gestellt – Bit-Perfect einschalten")
+                    checked: false
+                    onToggled: {
+                        if (checked) {
+                            Audio.bitPerfect = true
+                            snd.bpArmed = false
+                        }
+                        checked = false
+                    }
+                }
             }
         }
         Text {
@@ -89,8 +145,9 @@ Column {
         }
         SettingsOption {
             width: snd.width
-            visible: Audio.bitPerfect
+            visible: Audio.bitPerfect || snd.bpArmed
             label: qsTr("Gerät für Bit-Perfect")
+            hint: Audio.bitPerfect ? qsTr("Vor einem Wechsel des Geräts auch dort erst leiser drehen.") : ""
             HCombo {
                 width: Math.min(460, snd.width)
                 options: {
@@ -105,7 +162,7 @@ Column {
                         list.push({ value: Audio.hwDevice, label: qsTr("%1 (nicht verbunden)").arg(Audio.hwDeviceName || Audio.hwDevice) })
                     return list
                 }
-                current: Audio.hwDevice
+                current: Audio.hwDevice !== "" ? Audio.hwDevice : (Audio.hwDevices.length > 0 ? Audio.hwDevices[0].key : "") // the first one is taken by default
                 onPicked: (v) => Audio.setHwDevice(v, snd.nameOf(Audio.hwDevices, v, Audio.hwDevice, Audio.hwDeviceName))
             }
         }

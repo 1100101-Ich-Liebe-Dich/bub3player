@@ -136,6 +136,24 @@ QUrl imageUrl(qint64 sourceId, const QString &itemId, const QString &tag, int si
     return u;
 }
 
+QUrl artistSearchUrl(qint64 sourceId, const QString &artist)
+{
+    Server s;
+    if (!get(sourceId, s) || artist.isEmpty())
+        return {};
+    QUrl u(s.url);
+    u.setPath(u.path() + QStringLiteral("/Artists"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("searchTerm"), QString::fromLatin1(QUrl::toPercentEncoding(artist)));
+    q.addQueryItem(QStringLiteral("Limit"), QStringLiteral("100")); // short names ("Air") have many partial hits
+    q.addQueryItem(QStringLiteral("SortBy"), QStringLiteral("SortName"));
+    q.addQueryItem(QStringLiteral("Fields"), QStringLiteral("ImageTags"));
+    if (!s.userId.isEmpty())
+        q.addQueryItem(QStringLiteral("userId"), s.userId);
+    u.setQuery(q);
+    return u;
+}
+
 QByteArray httpGet(const QUrl &url, const QString &token, int timeoutMs, int *status)
 {
     QNetworkAccessManager nam;
