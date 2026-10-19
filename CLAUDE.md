@@ -171,8 +171,14 @@ Typischer Ablauf vor einem PR:
 - Der Jellyfin-Test-Server: `pkill -f "[m]ock-jellyfin.py"` (mit Klammern, sonst trifft es die
   eigene Shell). Genauso `pkill -f "[b]uild/halcyon"`.
 - playbin mit `NATIVE_AUDIO` und festem `audio-sink` nimmt nur Decoder, deren Ausgabe die Senke
-  direkt annimmt (die `audio-filter`-Kette zählt nicht) → „No decoder available“. Deshalb steckt
-  bei Bit-Perfect ein `audioconvert` (ohne Dither) mit der ALSA-Senke in einem Bin.
+  direkt annimmt (die `audio-filter`-Kette zählt nicht) → „No decoder available“. Deshalb stecken
+  bei Bit-Perfect `audioconvert` (ohne Dither) und `audioresample` mit der ALSA-Senke in einem Bin
+  (beide reichen unverändert durch, wenn das Gerät Format und Rate kann). Ohne Resampler laufen
+  MP3s mit fremder Rate stumm durch die ganze Warteschlange (mpg123 meldet keinen Fehler).
+- Ein PulseAudio-Gerät, das es nicht mehr gibt, meldet keinen Fehler der Senke, sondern
+  „No decoder available“ (MISSING_PLUGIN) – das zählt bei gewähltem Gerät als Ausgabefehler.
+- Die Null-Senke von PulseAudio im Container braucht nach jedem Start ~1–2 s, bis die Position
+  läuft. Kein Fehler des Players.
 - Eine neue Senke mit eigener Lautstärke (pulsesink) übernimmt die Lautstärke von playsink nur bei
   einer Änderung; nach `rebuildChains` wird sie deshalb beim nächsten PAUSED/PLAYING neu gesetzt.
 - `level` meldet bei „not-negotiated“ GStreamer-CRITICALs (Division durch 0) – harmlos, nur im

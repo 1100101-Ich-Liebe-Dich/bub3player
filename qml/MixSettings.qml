@@ -27,7 +27,7 @@ Column {
             visible: Player.bitPerfect
             width: mx.width
             wrapMode: Text.Wrap
-            text: qsTr("Bit-Perfect ist eingeschaltet (Einstellungen → Klang): Solange spielt alles lückenlos, ohne Überblenden.")
+            text: qsTr("Bit-Perfect ist eingeschaltet (Einstellungen → Klang). Solange es eingeschaltet ist, spielt alles lückenlos, ohne Überblenden.")
             font.family: Theme.uiFont
             font.pixelSize: 13
             font.weight: Font.DemiBold

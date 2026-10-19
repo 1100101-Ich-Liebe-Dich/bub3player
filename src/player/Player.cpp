@@ -99,20 +99,26 @@ GstPadProbeReturn onStreamEvent(GstPad *, GstPadProbeInfo *info, gpointer data)
     return GST_PAD_PROBE_OK;
 }
 
-// Bit-perfect: audioconvert (no dither) ! device. Puts the samples into a
-// container the device takes (16 bit into 32: zero bits added, nothing else),
-// and lets playbin see a sink that takes every decoder (with NATIVE_AUDIO it
-// only plugs decoders whose output the sink accepts directly). There is no
-// resampler: a rate the device lacks fails, see Player::handleOutputError.
+// Bit-perfect: audioconvert (no dither) ! audioresample ! device. Puts the
+// samples into a container the device takes (16 bit into 32: zero bits added,
+// nothing else) and lets playbin see a sink that takes every decoder (with
+// NATIVE_AUDIO it only plugs decoders whose output the sink accepts directly).
+// Both pass the samples through untouched whenever the device takes the
+// track's format and rate; only a rate the device lacks gets converted (the
+// settings show it), instead of a stream that cannot start.
 GstElement *bitPerfectSink(GstElement *device)
 {
     GstElement *conv = gst_element_factory_make("audioconvert", nullptr);
-    if (!conv)
+    GstElement *resample = gst_element_factory_make("audioresample", nullptr);
+    if (!conv || !resample) {
+        if (conv) gst_object_unref(conv);
+        if (resample) gst_object_unref(resample);
         return device;
+    }
     g_object_set(conv, "dithering", 0, "noise-shaping", 0, nullptr);
     GstElement *bin = gst_bin_new(nullptr);
-    gst_bin_add_many(GST_BIN(bin), conv, device, nullptr);
-    if (!gst_element_link(conv, device)) {
+    gst_bin_add_many(GST_BIN(bin), conv, resample, device, nullptr);
+    if (!gst_element_link_many(conv, resample, device, nullptr)) {
         qWarning() << "Bit-Perfect-Ausgabe konnte nicht verbunden werden";
         gst_object_unref(bin);
         return nullptr;
@@ -180,7 +186,7 @@ Player::Player(PlayQueue *queue, AudioOutput *output, QObject *parent) : QObject
     connect(&m_posTimer, &QTimer::timeout, this, &Player::pollPosition);
     connect(m_queue, &PlayQueue::upcomingChanged, this, &Player::armNext);
     if (m_out) {
-        connect(m_out, &AudioOutput::chainChanged, this, &Player::rebuildChains);
+        connect(m_out, &AudioOutput::chainChanged, this, [this] { rebuildChains(); });
         connect(m_out, &AudioOutput::eqGainsChanged, this, &Player::applyEq);
     }
 
@@ -357,9 +363,8 @@ void Player::configureDeck(Deck &d)
         g_object_set(d.playbin, "audio-sink", sink, nullptr);
     d.customSink = sink != nullptr;
 
-    // Bit-perfect: nothing between chain and device (no converter, no resampler,
-    // no software volume); a format the device cannot take fails and is handled
-    // in handleOutputError.
+    // Bit-perfect: nothing of playsink between chain and device (no converter,
+    // no resampler, no software volume); bitPerfectSink fits the format.
     const int flags = m_bitPerfect ? (d.baseFlags | FlagNativeAudio) & ~FlagSoftVolume : d.baseFlags;
     gint current = 0;
     g_object_get(d.playbin, "flags", &current, nullptr);
@@ -670,7 +675,7 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         GError *err = nullptr;
         gchar *dbg = nullptr;
         gst_message_parse_error(msg, &err, &dbg);
-        if (handleOutputError(msg, err, dbg)) {
+        if (handleOutputError(msg, err)) {
             // Not the track's fault: it plays on with another output.
             g_clear_error(&err);
             g_free(dbg);
@@ -698,7 +703,11 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
     case GST_MESSAGE_WARNING: {
         GError *err = nullptr;
         gst_message_parse_warning(msg, &err, nullptr);
-        qWarning() << "GStreamer:" << (err ? err->message : "");
+        // Bit-perfect has no volume on purpose; playsink says so on every track.
+        const bool expected = m_bitPerfect && err && err->domain == GST_STREAM_ERROR
+                              && GST_IS_BIN(GST_MESSAGE_SRC(msg)) && g_str_has_prefix(GST_MESSAGE_SRC_NAME(msg), "playsink");
+        if (!expected)
+            qWarning() << "GStreamer:" << (err ? err->message : "");
         g_clear_error(&err);
         break;
     }
@@ -1165,7 +1174,7 @@ void Player::setCurve(Deck &d, const QVector<QPair<qint64, double>> &points)
 
 // ---------------------------------------------------------------- loading
 
-bool Player::load(qint64 id, bool startPlaying, qint64 seekMs)
+bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
 {
     Deck &d = active();
     if (!d.playbin || id <= 0)
@@ -1187,7 +1196,12 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs)
     d.trackId = id;
     m_wantPlay = startPlaying;
     m_pendingSeek = seekMs > 0 ? seekMs : -1;
-    updateMeta(id);
+    if (sameTrack) {
+        m_lastPollPos = std::max<qint64>(0, seekMs); // listening time goes on
+        armNext();
+    } else {
+        updateMeta(id);
+    }
     m_position = std::max<qint64>(0, seekMs);
     emit positionChanged();
     gst_element_set_state(d.playbin, startPlaying ? GST_STATE_PLAYING : GST_STATE_PAUSED);
@@ -1210,6 +1224,7 @@ void Player::playCurrent(bool interruptIsSkip)
     if (m_state != 0)
         finishTrack(interruptIsSkip);
     m_consecutiveErrors = 0;
+    retryOutput(Resume::None);
     load(m_queue->currentId(), true);
 }
 
@@ -1232,12 +1247,16 @@ void Player::play()
     if (!active().playbin)
         return;
     if (m_state == 2) {
+        if (retryOutput(Resume::Play))
+            return; // continues on the chosen output
         gst_element_set_state(active().playbin, GST_STATE_PLAYING);
         if (m_tail >= 0)
             gst_element_set_state(m_deck[m_tail].playbin, GST_STATE_PLAYING);
     } else if (m_state == 0) {
-        if (m_queue->currentId() > 0)
+        if (m_queue->currentId() > 0) {
+            retryOutput(Resume::None);
             load(m_queue->currentId(), true);
+        }
     }
 }
 
@@ -1266,10 +1285,13 @@ void Player::stop()
 
 void Player::next()
 {
+    const bool paused = m_state == 2;
     if (m_state != 0)
         finishTrack(true);
-    if (m_queue->advance())
-        load(m_queue->currentId(), m_state != 2);
+    if (m_queue->advance()) {
+        retryOutput(Resume::None);
+        load(m_queue->currentId(), !paused);
+    }
 }
 
 void Player::previous()
@@ -1279,10 +1301,13 @@ void Player::previous()
         seek(0);
         return;
     }
+    const bool paused = m_state == 2;
     if (m_state != 0)
         finishTrack(true);
-    if (m_queue->back())
-        load(m_queue->currentId(), m_state != 2);
+    if (m_queue->back()) {
+        retryOutput(Resume::None);
+        load(m_queue->currentId(), !paused);
+    }
 }
 
 void Player::seek(qint64 ms)
@@ -1411,7 +1436,7 @@ void Player::setReplayGain(int mode)
     mode = std::clamp(mode, 0, 2);
     if (mode == m_rgMode)
         return;
-    const bool chainChanges = (mode == 0) != (m_rgMode == 0) && !m_bitPerfect;
+    const bool chainChanges = (mode == 0) != (m_rgMode == 0) && m_rgAvailable && !m_bitPerfect;
     m_rgMode = mode;
     applyReplayGain();
     if (chainChanges)
@@ -1450,15 +1475,15 @@ void Player::applyEq()
     }
 }
 
-void Player::rebuildChains()
+void Player::rebuildChains(Resume how)
 {
     if (!active().playbin)
         return;
     // Where we are: after the rebuild the same track continues at the same spot
     // (also a track that is just loading, e.g. when its device failed).
-    const qint64 id = m_playingId, pos = m_position, listened = m_listenedMs;
-    const bool resume = id > 0 && (m_state != 0 || m_switching);
-    const bool play = m_switching ? m_wantPlay : m_state == 1;
+    const qint64 id = m_playingId, pos = m_position;
+    const bool resume = how != Resume::None && id > 0 && (m_state != 0 || m_switching);
+    const bool play = how == Resume::Play || (m_switching ? m_wantPlay : m_state == 1);
     stopTail();
     cancelPrepared();
     m_switching = true;
@@ -1475,10 +1500,7 @@ void Player::rebuildChains()
     applyReplayGain();
     applyEq();
     qCDebug(lcMix) << "chains rebuilt" << (m_bitPerfect ? "(bit-perfect)" : "") << "resume" << resume << play << pos;
-    if (resume && load(id, play, pos)) {
-        m_listenedMs = listened;
-        m_lastPollPos = pos;
-    } else {
+    if (!resume || !load(id, play, pos, true)) {
         m_switching = false;
         if (m_state != 0)
             setState(0);
@@ -1489,23 +1511,32 @@ void Player::rebuildChains()
 }
 
 // The chosen output failed. Returns true when it was handled (other output, same track).
-bool Player::handleOutputError(GstMessage *msg, const GError *err, const char *debug)
+bool Player::handleOutputError(GstMessage *msg, const GError *err)
 {
-    if (!m_out || !m_out->customSink())
+    if (!m_out || !m_out->customSink() || !err)
         return false;
     GstObject *src = GST_MESSAGE_SRC(msg);
     const bool fromSink = src && GST_IS_ELEMENT(src) && !GST_IS_BIN(src) && GST_OBJECT_FLAG_IS_SET(src, GST_ELEMENT_FLAG_SINK);
-    // Bit-perfect has no converter in front of the device: a rate or format it
-    // cannot take stops the stream as "not negotiated".
-    const bool format = (err && err->domain == GST_CORE_ERROR && err->code == GST_CORE_ERROR_NEGOTIATION)
-                        || (debug && std::strstr(debug, "not-negotiated"));
-    if (!fromSink && !(format && m_bitPerfect))
+    // A sound-server device that is gone (headphones unplugged) opens fine but
+    // takes no format: playbin then finds "no decoder". If the decoder is really
+    // missing, the system default fails the same way and the track is skipped.
+    const bool noDecoder = (err->domain == GST_CORE_ERROR && err->code == GST_CORE_ERROR_MISSING_PLUGIN)
+                           || (err->domain == GST_STREAM_ERROR && err->code == GST_STREAM_ERROR_CODEC_NOT_FOUND);
+    if (!fromSink && !noDecoder)
         return false;
-    const QString reason = QString::fromUtf8(err ? err->message : "");
-    if (!m_out->outputFailed(format && m_bitPerfect, reason))
+    const bool busy = err->domain == GST_RESOURCE_ERROR && err->code == GST_RESOURCE_ERROR_BUSY;
+    if (!m_out->outputFailed(busy))
         return false;
-    qWarning() << "Ausgabe nicht nutzbar:" << reason << (debug ? debug : "") << "– neuer Versuch mit anderer Ausgabe";
+    qWarning() << "Ausgabe nicht nutzbar:" << err->message << "– weiter über den Systemstandard";
     rebuildChains();
+    return true;
+}
+
+bool Player::retryOutput(Resume how)
+{
+    if (!m_out || !m_out->retryChosen())
+        return false;
+    rebuildChains(how);
     return true;
 }
 
@@ -1545,7 +1576,8 @@ QVariantMap Player::signalPath() const
         outCaps = padCaps(d.bin, "src");
     out.insert(QStringLiteral("input"), AudioOutput::describeCaps(in));
     out.insert(QStringLiteral("output"), AudioOutput::describeCaps(outCaps));
-    out.insert(QStringLiteral("exact"), m_bitPerfect && m_out && !m_out->plugActive() && AudioOutput::sameSignal(in, outCaps));
+    out.insert(QStringLiteral("exact"), m_bitPerfect && AudioOutput::sameSignal(in, outCaps));
+    out.insert(QStringLiteral("lossy"), AudioOutput::floatSamples(in)); // lossy decoders give floats
     if (in)
         gst_caps_unref(in);
     if (outCaps)

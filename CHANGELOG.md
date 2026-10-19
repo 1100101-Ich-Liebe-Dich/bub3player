@@ -13,12 +13,13 @@ Neuer Reiter **Einstellungen → Klang** (`Strg + E`), in allen acht Themes:
   setzt ein Band auf 0 dB.
 - **Ausgabegerät wählen**: alle Geräte des Soundservers (PulseAudio, auch PipeWire), ohne die
   Systemeinstellungen anzufassen. Fehlt das Gerät (Kopfhörer abgezogen), spielt der Player über den
-  Systemstandard weiter und sagt es; die Wahl bleibt für den nächsten Start gespeichert.
+  Systemstandard weiter und sagt es. Beim nächsten Titel, den man startet, versucht er es wieder;
+  die Wahl bleibt gespeichert.
 - **Bit-Perfect über ALSA**: Die Samples gehen unverändert an den DAC, die Abtastrate folgt dem
   Titel. Lautstärke, ReplayGain, Equalizer und Übergänge sind dabei aus. Passt die Bittiefe nicht,
-  bekommt das Gerät die Samples verlustfrei in einem breiteren Behälter (16 in 32 bit); kann es die
-  Abtastrate nicht, rechnet ALSA um („plughw“), und der Player zeigt „nicht bit-perfect“.
-  Ist das Gerät belegt oder weg, geht es über den Systemstandard weiter.
+  bekommt das Gerät die Samples verlustfrei in einem breiteren Behälter (16 in 32 Bit); kann es die
+  Abtastrate nicht (etwa 22,05 kHz bei Hörbüchern), rechnet der Player sie um und zeigt „nicht
+  bit-perfect“. Ist das Gerät belegt oder weg, geht es über den Systemstandard weiter.
 - Anzeige, was gerade ankommt und was beim Gerät landet (Bittiefe, Abtastrate, Kanäle).
 - **Die bisherige Ausgabe bleibt unangetastet**: Mit „Systemstandard“ und ausgeschaltetem
   Equalizer ist die GStreamer-Kette Element für Element dieselbe wie in 1.0 (am Pipeline-Graphen

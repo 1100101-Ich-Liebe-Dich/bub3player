@@ -52,10 +52,7 @@ Column {
                         return list
                     }
                     current: Audio.device
-                    onPicked: (v) => {
-                        for (var i = 0; i < options.length; ++i)
-                            if (options[i].value === v) { Audio.setDevice(v, v === "" ? "" : options[i].label); return }
-                    }
+                    onPicked: (v) => Audio.setDevice(v, snd.nameOf(Audio.devices, v, Audio.device, Audio.deviceName))
                 }
                 PillButton {
                     compact: true
@@ -106,10 +103,7 @@ Column {
                     return list
                 }
                 current: Audio.hwDevice
-                onPicked: (v) => {
-                    for (var i = 0; i < options.length; ++i)
-                        if (options[i].value === v) { Audio.setHwDevice(v, options[i].label.replace(/\s+\(.*\)$/, "")); return }
-                }
+                onPicked: (v) => Audio.setHwDevice(v, snd.nameOf(Audio.hwDevices, v, Audio.hwDevice, Audio.hwDeviceName))
             }
         }
 
@@ -152,7 +146,8 @@ Column {
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: snd.path.exact ? "✓ " + qsTr("Bit-Perfect: Die Samples kommen unverändert beim Gerät an.")
-                                     : qsTr("Nicht bit-perfect: Das Gerät kann dieses Format nicht direkt, es wird umgerechnet.")
+                    : snd.path.lossy ? qsTr("Verlustbehaftete Formate (MP3, AAC, Ogg, Opus) kommen aus dem Decoder als Gleitkommazahlen und werden für das Gerät in ganze Zahlen umgesetzt.")
+                    : qsTr("Nicht bit-perfect: Das Gerät kann diese Abtastrate oder Kanalzahl nicht, sie wird umgerechnet.")
                 font.family: Theme.uiFont
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -232,7 +227,7 @@ Column {
             width: snd.width
             enabled: Audio.eqAvailable
             label: qsTr("Vorverstärkung")
-            value: (Audio.eqEffectivePreamp > 0 ? "+" : "") + Audio.eqEffectivePreamp.toFixed(1) + " dB"
+            value: snd.db(Audio.eqEffectivePreamp, 1) + " dB"
             hint: Audio.eqAutoPreamp ? qsTr("Automatisch so viel leiser, wie das lauteste Band anhebt: Nichts übersteuert.") : ""
             Column {
                 spacing: 6
@@ -276,7 +271,7 @@ Column {
         SettingsOption {
             width: snd.width
             label: qsTr("Vorverstärkung")
-            value: Player.preamp.toFixed(1) + " dB"
+            value: snd.db(Player.preamp, 1) + " dB"
             enabled: Player.replayGainAvailable && Player.replayGain > 0 && !Player.bitPerfect
             HSlider {
                 width: Math.min(420, snd.width)
@@ -285,6 +280,17 @@ Column {
                 onMoved: Player.preamp = value
             }
         }
+    }
+
+    // "+2,5" – German decimal comma, sign for gains
+    function db(v, decimals) {
+        return (v > 0 ? "+" : "") + Number(v).toLocaleString(Qt.locale("de_DE"), "f", decimals)
+    }
+    // Name of a device by key (a chosen device that is gone keeps its saved name).
+    function nameOf(list, key, chosen, chosenName) {
+        for (var i = 0; i < list.length; ++i)
+            if (list[i].key === key) return list[i].name
+        return key === chosen ? chosenName : ""
     }
 
     function builtin(name) {
@@ -386,7 +392,7 @@ Column {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 5
-                    text: (band.gain > 0 ? "+" : "") + (band.gain % 1 === 0 ? band.gain.toFixed(0) : band.gain.toFixed(1))
+                    text: snd.db(band.gain, band.gain % 1 === 0 ? 0 : 1)
                     font.family: Theme.uiFont
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -403,7 +409,7 @@ Column {
                     padding: 9
                     value: band.gain
                     focusPolicy: Qt.TabFocus
-                    Accessible.name: qsTr("%1 Hz").arg(Audio.eqFrequencies[index])
+                    Accessible.name: { var f = String(Audio.eqFrequencies[index]); return f.indexOf("k") >= 0 ? f.replace("k", " kHz") : f + " Hz" }
                     onMoved: Audio.setBand(index, value)
                     background: Item {}
                     handle: Rectangle {

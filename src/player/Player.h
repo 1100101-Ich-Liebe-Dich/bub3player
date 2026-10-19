@@ -252,15 +252,20 @@ private:
     GstElement *buildFilterBin(Deck &d);
     void configureDeck(Deck &d);   // chain, sink and flags from the settings (deck stopped)
     void updateMeters(Deck &d);    // only the playing deck posts spectrum/level
-    void rebuildChains();          // stop, configure both decks, continue where we were
-    bool handleOutputError(GstMessage *msg, const GError *err, const char *debug);
+    enum class Resume { Keep, Play, None };
+    // Stop, configure both decks, then (Keep) continue where we were, (Play)
+    // the same but playing, (None) stay stopped – a load follows.
+    void rebuildChains(Resume resume = Resume::Keep);
+    bool retryOutput(Resume how);  // the listener starts something: try the chosen output again
+    bool handleOutputError(GstMessage *msg, const GError *err);
     void applyEq();
     int transitionMode() const { return m_bitPerfect ? 0 : m_transition; }
     double unity() const { return m_bitPerfect && m_muted ? 0.0 : 1.0; } // fader at rest (bit-perfect mutes here)
     Deck &active() { return m_deck[m_active]; }
     Deck &other() { return m_deck[1 - m_active]; }
 
-    bool load(qint64 id, bool startPlaying, qint64 seekMs = 0);
+    // sameTrack: the playing track again after a rebuild (no new track for listeners)
+    bool load(qint64 id, bool startPlaying, qint64 seekMs = 0, bool sameTrack = false);
     void setState(int s);
     void updateMeta(qint64 id);
     void updateTrackInfo();

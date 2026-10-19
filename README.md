@@ -314,11 +314,12 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
   und Vorverstärkung – automatisch so viel leiser, wie das lauteste Band anhebt, damit nichts
   übersteuert. Ausgeschaltet ist er gar nicht erst in der Kette.
 - **Ausgabegerät wählen** – Kopfhörer, Boxen, HDMI … direkt im Player, ohne Umweg über die
-  Systemeinstellungen. Ist das Gerät weg, spielt der Player über den Systemstandard weiter.
+  Systemeinstellungen. Ist das Gerät weg, spielt der Player über den Systemstandard weiter und
+  versucht es beim nächsten Titel, den du startest, wieder.
 - **Bit-Perfect über ALSA**: Jeder Titel kommt in seiner eigenen Abtastrate und Bittiefe beim DAC
-  an, Sample für Sample wie in der Datei – kein Soundserver, keine Software-Lautstärke, kein
-  Resampler. Die Einstellungen zeigen, was gerade beim Gerät ankommt („24 bit · 96 kHz → Gerät:
-  32 bit · 96 kHz ✓“). Kann das Gerät ein Format nicht, rechnet ALSA um, und der Player sagt es.
+  an, Sample für Sample wie in der Datei – kein Soundserver, keine Software-Lautstärke, nichts
+  umgerechnet. Die Einstellungen zeigen, was gerade beim Gerät ankommt („24 Bit · 96 kHz → Gerät:
+  32 Bit · 96 kHz ✓“). Kann das Gerät eine Abtastrate nicht, rechnet der Player sie um und sagt es.
 - Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
   was GStreamer abspielt.
 

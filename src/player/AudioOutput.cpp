@@ -100,6 +100,7 @@ AudioOutput::AudioOutput(QObject *parent) : QObject(parent)
     m_preamp = std::clamp(s.value(QStringLiteral("audio/eqPreamp"), 0.0).toDouble(), -12.0, 12.0);
     m_autoPreamp = s.value(QStringLiteral("audio/eqAutoPreamp"), true).toBool();
     m_userPresets = QJsonDocument::fromJson(s.value(QStringLiteral("audio/eqPresets")).toByteArray()).array().toVariantList();
+    m_presetName = s.value(QStringLiteral("audio/eqPresetName")).toString();
     loadHwDevices();
 }
 
@@ -122,12 +123,13 @@ void AudioOutput::volumeIgnored()
 void AudioOutput::loadHwDevices()
 {
     // ALSA devices that can play, by card id (stays the same when cards are
-    // plugged in a different order): /proc/asound/pcm "00-00: name : name : playback 1".
+    // plugged in a different order). /proc/asound/cards: " 0 [PCH ]: HDA-Intel - HDA Intel PCH",
+    // /proc/asound/pcm: "00-00: name : name : playback 1".
     m_hwDevices.clear();
     QHash<QString, QString> cardId, cardName;
     QFile cards(QStringLiteral("/proc/asound/cards"));
     if (cards.open(QIODevice::ReadOnly)) {
-        static const QRegularExpression re(QStringLiteral("^\\s*(\\d+)\\s+\\[(\\S+)\\s*\\]:[^-]*-\\s*(.*)$"));
+        static const QRegularExpression re(QStringLiteral("^\\s*(\\d+)\\s+\\[(\\S+)\\s*\\]:\\s*.*?\\s-\\s(.*)$"));
         for (const QByteArray &line : cards.readAll().split('\n')) {
             const auto m = re.match(QString::fromUtf8(line));
             if (m.hasMatch()) {
@@ -157,8 +159,10 @@ void AudioOutput::loadHwDevices()
 void AudioOutput::refreshDevices()
 {
     loadHwDevices();
-    if (m_scanning)
+    if (m_scanning) {
+        emit devicesChanged(); // the ALSA list may have changed
         return;
+    }
     m_scanning = true;
     emit devicesChanged();
     QPointer<AudioOutput> self(this);
@@ -229,7 +233,6 @@ void AudioOutput::setDevice(const QString &key, const QString &name)
     m_deviceName = key.isEmpty() ? QString() : name;
     m_bitPerfect = false;
     m_useSystem = false;
-    m_usePlug = false;
     m_fallback.clear();
     QSettings s;
     s.setValue(QStringLiteral("audio/device"), m_device);
@@ -241,16 +244,17 @@ void AudioOutput::setDevice(const QString &key, const QString &name)
 
 void AudioOutput::setHwDevice(const QString &key, const QString &name)
 {
-    if (key == m_hwDevice && m_bitPerfect && !m_useSystem && !m_usePlug)
+    if (key == m_hwDevice && !(m_bitPerfect && m_useSystem))
         return;
     m_hwDevice = key;
     m_hwName = name;
-    m_useSystem = false;
-    m_usePlug = false;
-    m_fallback.clear();
     QSettings s;
     s.setValue(QStringLiteral("audio/hwDevice"), m_hwDevice);
     s.setValue(QStringLiteral("audio/hwDeviceName"), m_hwName);
+    if (m_bitPerfect) { // a new try with the new device
+        m_useSystem = false;
+        m_fallback.clear();
+    }
     emit outputChanged();
     if (m_bitPerfect)
         emit chainChanged();
@@ -259,9 +263,6 @@ void AudioOutput::setHwDevice(const QString &key, const QString &name)
 void AudioOutput::setBitPerfect(bool on)
 {
     on = on && m_alsaAvailable;
-    if (on == m_bitPerfect && !m_useSystem)
-        return;
-    m_bitPerfect = on;
     if (on && m_hwDevice.isEmpty() && !m_hwDevices.isEmpty()) {
         const QVariantMap first = m_hwDevices.first().toMap();
         m_hwDevice = first.value(QStringLiteral("key")).toString();
@@ -270,8 +271,14 @@ void AudioOutput::setBitPerfect(bool on)
         s.setValue(QStringLiteral("audio/hwDevice"), m_hwDevice);
         s.setValue(QStringLiteral("audio/hwDeviceName"), m_hwName);
     }
+    if (on && m_hwDevice.isEmpty()) {
+        emit outputChanged(); // no card to talk to: the switch goes back
+        return;
+    }
+    if (on == m_bitPerfect && !m_useSystem)
+        return;
+    m_bitPerfect = on;
     m_useSystem = false;
-    m_usePlug = false;
     m_fallback.clear();
     QSettings().setValue(QStringLiteral("audio/bitPerfect"), on);
     emit outputChanged();
@@ -305,10 +312,7 @@ GstElement *AudioOutput::createSink() const
         GstElement *e = gst_element_factory_make("alsasink", nullptr);
         if (!e)
             return nullptr;
-        QString dev = m_hwDevice;
-        if (m_usePlug)
-            dev.replace(0, 2, QStringLiteral("plughw")); // "hw:…" -> "plughw:…"
-        g_object_set(e, "device", dev.toUtf8().constData(), nullptr);
+        g_object_set(e, "device", m_hwDevice.toUtf8().constData(), nullptr);
         return e;
     }
     if (!m_device.isEmpty())
@@ -316,24 +320,27 @@ GstElement *AudioOutput::createSink() const
     return nullptr;
 }
 
-bool AudioOutput::outputFailed(bool formatProblem, const QString &rawReason)
+bool AudioOutput::outputFailed(bool busy)
 {
     if (!customSink())
         return false;
-    QString reason = rawReason.trimmed();
-    while (reason.endsWith(QLatin1Char('.')))
-        reason.chop(1);
-    if (bitPerfectActive() && formatProblem && !m_usePlug) {
-        m_usePlug = true;
-        m_fallback = tr("Das Gerät nimmt dieses Format nicht direkt an; es wird jetzt umgerechnet (nicht bit-perfect).");
-        emit message(m_fallback);
-    } else {
-        m_useSystem = true;
-        m_fallback = bitPerfectActive() || m_bitPerfect
-                         ? tr("Das Gerät für Bit-Perfect ist nicht verfügbar (%1). Bis zum nächsten Start läuft der Ton über den Systemstandard.").arg(reason)
-                         : tr("Das Ausgabegerät ist nicht verfügbar (%1). Bis zum nächsten Start läuft der Ton über den Systemstandard.").arg(reason);
-        emit message(tr("Ausgabegerät nicht verfügbar – der Ton läuft über den Systemstandard"));
-    }
+    const bool bp = bitPerfectActive();
+    m_useSystem = true;
+    const QString why = busy ? tr("belegt, ein anderes Programm nutzt es") : tr("nicht angeschlossen oder nicht erreichbar");
+    m_fallback = (bp ? tr("Das Gerät für Bit-Perfect ist %1.") : tr("Das Ausgabegerät ist %1.")).arg(why)
+                 + QLatin1Char(' ')
+                 + tr("Der Ton läuft so lange über den Systemstandard; beim nächsten Titel, den du startest, versucht es der Player wieder.");
+    emit message(tr("Ausgabegerät nicht verfügbar – der Ton läuft über den Systemstandard"));
+    emit outputChanged();
+    return true;
+}
+
+bool AudioOutput::retryChosen()
+{
+    if (!m_useSystem)
+        return false;
+    m_useSystem = false;
+    m_fallback.clear();
     emit outputChanged();
     return true;
 }
@@ -345,7 +352,7 @@ QString AudioOutput::describeCaps(const GstCaps *caps)
     if (!sampleFormat(caps, bits, isFloat, rate, channels))
         return {};
     QStringList parts;
-    parts << (isFloat ? tr("%1 bit Gleitkomma").arg(bits) : tr("%1 bit").arg(bits));
+    parts << (isFloat ? tr("%1 Bit Gleitkomma").arg(bits) : tr("%1 Bit").arg(bits));
     if (rate > 0)
         parts << QStringLiteral("%1 kHz").arg(QLocale(QLocale::German).toString(rate / 1000.0, 'g', 4));
     if (channels == 1)
@@ -364,6 +371,13 @@ bool AudioOutput::sameSignal(const GstCaps *in, const GstCaps *out)
     if (!sampleFormat(in, bitsIn, floatIn, rateIn, chIn) || !sampleFormat(out, bitsOut, floatOut, rateOut, chOut))
         return false;
     return rateIn == rateOut && chIn == chOut && floatIn == floatOut && bitsOut >= bitsIn;
+}
+
+bool AudioOutput::floatSamples(const GstCaps *caps)
+{
+    int bits = 0, rate = 0, channels = 0;
+    bool isFloat = false;
+    return sampleFormat(caps, bits, isFloat, rate, channels) && isFloat;
 }
 
 // ---------- equalizer ----------
@@ -431,6 +445,7 @@ void AudioOutput::setBand(int band, double db)
     if (std::abs(db - m_bands[band]) < 0.01)
         return;
     m_bands[band] = db;
+    m_presetName.clear();
     eqTouched();
 }
 
@@ -447,6 +462,7 @@ void AudioOutput::saveEq()
     s.setValue(QStringLiteral("audio/eqBands"), eqBands());
     s.setValue(QStringLiteral("audio/eqPreamp"), m_preamp);
     s.setValue(QStringLiteral("audio/eqAutoPreamp"), m_autoPreamp);
+    s.setValue(QStringLiteral("audio/eqPresetName"), m_presetName);
 }
 
 QVariantList AudioOutput::eqPresets() const
@@ -469,16 +485,23 @@ QVariantList AudioOutput::eqPresets() const
 
 QString AudioOutput::eqPreset() const
 {
+    // The one chosen last, else the first with this curve.
+    QString first;
     for (const QVariant &v : eqPresets()) {
         const QVariantMap m = v.toMap();
         const QVariantList g = m.value(QStringLiteral("gains")).toList();
         bool same = g.size() == Bands;
         for (int i = 0; same && i < Bands; ++i)
             same = std::abs(g[i].toDouble() - m_bands[i]) < 0.01;
-        if (same)
-            return m.value(QStringLiteral("name")).toString();
+        if (!same)
+            continue;
+        const QString name = m.value(QStringLiteral("name")).toString();
+        if (name == m_presetName)
+            return name;
+        if (first.isEmpty())
+            first = name;
     }
-    return {};
+    return first;
 }
 
 void AudioOutput::applyPreset(const QString &name)
@@ -490,6 +513,7 @@ void AudioOutput::applyPreset(const QString &name)
         const QVariantList g = m.value(QStringLiteral("gains")).toList();
         for (int i = 0; i < Bands; ++i)
             m_bands[i] = std::clamp(g.value(i).toDouble(), -12.0, 12.0);
+        m_presetName = name;
         eqTouched();
         return;
     }
@@ -505,18 +529,22 @@ bool AudioOutput::savePreset(const QString &rawName)
             emit message(tr("»%1« gibt es schon als Voreinstellung").arg(name));
             return false;
         }
-    QVariantList gains = eqBands();
-    bool replaced = false;
+    const QVariantList gains = eqBands();
+    QString stored; // an own preset of that name (any case) is overwritten
     for (QVariant &v : m_userPresets) {
         QVariantMap m = v.toMap();
         if (m.value(QStringLiteral("name")).toString().compare(name, Qt::CaseInsensitive) == 0) {
             m.insert(QStringLiteral("gains"), gains);
             v = m;
-            replaced = true;
+            stored = m.value(QStringLiteral("name")).toString();
         }
     }
-    if (!replaced)
+    if (stored.isEmpty()) {
         m_userPresets << QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("gains"), gains}};
+        stored = name;
+    }
+    m_presetName = stored;
+    saveEq();
     QSettings().setValue(QStringLiteral("audio/eqPresets"),
                          QJsonDocument(QJsonArray::fromVariantList(m_userPresets)).toJson(QJsonDocument::Compact));
     emit eqChanged();
@@ -529,6 +557,10 @@ void AudioOutput::deletePreset(const QString &name)
     for (int i = 0; i < m_userPresets.size(); ++i)
         if (m_userPresets[i].toMap().value(QStringLiteral("name")).toString() == name) {
             m_userPresets.removeAt(i);
+            if (m_presetName == name) {
+                m_presetName.clear();
+                saveEq();
+            }
             QSettings().setValue(QStringLiteral("audio/eqPresets"),
                                  QJsonDocument(QJsonArray::fromVariantList(m_userPresets)).toJson(QJsonDocument::Compact));
             emit eqChanged();

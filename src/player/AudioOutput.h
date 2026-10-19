@@ -17,10 +17,10 @@ typedef struct _GstCaps GstCaps;
 //  - Bit-Perfect: ALSA directly ("hw:CARD=…,DEV=…"). The decoded samples reach
 //    the DAC unchanged, the sample rate follows the track. No ReplayGain, no
 //    equalizer, no software volume, no blends (the device is opened by one
-//    stream only). If the device cannot take a format, "plughw" converts it
-//    (and the status says so).
-// A device that fails (unplugged, busy) falls back to the system default for
-// the rest of the session; the choice itself is kept.
+//    stream only). A container the device lacks gets the samples losslessly
+//    (16 in 32 bit); a sample rate it lacks is converted (the status says so).
+// A device that fails (unplugged, busy) falls back to the system default until
+// the listener starts the next track; the choice itself is kept.
 //
 // Equalizer: 10 bands (equalizer-10bands) plus a preamp, only in the chain
 // while switched on – off means the exact chain of before.
@@ -94,20 +94,21 @@ public:
     // A new sink for one deck, or nullptr for playbin's own choice (system default).
     GstElement *createSink() const;
     bool customSink() const;
-    // The chosen output failed (gone, busy, format): `formatProblem` with
-    // bit-perfect tries "plughw" first, everything else falls back to the
-    // system default. Returns false when there is nothing left to try.
-    bool outputFailed(bool formatProblem, const QString &reason);
+    // The chosen output failed (gone, busy): system default until retryChosen().
+    // Returns false when the system default is in use already.
+    bool outputFailed(bool busy);
+    // Back to the chosen output after a failure (the listener starts a track).
+    // Returns whether anything changed.
+    bool retryChosen();
     double bandGain(int band) const { return band >= 0 && band < Bands ? m_bands[band] : 0.0; }
-    // Bit-perfect had to convert ("plughw") this session.
-    bool plugActive() const { return bitPerfectActive() && m_usePlug; }
     // The volume was changed while bit-perfect ignores it: tell once.
     void volumeIgnored();
 
     static bool hasElement(const char *factory);
-    static QString describeCaps(const GstCaps *caps); // "24 bit · 96 kHz · Stereo"
+    static QString describeCaps(const GstCaps *caps); // "24 Bit · 96 kHz · Stereo"
     // Same rate and channels, no bits lost (a wider integer container is fine).
     static bool sameSignal(const GstCaps *in, const GstCaps *out);
+    static bool floatSamples(const GstCaps *caps);
 
 signals:
     void devicesChanged();
@@ -130,8 +131,7 @@ private:
     bool m_bitPerfect = false;
     QString m_hwDevice, m_hwName;
     bool m_alsaAvailable = false;
-    bool m_useSystem = false;  // this session: the chosen output failed
-    bool m_usePlug = false;    // this session: bit-perfect device needs plughw
+    bool m_useSystem = false;  // the chosen output failed: system default for now
     QString m_fallback;
 
     bool m_eqAvailable = false;
@@ -140,4 +140,5 @@ private:
     double m_preamp = 0.0;
     bool m_autoPreamp = true;
     QVariantList m_userPresets; // [{name, gains}]
+    QString m_presetName;       // last chosen or saved preset (several may share a curve)
 };
