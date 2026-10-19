@@ -152,7 +152,7 @@ Item {
                     radius: page.round ? width / 2 : Theme.radius
                     requestSize: 256
                     coverId: page.layout === "grid" ? model.coverId : 0
-                    artist: page.round ? (model.title || "") : ""
+                    artist: page.round ? String(model.key1 || "") : "" // "" (unknown): no artist picture
                     label: model.title || ""
                     scale: hover.containsMouse ? 1.02 : 1
                     Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -224,7 +224,7 @@ Item {
                     radius: Theme.radius - 2
                     requestSize: 128
                     coverId: page.layout !== "grid" ? model.coverId : 0
-                    artist: page.round ? (model.title || "") : ""
+                    artist: page.round ? String(model.key1 || "") : "" // "" (unknown): no artist picture
                     label: model.title || ""
                     showInitial: false
                 }
@@ -264,8 +264,7 @@ Item {
                 z: -1
                 onClicked: (m) => {
                     if (m.button === Qt.RightButton) {
-                        ctx.row = index
-                        ctx.popup()
+                        ctx.openFor(groups, index)
                     } else {
                         window.openGroup(groups, index, page.groupBy)
                     }
@@ -281,6 +280,7 @@ Item {
         readonly property var letters: ["#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
         readonly property real step: Math.min(18, (page.height - 80) / letters.length)
         property string current: ""
+        readonly property string initials: groups.initials // once, not per letter
         anchors.right: parent.right
         anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
@@ -307,7 +307,7 @@ Item {
                     font.family: Theme.uiFont
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    readonly property bool has: groups.initials.indexOf(modelData) >= 0
+                    readonly property bool has: jumpBar.initials.indexOf(modelData) >= 0
                     color: jumpArea.pressed && jumpBar.current === modelData ? Theme.accent
                          : jumpArea.containsMouse && Math.floor((jumpArea.mouseY - 4) / jumpBar.step) === index ? Theme.accent
                          : has ? Theme.textDim : Theme.alpha(Theme.textFaint, 0.45)
@@ -329,7 +329,7 @@ Item {
             visible: jumpArea.pressed && jumpBar.current !== ""
             anchors.right: parent.left
             anchors.rightMargin: 14
-            y: Math.max(0, Math.min(jumpBar.height - height, jumpBar.letters.indexOf(jumpBar.current) * jumpBar.step - height / 2))
+            y: Math.max(0, Math.min(jumpBar.height - height, (jumpBar.letters.indexOf(jumpBar.current) + 0.5) * jumpBar.step - height / 2))
             width: 56; height: 56
             radius: Math.min(28, Theme.radius + 10)
             color: Theme.accent
@@ -355,19 +355,5 @@ Item {
         onAction: window.openSettings()
     }
 
-    HMenu {
-        id: ctx
-        property int row: -1
-        HMenuItem { text: qsTr("Abspielen"); onTriggered: Library.playGroup(groups, ctx.row, false) }
-        HMenuItem { text: qsTr("Zufällig abspielen"); onTriggered: Library.playGroup(groups, ctx.row, true) }
-        HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueGroup(groups, ctx.row, true) }
-        HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueGroup(groups, ctx.row, false) }
-        HMenuItem { text: qsTr("Radio dazu starten"); onTriggered: Recommend.startRadioFromGroup(groups, ctx.row) }
-        PlaylistMenu {
-            onChosen: (id) => {
-                var r = ctx.row
-                window.playlistUi.addTo(id, function (pid) { Playlists.addGroup(pid, groups, r) })
-            }
-        }
-    }
+    GroupMenu { id: ctx }
 }

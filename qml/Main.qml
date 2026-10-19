@@ -143,7 +143,7 @@ ApplicationWindow {
             var isArtist = groupBy === "albumArtist" || groupBy === "artist"
             stack.push(groupsPage, {
                 view: { id: "", name: g.title, layout: "grid",
-                        heroCover: isArtist ? g.coverId : 0, heroArtist: isArtist ? g.title : "",
+                        heroCover: isArtist ? g.coverId : 0, heroArtist: isArtist ? String(g.key1 || "") : "",
                         spec: Object.assign({}, spec, { groupBy: "album", groupSort: groupBy === "albumArtist" || groupBy === "artist" ? "year" : "name" }) },
                 subtitle: g.subtitle
             })

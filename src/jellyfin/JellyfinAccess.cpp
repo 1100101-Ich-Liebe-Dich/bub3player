@@ -136,20 +136,19 @@ QUrl imageUrl(qint64 sourceId, const QString &itemId, const QString &tag, int si
     return u;
 }
 
-QUrl artistImageUrl(qint64 sourceId, const QString &artist, int size)
+QUrl artistSearchUrl(qint64 sourceId, const QString &artist)
 {
     Server s;
     if (!get(sourceId, s) || artist.isEmpty())
         return {};
     QUrl u(s.url);
-    // /Artists/{name}/Images/Primary/0 – the name as one path segment
-    u.setPath(u.path() + QStringLiteral("/Artists/") + QString::fromLatin1(QUrl::toPercentEncoding(artist))
-                  + QStringLiteral("/Images/Primary/0"),
-              QUrl::StrictMode);
+    u.setPath(u.path() + QStringLiteral("/Artists"));
     QUrlQuery q;
-    q.addQueryItem(QStringLiteral("fillWidth"), QString::number(size));
-    q.addQueryItem(QStringLiteral("fillHeight"), QString::number(size));
-    q.addQueryItem(QStringLiteral("quality"), QStringLiteral("90"));
+    q.addQueryItem(QStringLiteral("searchTerm"), QString::fromLatin1(QUrl::toPercentEncoding(artist)));
+    q.addQueryItem(QStringLiteral("Limit"), QStringLiteral("20"));
+    q.addQueryItem(QStringLiteral("Fields"), QStringLiteral("ImageTags"));
+    if (!s.userId.isEmpty())
+        q.addQueryItem(QStringLiteral("userId"), s.userId);
     u.setQuery(q);
     return u;
 }

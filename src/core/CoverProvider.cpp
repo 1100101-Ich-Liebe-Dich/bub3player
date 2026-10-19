@@ -12,6 +12,9 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QImageReader>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QMutex>
 #include <QRegularExpression>
 #include <QRunnable>
@@ -145,45 +148,58 @@ QString pickArtistImage(const QDir &dir, const QString &artist)
     return images.size() == 1 ? dir.filePath(images.first()) : QString();
 }
 
-// MUSIK/KÜNSTLER/ALBUM/titel.mp3 or MUSIK/KÜNSTLER/EPs/ALBUM/CD1/titel.mp3: up to
-// three folders above the track's, the one named like the artist. The album folder
-// itself never counts (a self-titled album has the album's cover there), except
-// for loose tracks right in the artist's folder.
+// "artist.jpg" (any case, jpg/jpeg/png/webp) in a folder – looked up by name,
+// a big folder (the library root) is never listed for it.
+QString probeArtistFile(const QDir &dir)
+{
+    for (const char *base : {"artist", "Artist", "ARTIST"})
+        for (const char *ext : {"jpg", "jpeg", "png", "webp", "JPG", "JPEG", "PNG", "WEBP"}) {
+            const QString f = dir.filePath(QStringLiteral("%1.%2").arg(QLatin1String(base), QLatin1String(ext)));
+            if (QFileInfo::exists(f))
+                return f;
+        }
+    return {};
+}
+
+// MUSIK/KÜNSTLER/ALBUM/titel.mp3 or MUSIK/KÜNSTLER/EPs/ALBUM/CD1/titel.mp3: of the
+// three folders above the track's, the outermost one named like the artist (so
+// MUSIK/Metallica/Metallica/CD1 finds the artist's folder, not the album's). The
+// track's own folder only counts for loose tracks right in the artist's folder,
+// and then only with an artist.jpg. No folder of that name, no picture: an
+// image in a folder like "Sammlung" or "Various Artists" belongs to nobody in particular.
 QString findArtistImage(const QString &trackFolder, const QString &artist)
 {
     const QString want = nameKey(artist);
     if (want.isEmpty())
         return {};
     QDir d(trackFolder);
+    QString outer;
     for (int level = 1; level <= 3 && d.cdUp(); ++level)
         if (nameKey(d.dirName()) == want)
-            return pickArtistImage(d, artist);
-    // No folder named like the artist: only an explicit artist.jpg next to the album folders.
+            outer = d.absolutePath();
+    if (!outer.isEmpty())
+        return pickArtistImage(QDir(outer), artist);
     d = QDir(trackFolder);
-    if (d.cdUp())
-        for (const QString &f : imagesIn(d))
-            if (QFileInfo(f).completeBaseName().compare(QLatin1String("artist"), Qt::CaseInsensitive) == 0)
-                return d.filePath(f);
-    d = QDir(trackFolder);
-    if (nameKey(d.dirName()) == want) {
-        const QStringList images = imagesIn(d);
-        for (const QString &f : images)
-            if (QFileInfo(f).completeBaseName().compare(QLatin1String("artist"), Qt::CaseInsensitive) == 0)
-                return d.filePath(f);
-    }
-    return {};
+    return nameKey(d.dirName()) == want ? probeArtistFile(d) : QString();
+}
+
+// One database connection per decoder thread for both lookups.
+DbConnection &coverDb()
+{
+    thread_local DbConnection db;
+    if (!db.isOpen())
+        db = Database::open(2048);
+    return db;
 }
 
 // The artist's picture for a track of the artist. False when there is none
 // (the caller falls back to the album art).
 bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
 {
-    thread_local DbConnection db;
+    DbConnection &db = coverDb();
     thread_local std::unique_ptr<Stmt> q;
-    if (!db.isOpen()) {
-        db = Database::open(2048);
+    if (!q)
         q = std::make_unique<Stmt>(db, "SELECT f.path, t.source_id FROM tracks t JOIN folders f ON f.id = t.folder_id WHERE t.id = ?");
-    }
     q->bind(1, trackId);
     if (!q->step()) {
         q->reset();
@@ -196,7 +212,9 @@ bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
     if (sourceId != Database::LocalSource) {
         src.remoteSource = sourceId;
         src.remoteArtist = artist;
-        src.key = QStringLiteral("ja%1_%2").arg(sourceId).arg(hashOf(nameKey(artist)));
+        // The server's picture may change: fetched again once a week.
+        const qint64 week = QDateTime::currentSecsSinceEpoch() / (7 * 86400);
+        src.key = QStringLiteral("ja%1_%2_%3").arg(sourceId).arg(hashOf(artist.toCaseFolded())).arg(week);
         return true;
     }
     const QString cacheKey = folder + QChar(0x1f) + artist;
@@ -226,13 +244,11 @@ bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
 
 bool resolve(qint64 trackId, Source &src)
 {
-    thread_local DbConnection db;
+    DbConnection &db = coverDb();
     thread_local std::unique_ptr<Stmt> q;
-    if (!db.isOpen()) {
-        db = Database::open(2048);
+    if (!q)
         q = std::make_unique<Stmt>(db, "SELECT f.id, f.path, t.filename, t.mtime, t.source_id, t.image_ref FROM tracks t "
                                        "JOIN folders f ON f.id = t.folder_id WHERE t.id = ?");
-    }
     q->bind(1, trackId);
     if (!q->step()) {
         q->reset();
@@ -323,10 +339,26 @@ QImage produce(const Source &src, int bucket, QString *outPath)
         if (!JellyfinAccess::get(src.remoteSource, server))
             return {};
         int status = 0;
-        const QUrl url = src.remoteArtist.isEmpty()
-                             ? JellyfinAccess::imageUrl(src.remoteSource, src.remoteItem, src.remoteTag, bucket)
-                             : JellyfinAccess::artistImageUrl(src.remoteSource, src.remoteArtist, bucket);
-        QByteArray bytes = JellyfinAccess::httpGet(url, server.token, 8000, &status);
+        QByteArray bytes;
+        if (src.remoteArtist.isEmpty()) {
+            bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, src.remoteItem, src.remoteTag, bucket),
+                                            server.token, 8000, &status);
+        } else {
+            // The artist's item by name (works for "AC/DC" too), then its picture.
+            const QByteArray found = JellyfinAccess::httpGet(JellyfinAccess::artistSearchUrl(src.remoteSource, src.remoteArtist),
+                                                             server.token, 8000, &status);
+            QString id, tag;
+            for (const QJsonValue v : QJsonDocument::fromJson(found).object().value(QStringLiteral("Items")).toArray()) {
+                const QJsonObject o = v.toObject();
+                if (o.value(QStringLiteral("Name")).toString().compare(src.remoteArtist, Qt::CaseInsensitive) == 0) {
+                    id = o.value(QStringLiteral("Id")).toString();
+                    tag = o.value(QStringLiteral("ImageTags")).toObject().value(QStringLiteral("Primary")).toString();
+                    break;
+                }
+            }
+            if (!id.isEmpty() && !tag.isEmpty())
+                bytes = JellyfinAccess::httpGet(JellyfinAccess::imageUrl(src.remoteSource, id, tag, bucket), server.token, 8000, &status);
+        }
         if (status == 0 || status >= 500) {
             QMutexLocker lock(&g_mutex);
             g_offlineUntil.insert(src.remoteSource, now + 60000);

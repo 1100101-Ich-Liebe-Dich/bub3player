@@ -11,14 +11,15 @@ Column {
     spacing: 18
     bottomPadding: shelvesShown ? 18 : 0
     readonly property bool shelvesShown: artists.count > 0 || albums.count > 0
+    readonly property int shown: 60 // per row; one more is asked for to know there are more
 
     GroupModel {
         id: artists
-        spec: sh.text.trim() === "" ? ({}) : { search: sh.text, searchIn: "artist", groupBy: "albumArtist", groupSort: "count", limit: 60 }
+        spec: sh.text.trim() === "" ? ({}) : { search: sh.text, searchIn: "artist", groupBy: "albumArtist", groupSort: "count", limit: sh.shown + 1 }
     }
     GroupModel {
         id: albums
-        spec: sh.text.trim() === "" ? ({}) : { search: sh.text, searchIn: "album", groupBy: "album", groupSort: "count", limit: 60 }
+        spec: sh.text.trim() === "" ? ({}) : { search: sh.text, searchIn: "album", groupBy: "album", groupSort: "count", limit: sh.shown + 1 }
     }
 
     Shelf {
@@ -71,7 +72,7 @@ Column {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: shelf.model.count >= 60 ? qsTr("die ersten 60") : String(shelf.model.count)
+                    text: shelf.model.count > sh.shown ? qsTr("mehr als %1").arg(sh.shown) : String(shelf.model.count)
                     font.family: Theme.uiFont
                     font.pixelSize: 13
                     color: Theme.textFaint
@@ -120,13 +121,15 @@ Column {
                 scrollAnim.restart()
             }
             NumberAnimation { id: scrollAnim; target: row; property: "contentX"; duration: 240; easing.type: Easing.OutCubic }
-            // the mouse wheel scrolls the row sideways only when it is meant for it (Shift or a sideways wheel)
+            // Shift + wheel scrolls the row sideways (a sideways wheel does anyway)
             WheelHandler {
                 acceptedModifiers: Qt.ShiftModifier
-                orientation: Qt.Vertical
-                property: "contentX"
-                target: row
-                rotationScale: -1
+                target: null
+                onWheel: (ev) => {
+                    var lo = row.originX - row.leftMargin
+                    var hi = Math.max(lo, row.originX + row.contentWidth + row.rightMargin - row.width)
+                    row.contentX = Math.max(lo, Math.min(hi, row.contentX - ev.angleDelta.y))
+                }
             }
 
             delegate: Item {
@@ -140,7 +143,7 @@ Column {
                     radius: shelf.round ? width / 2 : Theme.radius
                     requestSize: 256
                     coverId: model.coverId
-                    artist: shelf.round ? (model.title || "") : ""
+                    artist: shelf.round ? String(model.key1 || "") : ""
                     label: model.title || ""
                     scale: hover.containsMouse ? 1.03 : 1
                     Behavior on scale { NumberAnimation { duration: 140 } }
@@ -162,7 +165,7 @@ Column {
                     anchors.topMargin: 27
                     width: parent.width
                     horizontalAlignment: shelf.round ? Text.AlignHCenter : Text.AlignLeft
-                    text: shelf.round ? (model.count === 1 ? qsTr("1 Titel") : qsTr("%1 Titel").arg(model.count)) : (model.subtitle || "")
+                    text: model.subtitle || "" // artists: "1.234 Titel", albums: the artist
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 12
@@ -176,9 +179,7 @@ Column {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: (m) => {
                         if (m.button === Qt.RightButton) {
-                            ctx.row = index
-                            ctx.model = shelf.model
-                            ctx.popup()
+                            ctx.openFor(shelf.model, index)
                         } else {
                             window.openGroup(shelf.model, index, shelf.groupBy)
                         }
@@ -188,20 +189,5 @@ Column {
         }
     }
 
-    HMenu {
-        id: ctx
-        property int row: -1
-        property var model
-        HMenuItem { text: qsTr("Abspielen"); onTriggered: Library.playGroup(ctx.model, ctx.row, false) }
-        HMenuItem { text: qsTr("Zufällig abspielen"); onTriggered: Library.playGroup(ctx.model, ctx.row, true) }
-        HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueGroup(ctx.model, ctx.row, true) }
-        HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueGroup(ctx.model, ctx.row, false) }
-        HMenuItem { text: qsTr("Radio dazu starten"); onTriggered: Recommend.startRadioFromGroup(ctx.model, ctx.row) }
-        PlaylistMenu {
-            onChosen: (id) => {
-                var m = ctx.model, r = ctx.row
-                window.playlistUi.addTo(id, function (pid) { Playlists.addGroup(pid, m, r) })
-            }
-        }
-    }
+    GroupMenu { id: ctx }
 }

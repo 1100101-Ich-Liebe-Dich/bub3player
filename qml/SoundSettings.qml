@@ -75,8 +75,6 @@ Column {
             onToggled: {
                 // On: only asks for the confirmation below. Off: right away.
                 snd.bpArmed = checked && !Audio.bitPerfect
-                if (snd.bpArmed && Audio.hwDevice === "" && Audio.hwDevices.length > 0)
-                    Audio.setHwDevice(Audio.hwDevices[0].key, Audio.hwDevices[0].name) // only remembered until confirmed
                 if (!checked)
                     Audio.bitPerfect = false
                 checked = Qt.binding(() => Audio.bitPerfect || snd.bpArmed)
@@ -164,7 +162,7 @@ Column {
                         list.push({ value: Audio.hwDevice, label: qsTr("%1 (nicht verbunden)").arg(Audio.hwDeviceName || Audio.hwDevice) })
                     return list
                 }
-                current: Audio.hwDevice
+                current: Audio.hwDevice !== "" ? Audio.hwDevice : (Audio.hwDevices.length > 0 ? Audio.hwDevices[0].key : "") // the first one is taken by default
                 onPicked: (v) => Audio.setHwDevice(v, snd.nameOf(Audio.hwDevices, v, Audio.hwDevice, Audio.hwDeviceName))
             }
         }
