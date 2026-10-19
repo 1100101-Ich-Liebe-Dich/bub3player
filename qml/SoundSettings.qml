@@ -70,7 +70,10 @@ Column {
             label: qsTr("Bit-Perfect: unverändert direkt an den DAC (ALSA, am Soundserver vorbei)")
             checked: Audio.bitPerfect
             enabled: Audio.alsaAvailable && (Audio.bitPerfect || Audio.hwDevices.length > 0)
-            onToggled: Audio.bitPerfect = checked
+            onToggled: {
+                Audio.bitPerfect = checked
+                checked = Qt.binding(() => Audio.bitPerfect) // refused (no card): back off
+            }
         }
         Text {
             width: snd.width

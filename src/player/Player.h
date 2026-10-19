@@ -295,6 +295,7 @@ private:
     bool m_bitPerfect = false;     // the chains were built bit-perfect
     bool m_volumeHinted = false;
     bool m_volumeAfterRebuild = false; // set the volume again once the new chain runs
+    qint64 m_suspectId = 0;            // fell back for "no decoder": maybe the track, not the device
     std::atomic<int> m_active{0};
     int m_tail = -1;               // deck fading out, -1 none
     qint64 m_tailEndMs = 0;        // ... until this position

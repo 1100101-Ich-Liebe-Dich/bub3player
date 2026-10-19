@@ -234,6 +234,7 @@ void AudioOutput::setDevice(const QString &key, const QString &name)
     m_bitPerfect = false;
     m_useSystem = false;
     m_fallback.clear();
+    m_told = false;
     QSettings s;
     s.setValue(QStringLiteral("audio/device"), m_device);
     s.setValue(QStringLiteral("audio/deviceName"), m_deviceName);
@@ -254,6 +255,7 @@ void AudioOutput::setHwDevice(const QString &key, const QString &name)
     if (m_bitPerfect) { // a new try with the new device
         m_useSystem = false;
         m_fallback.clear();
+        m_told = false;
     }
     emit outputChanged();
     if (m_bitPerfect)
@@ -280,6 +282,7 @@ void AudioOutput::setBitPerfect(bool on)
     m_bitPerfect = on;
     m_useSystem = false;
     m_fallback.clear();
+    m_told = false;
     QSettings().setValue(QStringLiteral("audio/bitPerfect"), on);
     emit outputChanged();
     emit chainChanged();
@@ -330,7 +333,10 @@ bool AudioOutput::outputFailed(bool busy)
     m_fallback = (bp ? tr("Das Gerät für Bit-Perfect ist %1.") : tr("Das Ausgabegerät ist %1.")).arg(why)
                  + QLatin1Char(' ')
                  + tr("Der Ton läuft so lange über den Systemstandard; beim nächsten Titel, den du startest, versucht es der Player wieder.");
-    emit message(tr("Ausgabegerät nicht verfügbar – der Ton läuft über den Systemstandard"));
+    if (!m_told) { // once per choice, not on every new try
+        m_told = true;
+        emit message(tr("Ausgabegerät nicht verfügbar – der Ton läuft über den Systemstandard"));
+    }
     emit outputChanged();
     return true;
 }

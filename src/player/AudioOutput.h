@@ -132,6 +132,7 @@ private:
     QString m_hwDevice, m_hwName;
     bool m_alsaAvailable = false;
     bool m_useSystem = false;  // the chosen output failed: system default for now
+    bool m_told = false;       // the listener heard about the failure of this choice
     QString m_fallback;
 
     bool m_eqAvailable = false;

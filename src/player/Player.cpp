@@ -16,7 +16,6 @@
 #include <QUrl>
 #include <QtConcurrent>
 #include <cmath>
-#include <cstring>
 #include <gst/audio/audio.h>
 #include <gst/controller/gstdirectcontrolbinding.h>
 #include <gst/controller/gstinterpolationcontrolsource.h>
@@ -693,6 +692,12 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         gst_element_set_state(d.playbin, GST_STATE_READY);
         // Skip unreadable files, but never spin through a whole broken queue.
         if (++m_consecutiveErrors < 5 && m_queue->advance()) {
+            if (m_suspectId == m_playingId) {
+                // It failed on the system default too: the decoder was missing, not
+                // the device. The next track goes to the chosen output again.
+                m_suspectId = 0;
+                retryOutput(Resume::None);
+            }
             load(m_queue->currentId(), m_wantPlay);
         } else {
             m_switching = false;
@@ -704,7 +709,7 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         GError *err = nullptr;
         gst_message_parse_warning(msg, &err, nullptr);
         // Bit-perfect has no volume on purpose; playsink says so on every track.
-        const bool expected = m_bitPerfect && err && err->domain == GST_STREAM_ERROR
+        const bool expected = m_bitPerfect && err && err->domain == GST_STREAM_ERROR && err->code == GST_STREAM_ERROR_NOT_IMPLEMENTED
                               && GST_IS_BIN(GST_MESSAGE_SRC(msg)) && g_str_has_prefix(GST_MESSAGE_SRC_NAME(msg), "playsink");
         if (!expected)
             qWarning() << "GStreamer:" << (err ? err->message : "");
@@ -1527,6 +1532,7 @@ bool Player::handleOutputError(GstMessage *msg, const GError *err)
     const bool busy = err->domain == GST_RESOURCE_ERROR && err->code == GST_RESOURCE_ERROR_BUSY;
     if (!m_out->outputFailed(busy))
         return false;
+    m_suspectId = noDecoder && !fromSink ? m_playingId : 0;
     qWarning() << "Ausgabe nicht nutzbar:" << err->message << "– weiter über den Systemstandard";
     rebuildChains();
     return true;
