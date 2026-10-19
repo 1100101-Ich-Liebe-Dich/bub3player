@@ -32,6 +32,34 @@ namespace {
 
 const QChar Sep(0x1f); // hint fields: path, title, artist, album, length (ms)
 
+// A write that is rolled back unless it is committed (also when it throws).
+struct WriteTx
+{
+    DbConnection &db;
+    bool done = false;
+    explicit WriteTx(DbConnection &d, const char *begin = "BEGIN IMMEDIATE") : db(d) { db.exec(begin); }
+    void commit()
+    {
+        db.exec("COMMIT");
+        done = true;
+    }
+    ~WriteTx()
+    {
+        if (!done) {
+            try {
+                db.exec("ROLLBACK");
+            } catch (...) {
+            }
+        }
+    }
+};
+
+// The list changed between showing and editing it (another edit was faster).
+struct StaleEdit : std::runtime_error
+{
+    StaleEdit() : std::runtime_error("stale") {}
+};
+
 struct Hint
 {
     QString path, title, artist, album;
@@ -207,15 +235,18 @@ QVariantMap PlaylistStore::get(qint64 id) const
     return {};
 }
 
-QString PlaylistStore::uniqueName(const QString &base) const
+QString PlaylistStore::uniqueName(const QString &base, qint64 except) const
 {
     QString b = base.trimmed();
     if (b.isEmpty())
         b = tr("Neue Playlist");
     auto taken = [&](const QString &n) {
-        for (const QVariant &v : m_list)
-            if (v.toMap().value(QStringLiteral("name")).toString().compare(n, Qt::CaseInsensitive) == 0)
+        for (const QVariant &v : m_list) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("id")).toLongLong() != except
+                && m.value(QStringLiteral("name")).toString().compare(n, Qt::CaseInsensitive) == 0)
                 return true;
+        }
         return false;
     };
     if (!taken(b))
@@ -265,7 +296,7 @@ bool PlaylistStore::rename(qint64 id, const QString &name)
         return true;
     try {
         Stmt s(TrackCache::instance().db(), "UPDATE playlists SET name = ?, updated = ? WHERE id = ?");
-        s.bind(1, uniqueName(n)).bind(2, QDateTime::currentSecsSinceEpoch()).bind(3, id);
+        s.bind(1, uniqueName(n, id)).bind(2, QDateTime::currentSecsSinceEpoch()).bind(3, id);
         s.exec();
     } catch (const std::exception &e) {
         qWarning() << e.what();
@@ -302,7 +333,7 @@ void PlaylistStore::remove(qint64 id)
     const QString name = get(id).value(QStringLiteral("name")).toString();
     try {
         DbConnection &db = TrackCache::instance().db();
-        Transaction tx(db);
+        WriteTx tx(db);
         Stmt a(db, "DELETE FROM playlist_items WHERE playlist_id = ?");
         a.bind(1, id);
         a.exec();
@@ -330,13 +361,6 @@ qint64 PlaylistStore::freeze(qint64 id, TrackListModel *model)
     return nid;
 }
 
-void PlaylistStore::touch(qint64 id)
-{
-    Stmt s(TrackCache::instance().db(), "UPDATE playlists SET updated = ? WHERE id = ?");
-    s.bind(1, QDateTime::currentSecsSinceEpoch()).bind(2, id);
-    s.exec();
-}
-
 QString PlaylistStore::hintFor(DbConnection &db, qint64 trackId)
 {
     Stmt s(db, "SELECT COALESCE(f.path, ''), t.filename, t.title, t.artist, t.album, t.duration_ms, t.source_id, "
@@ -354,72 +378,94 @@ QString PlaylistStore::hintFor(DbConnection &db, qint64 trackId)
     return makeHint(h);
 }
 
-void PlaylistStore::append(qint64 id, QVector<qint64> trackIds, bool announce)
+void PlaylistStore::append(qint64 id, QVector<qint64> trackIds, bool announce, QVariantMap spec)
 {
     const QVariantMap p = get(id);
-    if (p.isEmpty() || p.value(QStringLiteral("smart")).toBool() || trackIds.isEmpty())
+    if (p.isEmpty() || p.value(QStringLiteral("smart")).toBool() || (trackIds.isEmpty() && spec.isEmpty()))
         return;
-    // Lists from a view hold every track once; the queue or a mix may repeat one.
-    if (trackIds.size() < 50000) {
-        QSet<qint64> seen;
-        seen.reserve(trackIds.size());
-        trackIds.erase(std::remove_if(trackIds.begin(), trackIds.end(),
-                                      [&](qint64 t) {
-                                          if (t <= 0 || seen.contains(t))
-                                              return true;
-                                          seen.insert(t);
-                                          return false;
-                                      }),
-                       trackIds.end());
+    QueryBuilder::Built q;
+    if (!spec.isEmpty()) {
+        q = QueryBuilder::trackIds(spec);
+        if (!q.ok) {
+            emit message(q.error);
+            return;
+        }
     }
     const QString name = p.value(QStringLiteral("name")).toString();
-    ++m_pendingWrites;
+    setPending(+1);
     QPointer<PlaylistStore> self(this);
-    // Off the UI thread: a million tracks take a few seconds.
-    (void)QtConcurrent::run(&m_writer, [self, id, ids = std::move(trackIds), announce, name] {
-        qint64 added = 0;
+    // Off the UI thread, in chunks: a million tracks take a few seconds, the
+    // window stays smooth and other writers are never locked out for long.
+    (void)QtConcurrent::run(&m_writer, [self, id, ids = std::move(trackIds), q, announce, name] {
+        qint64 added = 0, offered = 0;
         QString error;
         try {
             DbConnection db = Database::open(4 * 1024);
             db.exec("PRAGMA temp_store=FILE"); // big lists: keep the temporary tables out of RAM
-            Transaction tx(db);
             db.exec("CREATE TEMP TABLE IF NOT EXISTS pl_add(seq INTEGER PRIMARY KEY, track_id INTEGER NOT NULL)");
             {
+                WriteTx t(db, "BEGIN"); // only the temporary table: no lock on the library
+                db.exec("DELETE FROM temp.pl_add");
                 Stmt ins(db, "INSERT INTO temp.pl_add(seq, track_id) VALUES (?, ?)");
-                qint64 seq = 0;
-                for (qint64 t : ids) {
-                    ins.bind(1, seq++).bind(2, t);
+                auto put = [&](qint64 track) {
+                    if (track <= 0)
+                        return;
+                    ins.bind(1, offered++).bind(2, track);
                     ins.exec();
+                };
+                if (!q.sql.isEmpty()) {
+                    Stmt sel(db, q.sql);
+                    for (int i = 0; i < q.binds.size(); ++i)
+                        sel.bind(i + 1, q.binds[i]);
+                    while (sel.step())
+                        put(sel.i64(0));
+                } else {
+                    for (qint64 t : ids)
+                        put(t);
                 }
+                db.exec("CREATE INDEX IF NOT EXISTS temp.pl_add_track ON pl_add(track_id)");
+                t.commit();
+            }
+            qint64 base = 0;
+            {
+                Stmt s(db, "SELECT COALESCE(MAX(pos), -1) + 1 FROM playlist_items WHERE playlist_id = ?");
+                s.bind(1, id);
+                if (s.step())
+                    base = s.i64(0);
             }
             // Each track once: adding an album twice by mistake should not double it.
             // The hint keeps path, title, artist, album and length (see Hint).
             Stmt add(db, "INSERT INTO playlist_items(playlist_id, pos, track_id, hint) "
-                         "SELECT ?1, (SELECT COALESCE(MAX(pos), -1) + 1 FROM playlist_items WHERE playlist_id = ?1) + a.seq, t.id, "
-                         "  (CASE WHEN t.source_id = 1 THEN COALESCE(f.path, '') || '/' || t.filename "
-                         "        ELSE 'jf:' || t.source_id || ':' || COALESCE(t.remote_id, '') END) "
+                         "SELECT ?1, ?2 + a.seq, t.id, "
+                         "  replace(CASE WHEN t.source_id = 1 THEN COALESCE(f.path, '') || '/' || t.filename "
+                         "               ELSE 'jf:' || t.source_id || ':' || COALESCE(t.remote_id, '') END, char(31), '') "
                          "  || char(31) || replace(t.title, char(31), '') || char(31) || replace(t.artist, char(31), '') "
                          "  || char(31) || replace(t.album, char(31), '') || char(31) || t.duration_ms "
                          "FROM temp.pl_add a JOIN tracks t ON t.id = a.track_id LEFT JOIN folders f ON f.id = t.folder_id "
-                         "WHERE t.id NOT IN (SELECT track_id FROM playlist_items WHERE playlist_id = ?1 AND track_id IS NOT NULL) "
+                         "WHERE a.seq >= ?3 AND a.seq < ?4 "
                          "AND EXISTS (SELECT 1 FROM playlists WHERE id = ?1) " // deleted in the meantime
+                         "AND NOT EXISTS (SELECT 1 FROM playlist_items i WHERE i.track_id = t.id AND i.playlist_id = ?1) "
+                         "AND NOT EXISTS (SELECT 1 FROM temp.pl_add b WHERE b.track_id = a.track_id AND b.seq < a.seq) "
                          "ORDER BY a.seq");
-            add.bind(1, id);
-            add.exec();
-            added = sqlite3_changes(db);
             Stmt touch(db, "UPDATE playlists SET updated = ? WHERE id = ?");
-            touch.bind(1, QDateTime::currentSecsSinceEpoch()).bind(2, id);
-            touch.exec();
-            tx.commit();
+            constexpr qint64 Chunk = 20000;
+            for (qint64 from = 0; from < offered; from += Chunk) {
+                WriteTx t(db);
+                add.bind(1, id).bind(2, base).bind(3, from).bind(4, from + Chunk);
+                add.exec();
+                added += sqlite3_changes(db);
+                touch.bind(1, QDateTime::currentSecsSinceEpoch()).bind(2, id);
+                touch.exec();
+                t.commit();
+            }
             db.exec("DROP TABLE IF EXISTS temp.pl_add");
         } catch (const std::exception &e) {
             error = QString::fromUtf8(e.what());
         }
-        const qint64 offered = ids.size();
         QMetaObject::invokeMethod(qApp, [self, id, added, offered, error, announce, name] {
             if (!self)
                 return;
-            --self->m_pendingWrites;
+            self->setPending(-1);
             if (!error.isEmpty()) {
                 emit self->message(tr("Hinzufügen fehlgeschlagen: %1").arg(error));
                 return;
@@ -432,7 +478,9 @@ void PlaylistStore::append(qint64 id, QVector<qint64> trackIds, bool announce)
             if (added == 0 && already > 0)
                 emit self->message(already == 1 ? tr("Ist schon in »%1«").arg(name) : tr("Sind schon alle in »%1«").arg(name));
             else if (already > 0)
-                emit self->message(tr("%1 zu »%2« hinzugefügt, %3 waren schon drin").arg(titles(added), name, de(already)));
+                emit self->message((already == 1 ? tr("%1 zu »%2« hinzugefügt, 1 war schon drin")
+                                                 : tr("%1 zu »%2« hinzugefügt, %3 waren schon drin"))
+                                       .arg(titles(added), name, de(already)));
             else
                 emit self->message(tr("%1 zu »%2« hinzugefügt").arg(titles(added), name));
         }, Qt::QueuedConnection);
@@ -447,32 +495,19 @@ void PlaylistStore::addRows(qint64 id, TrackListModel *model, int row)
 
 void PlaylistStore::addAll(qint64 id, TrackListModel *model)
 {
-    if (model)
+    if (!model)
+        return;
+    // A fixed list (mix) as it is, a view by its spec (the query runs in the writer).
+    if (model->spec().contains(QStringLiteral("ids")) || model->hasKeys())
         append(id, model->ids());
-}
-
-static QVector<qint64> idsFor(const QVariantMap &spec)
-{
-    QVector<qint64> ids;
-    const QueryBuilder::Built q = QueryBuilder::trackIds(spec);
-    if (!q.ok)
-        return ids;
-    try {
-        Stmt s(TrackCache::instance().db(), q.sql);
-        for (int i = 0; i < q.binds.size(); ++i)
-            s.bind(i + 1, q.binds[i]);
-        while (s.step())
-            ids << s.i64(0);
-    } catch (const std::exception &e) {
-        qWarning() << e.what();
-    }
-    return ids;
+    else
+        append(id, {}, true, model->spec());
 }
 
 void PlaylistStore::addGroup(qint64 id, GroupModel *model, int row)
 {
     if (model)
-        append(id, idsFor(model->trackSpec(row)));
+        append(id, {}, true, model->trackSpec(row));
 }
 
 void PlaylistStore::addFolder(qint64 id, const QString &path)
@@ -481,7 +516,7 @@ void PlaylistStore::addFolder(qint64 id, const QString &path)
                                                                                  {QStringLiteral("op"), QStringLiteral("under")},
                                                                                  {QStringLiteral("value"), path}}}},
                            {QStringLiteral("sort"), QStringLiteral("path")}};
-    append(id, idsFor(spec));
+    append(id, {}, true, spec);
 }
 
 void PlaylistStore::addQueue(qint64 id)
@@ -499,68 +534,94 @@ void PlaylistStore::addTrack(qint64 id, qint64 trackId)
     append(id, {trackId});
 }
 
+void PlaylistStore::setPending(int delta)
+{
+    const bool was = m_pendingWrites > 0;
+    m_pendingWrites += delta;
+    if (was != (m_pendingWrites > 0))
+        emit busyChanged();
+}
+
 void PlaylistStore::writeAsync(qint64 id, std::function<void(DbConnection &)> work, std::function<void()> after)
 {
-    ++m_pendingWrites;
+    setPending(+1);
     QPointer<PlaylistStore> self(this);
     // One writer thread: edits run in the order they were made, and a big
-    // playlist never blocks the window.
+    // playlist never blocks the window. A failed edit is rolled back as a whole.
     (void)QtConcurrent::run(&m_writer, [self, id, work = std::move(work), after = std::move(after)] {
         QString error;
+        bool stale = false;
         try {
             DbConnection db = Database::open(4 * 1024);
             db.exec("PRAGMA temp_store=FILE"); // big lists: keep temporary tables out of RAM
-            Transaction tx(db);
+            WriteTx tx(db);
             work(db);
             Stmt touch(db, "UPDATE playlists SET updated = ? WHERE id = ?");
             touch.bind(1, QDateTime::currentSecsSinceEpoch()).bind(2, id);
             touch.exec();
             tx.commit();
+        } catch (const StaleEdit &) {
+            stale = true;
         } catch (const std::exception &e) {
             error = QString::fromUtf8(e.what());
         }
-        QMetaObject::invokeMethod(qApp, [self, id, error, after] {
+        QMetaObject::invokeMethod(qApp, [self, id, error, stale, after] {
             if (!self)
                 return;
-            --self->m_pendingWrites;
-            if (!error.isEmpty()) {
-                qWarning() << "Playlist:" << error;
-                emit self->message(tr("Playlist konnte nicht geändert werden: %1").arg(error));
-                return;
-            }
+            self->setPending(-1);
             self->reload();
             emit self->contentChanged(id);
-            if (after)
+            if (stale) {
+                emit self->message(tr("Die Playlist hat sich gerade geändert, bitte noch einmal versuchen"));
+            } else if (!error.isEmpty()) {
+                qWarning() << "Playlist:" << error;
+                emit self->message(tr("Playlist konnte nicht geändert werden: %1").arg(error));
+            } else if (after) {
                 after();
+            }
         }, Qt::QueuedConnection);
     });
 }
 
-static void fillKeys(DbConnection &db, const QVector<qint64> &keys)
+// The rows of an edit, as (position, track) pairs: the position says which
+// entry, the track proves the list has not changed since the rows were shown.
+static QVector<QPair<qint64, qint64>> entryKeys(TrackListModel *model, const QVector<int> &rows)
 {
-    db.exec("CREATE TEMP TABLE IF NOT EXISTS pl_keys(pos INTEGER PRIMARY KEY)");
+    QVector<QPair<qint64, qint64>> keys;
+    keys.reserve(rows.size());
+    for (int r : rows)
+        keys.append({model->keyAt(r), model->idAt(r)});
+    return keys;
+}
+
+static void fillKeys(DbConnection &db, qint64 playlist, const QVector<QPair<qint64, qint64>> &keys)
+{
+    db.exec("CREATE TEMP TABLE IF NOT EXISTS pl_keys(pos INTEGER PRIMARY KEY, track_id INTEGER)");
     db.exec("DELETE FROM temp.pl_keys");
-    Stmt ins(db, "INSERT OR IGNORE INTO temp.pl_keys(pos) VALUES (?)");
-    for (qint64 k : keys) {
-        ins.bind(1, k);
+    Stmt ins(db, "INSERT OR IGNORE INTO temp.pl_keys(pos, track_id) VALUES (?, ?)");
+    for (const auto &k : keys) {
+        ins.bind(1, k.first).bind(2, k.second);
         ins.exec();
     }
+    Stmt check(db, "SELECT (SELECT COUNT(*) FROM temp.pl_keys) - (SELECT COUNT(*) FROM temp.pl_keys k "
+                   "JOIN playlist_items i ON i.playlist_id = ? AND i.pos = k.pos AND i.track_id = k.track_id)");
+    check.bind(1, playlist);
+    if (!check.step() || check.i64(0) != 0)
+        throw StaleEdit();
 }
 
 void PlaylistStore::removeRows(qint64 id, TrackListModel *model, int row)
 {
-    if (!model || !model->hasKeys())
+    if (!model || !model->hasKeys() || m_pendingWrites > 0)
         return;
-    QVector<qint64> keys;
-    for (int r : model->actionRows(row))
-        keys << model->keyAt(r);
+    const auto keys = entryKeys(model, model->actionRows(row));
     if (keys.isEmpty())
         return;
     model->clearSelection();
     const QString msg = tr("%1 aus »%2« entfernt").arg(titles(keys.size()), get(id).value(QStringLiteral("name")).toString());
     QPointer<PlaylistStore> self(this);
     writeAsync(id, [id, keys](DbConnection &db) {
-        fillKeys(db, keys);
+        fillKeys(db, id, keys);
         Stmt del(db, "DELETE FROM playlist_items WHERE playlist_id = ? AND pos IN (SELECT pos FROM temp.pl_keys)");
         del.bind(1, id);
         del.exec();
@@ -570,20 +631,27 @@ void PlaylistStore::removeRows(qint64 id, TrackListModel *model, int row)
 
 void PlaylistStore::moveRows(qint64 id, TrackListModel *model, int row, int to)
 {
-    if (!model || !model->hasKeys())
+    if (!model || !model->hasKeys() || m_pendingWrites > 0)
         return;
-    QVector<qint64> keys;
-    for (int r : model->actionRows(row))
-        keys << model->keyAt(r);
-    if (keys.isEmpty())
-        return;
+    const QVector<int> rows = model->actionRows(row);
+    if (rows.isEmpty() || (rows.size() == 1 && (to == rows[0] || to == rows[0] + 1)))
+        return; // dropped where it was
+    const auto keys = entryKeys(model, rows);
     model->clearSelection();
     // Entries are keyed by position. Only the stretch between the moved rows
     // and the target changes; missing entries (not in the model) keep their
     // place relative to their neighbours.
-    const qint64 target = to >= 0 && to < model->count() ? model->keyAt(to) : std::numeric_limits<qint64>::max();
-    writeAsync(id, [id, keys, target](DbConnection &db) {
-        fillKeys(db, keys);
+    const bool toEnd = to < 0 || to >= model->count();
+    const qint64 target = toEnd ? std::numeric_limits<qint64>::max() : model->keyAt(to);
+    const qint64 targetTrack = toEnd ? 0 : model->idAt(to);
+    writeAsync(id, [id, keys, target, targetTrack, toEnd](DbConnection &db) {
+        fillKeys(db, id, keys);
+        if (!toEnd) {
+            Stmt t(db, "SELECT 1 FROM playlist_items WHERE playlist_id = ? AND pos = ? AND track_id = ?");
+            t.bind(1, id).bind(2, target).bind(3, targetTrack);
+            if (!t.step())
+                throw StaleEdit();
+        }
         qint64 lo = 0, hi = 0;
         {
             Stmt s(db, "SELECT MIN(pos), MAX(pos) FROM temp.pl_keys");
@@ -605,7 +673,7 @@ void PlaylistStore::moveRows(qint64 id, TrackListModel *model, int row, int to)
         rank.exec();
         // the entry ranked k takes the position of slot k
         db.exec("DROP TABLE IF EXISTS temp.pl_map");
-        db.exec("CREATE TEMP TABLE pl_map(old INTEGER PRIMARY KEY, new INTEGER)");
+        db.exec("CREATE TEMP TABLE pl_map(old INTEGER PRIMARY KEY, new INTEGER NOT NULL)");
         db.exec("INSERT INTO temp.pl_map(old, new) SELECT a.pos, b.pos FROM temp.pl_rank a JOIN temp.pl_rank b ON b.slot = a.rnk");
         Stmt park(db, "UPDATE playlist_items SET pos = -1 - pos WHERE playlist_id = ? AND pos BETWEEN ? AND ?");
         park.bind(1, id).bind(2, lo).bind(3, hi);
@@ -620,69 +688,81 @@ void PlaylistStore::moveRows(qint64 id, TrackListModel *model, int row, int to)
 
 int PlaylistStore::removeMissing(qint64 id)
 {
-    int n = 0;
-    try {
-        DbConnection &db = TrackCache::instance().db();
+    if (get(id).value(QStringLiteral("missing")).toLongLong() <= 0)
+        return 0;
+    QPointer<PlaylistStore> self(this);
+    auto removed = std::make_shared<qint64>(0);
+    writeAsync(id, [id, removed](DbConnection &db) {
         Stmt s(db, "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IS NULL");
         s.bind(1, id);
         s.exec();
-        n = sqlite3_changes(db);
-    } catch (const std::exception &e) {
-        qWarning() << e.what();
-    }
-    if (n > 0) {
-        reload();
-        emit contentChanged(id);
-        emit message(tr("%1 entfernt, die nicht mehr da waren").arg(titles(n)));
-    }
-    return n;
+        *removed = sqlite3_changes(db);
+    }, [self, removed] {
+        if (self && *removed > 0)
+            emit self->message(*removed == 1 ? tr("1 Titel entfernt, der nicht mehr da war")
+                                             : tr("%1 entfernt, die nicht mehr da waren").arg(titles(*removed)));
+    });
+    return 0;
 }
 
 void PlaylistStore::relink()
 {
-    QSet<qint64> touched;
-    try {
-        DbConnection &db = TrackCache::instance().db();
-        if (db.scalar("SELECT EXISTS(SELECT 1 FROM playlist_items WHERE track_id IS NULL)") == 0)
-            return;
-        struct Missing { qint64 playlist, pos; QString hint; };
-        QVector<Missing> missing;
-        {
-            Stmt s(db, "SELECT playlist_id, pos, hint FROM playlist_items WHERE track_id IS NULL");
-            while (s.step())
-                missing << Missing{s.i64(0), s.i64(1), s.str(2)};
-        }
-        Stmt byPath(db, ByPathSql), byName(db, ByNameSql), byRemote(db, ByRemoteSql);
-        Stmt upd(db, "UPDATE playlist_items SET track_id = ? WHERE playlist_id = ? AND pos = ?");
-        Transaction tx(db);
-        for (const Missing &m : missing) {
-            const Hint h = parseHint(m.hint);
-            qint64 t = 0;
-            if (h.path.startsWith(QLatin1String("jf:"))) {
-                const QStringList f = h.path.split(QLatin1Char(':'));
-                byRemote.bind(1, f.value(1).toLongLong()).bind(2, f.mid(2).join(QLatin1Char(':')));
-                t = byRemote.step() ? byRemote.i64(0) : 0;
-                byRemote.reset();
-            } else if (!h.path.isEmpty()) {
-                t = trackByPath(byPath, h.path);
+    if (m_relinkQueued)
+        return; // one is waiting in the writer already
+    m_relinkQueued = true;
+    QPointer<PlaylistStore> self(this);
+    std::atomic<bool> *queued = &m_relinkQueued; // the writer finishes before the store goes away
+    (void)QtConcurrent::run(&m_writer, [self, queued] {
+        *queued = false; // later scans may queue the next one
+        QSet<qint64> touched;
+        try {
+            DbConnection db = Database::open(2 * 1024);
+            if (db.scalar("SELECT EXISTS(SELECT 1 FROM playlist_items INDEXED BY idx_playlist_items_missing WHERE track_id IS NULL)") == 0)
+                return;
+            WriteTx tx(db);
+            struct Missing { qint64 playlist, pos; QString hint; };
+            QVector<Missing> missing;
+            {
+                Stmt s(db, "SELECT playlist_id, pos, hint FROM playlist_items WHERE track_id IS NULL");
+                while (s.step())
+                    missing << Missing{s.i64(0), s.i64(1), s.str(2)};
             }
-            if (t == 0)
-                t = trackByName(byName, h);
-            if (t == 0)
-                continue;
-            upd.bind(1, t).bind(2, m.playlist).bind(3, m.pos);
-            upd.exec();
-            touched.insert(m.playlist);
+            Stmt byPath(db, ByPathSql), byName(db, ByNameSql), byRemote(db, ByRemoteSql);
+            Stmt upd(db, "UPDATE playlist_items SET track_id = ? WHERE playlist_id = ? AND pos = ? AND track_id IS NULL");
+            for (const Missing &m : missing) {
+                const Hint h = parseHint(m.hint);
+                qint64 t = 0;
+                if (h.path.startsWith(QLatin1String("jf:"))) {
+                    const QStringList f = h.path.split(QLatin1Char(':'));
+                    byRemote.bind(1, f.value(1).toLongLong()).bind(2, f.mid(2).join(QLatin1Char(':')));
+                    t = byRemote.step() ? byRemote.i64(0) : 0;
+                    byRemote.reset();
+                } else if (!h.path.isEmpty()) {
+                    t = trackByPath(byPath, h.path);
+                }
+                if (t == 0)
+                    t = trackByName(byName, h);
+                if (t == 0)
+                    continue;
+                upd.bind(1, t).bind(2, m.playlist).bind(3, m.pos);
+                upd.exec();
+                touched.insert(m.playlist);
+            }
+            tx.commit();
+        } catch (const std::exception &e) {
+            qWarning() << "Playlists wieder verknüpfen:" << e.what();
+            return;
         }
-        tx.commit();
-    } catch (const std::exception &e) {
-        qWarning() << "Playlists wieder verknüpfen:" << e.what();
-    }
-    if (touched.isEmpty())
-        return;
-    reload();
-    for (qint64 id : std::as_const(touched))
-        emit contentChanged(id);
+        if (touched.isEmpty())
+            return;
+        QMetaObject::invokeMethod(qApp, [self, touched] {
+            if (!self)
+                return;
+            self->reload();
+            for (qint64 id : touched)
+                emit self->contentChanged(id);
+        }, Qt::QueuedConnection);
+    });
 }
 
 // ---------- M3U ----------
@@ -791,7 +871,7 @@ qint64 PlaylistStore::importFile(const QUrl &url)
     // the files get scanned (e.g. a folder not added yet).
     try {
         DbConnection &db = TrackCache::instance().db();
-        Transaction tx(db);
+        WriteTx tx(db);
         Stmt ins(db, "INSERT INTO playlist_items(playlist_id, pos, track_id, hint) VALUES (?, ?, ?, ?)");
         qint64 pos = 0;
         for (int o : order) {
@@ -812,8 +892,8 @@ qint64 PlaylistStore::importFile(const QUrl &url)
     if (lost.isEmpty())
         emit message(tr("»%1« importiert: %2").arg(name, titles(found.size())));
     else
-        emit message(tr("»%1« importiert: %2 von %3 gefunden, der Rest wird verknüpft, sobald er auftaucht")
-                         .arg(name, de(found.size()), titles(total)));
+        emit message(tr("»%1« importiert: %2 von %3 Titeln gefunden, der Rest wird verknüpft, sobald er auftaucht")
+                         .arg(name, de(found.size()), de(total)));
     return id;
 }
 
@@ -887,7 +967,8 @@ bool PlaylistStore::exportFile(qint64 id, const QUrl &url)
         return false;
     }
     if (skipped > 0)
-        emit message(tr("%1 gespeichert. %2 vom Jellyfin-Server stehen nur als Kommentar drin")
+        emit message((skipped == 1 ? tr("%1 gespeichert. 1 Titel vom Jellyfin-Server steht nur als Kommentar drin")
+                                   : tr("%1 gespeichert. %2 Titel vom Jellyfin-Server stehen nur als Kommentar drin"))
                          .arg(titles(written), de(skipped)));
     else
         emit message(tr("%1 gespeichert: %2").arg(titles(written), QFileInfo(file).fileName()));

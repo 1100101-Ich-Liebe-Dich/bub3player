@@ -249,16 +249,9 @@ HDialog {
         }
         HSegmented {
             anchors.verticalCenter: parent.verticalCenter
-            options: [{ value: "all", label: qsTr("alle Regeln") }, { value: "any", label: qsTr("mindestens eine Regel") }]
+            options: [{ value: "all", label: qsTr("alle Regeln gelten") }, { value: "any", label: qsTr("mindestens eine Regel gilt") }]
             current: ed.match
             onPicked: (v) => { ed.match = v; ed.changed() }
-        }
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("gelten")
-            font.family: Theme.uiFont
-            font.pixelSize: 14
-            color: Theme.textDim
         }
     }
 

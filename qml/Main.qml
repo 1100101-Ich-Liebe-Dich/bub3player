@@ -142,13 +142,13 @@ ApplicationWindow {
             // Drill into the albums of that artist / genre / era.
             stack.push(groupsPage, {
                 view: { id: "", name: g.title, layout: "grid",
-                        spec: { groupBy: "album", groupSort: groupBy === "albumArtist" || groupBy === "artist" ? "year" : "name", filters: spec.filters } },
+                        spec: Object.assign({}, spec, { groupBy: "album", groupSort: groupBy === "albumArtist" || groupBy === "artist" ? "year" : "name" }) },
                 subtitle: g.subtitle
             })
         } else {
-            openTracks(g.title, g.subtitle, { filters: spec.filters,
+            openTracks(g.title, g.subtitle, Object.assign({}, spec, {
                                               sort: groupBy === "addedMonth" ? "added" : groupBy === "tempo" ? "bpm" : "album",
-                                              desc: groupBy === "addedMonth" }, 0, false)
+                                              desc: groupBy === "addedMonth" }), 0, false)
         }
     }
     function search(text) {

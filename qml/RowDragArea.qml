@@ -61,7 +61,8 @@ MouseArea {
     onReleased: {
         if (dragging) {
             swallowClick = true
-            if (target >= 0 && target !== from && target !== from + 1)
+            // a drop right next to the row is still a move for the other selected rows
+            if (target >= 0)
                 d.moveRequested(from, target)
         }
         dragging = false

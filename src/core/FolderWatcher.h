@@ -1,12 +1,14 @@
 #pragma once
 
 #include <QObject>
+#include <QByteArray>
 #include <QStringList>
 #include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 // Watches the library folders with inotify and reports folders whose content
@@ -52,6 +54,7 @@ private:
     struct Cmd { int kind; QStringList paths; }; // 0 add trees, 1 add all
     void loop(QStringList roots);
     void addWatches(const QStringList &paths, bool all, const QStringList &roots);
+    void watchNewFolder(int parentWd, qint64 knownFolder, const char *name);
 
     std::thread m_thread;
     std::mutex m_mutex;
@@ -64,4 +67,5 @@ private:
     bool m_active = false;
     QStringList m_roots, m_network;
     std::vector<qint64> m_folderOfWd; // watch descriptor -> folder id (worker thread only)
+    std::unordered_map<int, QByteArray> m_placeholder; // new folders not scanned yet: their path
 };

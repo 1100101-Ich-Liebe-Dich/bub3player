@@ -172,10 +172,14 @@ QVariantMap GroupModel::trackSpec(int row) const
         return {};
     const Group &g = m_groups[row];
     const QString by = m_spec.value(QStringLiteral("groupBy"), QStringLiteral("album")).toString();
-    QVariantList filters = m_spec.value(QStringLiteral("filters")).toList();
-    filters += QueryBuilder::groupFilters(by, g.key1, g.key2);
+    // The view's own filters (with their "match"), the group on top of them.
     QVariantMap spec;
-    spec.insert(QStringLiteral("filters"), filters);
+    for (const char *key : {"filters", "match", "playlist"})
+        if (m_spec.contains(QLatin1String(key)))
+            spec.insert(QLatin1String(key), m_spec.value(QLatin1String(key)));
+    QVariantList require = m_spec.value(QStringLiteral("require")).toList();
+    require += QueryBuilder::groupFilters(by, g.key1, g.key2);
+    spec.insert(QStringLiteral("require"), require);
     spec.insert(QStringLiteral("sort"), QStringLiteral("album"));
     return spec;
 }

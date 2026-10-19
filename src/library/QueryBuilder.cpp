@@ -136,12 +136,8 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
         // Jellyfin copies of tracks that also exist locally (see JellyfinWriter::markDuplicates).
         where << QStringLiteral("t.dup = 0");
     }
-    // Filters: all must match, or with "match": "any" at least one.
-    const bool any = spec.value(QStringLiteral("match")).toString() == QLatin1String("any");
-    QStringList conds;
-    QStringList &out = any ? conds : where;
-    const QVariantList filters = spec.value(QStringLiteral("filters")).toList();
     const qint64 now = QDateTime::currentSecsSinceEpoch();
+    auto addFilters = [&](const QVariantList &filters, QStringList &out) -> bool {
     for (const QVariant &fv : filters) {
         const QVariantMap f = fv.toMap();
         const QString name = f.value(QStringLiteral("field")).toString();
@@ -217,8 +213,19 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
         }
     }
 
+    return true;
+    };
+
+    // Filters: all must match, or with "match": "any" at least one.
+    // "require" always has to match as well (e.g. the group opened from a view).
+    const bool any = spec.value(QStringLiteral("match")).toString() == QLatin1String("any");
+    QStringList conds;
+    if (!addFilters(spec.value(QStringLiteral("filters")).toList(), any ? conds : where))
+        return false;
     if (any && !conds.isEmpty())
         where << QStringLiteral("(") + conds.join(QStringLiteral(" OR ")) + QStringLiteral(")");
+    if (!addFilters(spec.value(QStringLiteral("require")).toList(), where))
+        return false;
 
     const QString search = spec.value(QStringLiteral("search")).toString().trimmed();
     if (!search.isEmpty()) {
@@ -278,7 +285,10 @@ Built trackIds(const QVariantMap &spec)
     if (sortKey == QLatin1String("random") && seed > 0) {
         // Shuffled, but the same order on every reload until the seed changes
         // (a smart playlist must not reshuffle while a scan updates the library).
-        order << QStringLiteral("((t.id * 2654435761 + %1) % 4294967291)").arg(seed % 4294967291LL) << QStringLiteral("t.id");
+        // x = a·id + s1, then x² + s2 (mod p): a different seed gives a different
+        // order, not just a rotation of the same one. Stays below 2^62.
+        const QString x = QStringLiteral("((t.id * 1103515245 + %1) % 2147483647)").arg(seed % 2147483647LL);
+        order << QStringLiteral("((%1 * %1 + %2) % 2147483647)").arg(x).arg((seed * 7919) % 2147483647LL) << QStringLiteral("t.id");
     } else {
         for (int i = 0; i < sd.keys.size(); ++i) {
             // bpm/energy: the value itself follows the direction, "not analysed" stays last

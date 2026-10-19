@@ -8,6 +8,8 @@
 #include <QHash>
 #include <QSet>
 
+#include <limits>
+
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -110,6 +112,7 @@ void FolderWatcher::stop()
     }
     m_folderOfWd.clear();
     m_folderOfWd.shrink_to_fit();
+    m_placeholder.clear();
     const bool was = m_active;
     m_active = false;
     m_watched = 0;
@@ -157,10 +160,19 @@ void FolderWatcher::addWatches(const QStringList &paths, bool all, const QString
             return false;
         };
         qint64 seen = 0, known = 0;
+        // Leave a tenth of the system's watches to other programs (file
+        // managers, editors): they would fail in odd ways without any.
+        const qint64 limit = kernelLimit();
+        const qint64 cap = limit > 0 ? limit * 9 / 10 : std::numeric_limits<qint64>::max();
         auto watch = [&](qint64 id, const QString &path) {
             ++seen;
             if (m_limited.load())
                 return;
+            if (m_watched.load() >= cap) {
+                m_limited = true;
+                qInfo() << "Ordnerüberwachung: Grenze erreicht nach" << m_watched.load() << "Ordnern";
+                return;
+            }
             const int wd = inotify_add_watch(m_fd, QFile::encodeName(path).constData(), WatchMask);
             if (wd < 0) {
                 if (errno == ENOSPC) {
@@ -176,9 +188,10 @@ void FolderWatcher::addWatches(const QStringList &paths, bool all, const QString
             else
                 ++known;
             m_folderOfWd[size_t(wd)] = id;
+            m_placeholder.erase(wd);
         };
-        m_limited = false; // try again: the limit may have been raised, folders freed
         if (all) {
+            m_limited = false; // try again: the limit may have been raised, folders freed
             qint64 total = 0;
             // Shallow folders first: if the limit is reached, a new album or artist
             // anywhere still shows up at once; only changes deep inside wait.
@@ -208,6 +221,42 @@ void FolderWatcher::addWatches(const QStringList &paths, bool all, const QString
         qWarning() << "Ordnerüberwachung:" << e.what();
     }
     QMetaObject::invokeMethod(this, &FolderWatcher::statusChanged, Qt::QueuedConnection);
+}
+
+// A folder that just appeared is watched right away, before the scan has
+// even seen it: files copied into it meanwhile must not slip through. Its
+// events count for the nearest known folder (whose scan picks up new
+// subfolders as a whole); the scan's addTrees() gives it its own id later.
+void FolderWatcher::watchNewFolder(int parentWd, qint64 knownFolder, const char *name)
+{
+    QByteArray parent;
+    auto it = m_placeholder.find(parentWd);
+    if (it != m_placeholder.end()) {
+        parent = it->second;
+    } else {
+        try {
+            DbConnection db = Database::open(256);
+            db.exec("PRAGMA mmap_size=0");
+            Stmt q(db, "SELECT path FROM folders WHERE id = ?");
+            q.bind(1, knownFolder);
+            if (q.step())
+                parent = QFile::encodeName(q.str(0));
+        } catch (const std::exception &) {
+        }
+    }
+    if (parent.isEmpty() || m_limited.load())
+        return;
+    const QByteArray path = parent + '/' + name;
+    const int wd = inotify_add_watch(m_fd, path.constData(), WatchMask);
+    if (wd < 0)
+        return;
+    if (size_t(wd) >= m_folderOfWd.size())
+        m_folderOfWd.resize(size_t(wd) + 1024, 0);
+    if (m_folderOfWd[size_t(wd)] == 0) {
+        ++m_watched;
+        m_folderOfWd[size_t(wd)] = knownFolder;
+        m_placeholder[wd] = path;
+    }
 }
 
 void FolderWatcher::loop(QStringList roots)
@@ -266,15 +315,24 @@ void FolderWatcher::loop(QStringList roots)
                         if (folder != 0)
                             --m_watched;
                         m_folderOfWd[size_t(ev->wd)] = 0;
+                        m_placeholder.erase(ev->wd);
                         continue;
                     }
-                    if (folder == 0 || (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_UNMOUNT)))
+                    if (ev->mask & IN_MOVE_SELF) {
+                        // moved somewhere else (maybe out of the library, e.g. to the
+                        // trash): drop the watch, the new place gets one after its scan
+                        inotify_rm_watch(m_fd, ev->wd);
+                        continue;
+                    }
+                    if (folder == 0 || (ev->mask & (IN_DELETE_SELF | IN_UNMOUNT)))
                         continue; // the parent folder reports it (or the drive is away: keep everything)
                     if (ev->len == 0 || ev->name[0] == '.' || ev->name[0] == 0)
                         continue; // hidden files: partial downloads, sync tools
                     const bool isDir = ev->mask & IN_ISDIR;
                     if (!isDir && (ev->mask & IN_CREATE))
                         continue;
+                    if (isDir && (ev->mask & (IN_CREATE | IN_MOVED_TO)))
+                        watchNewFolder(ev->wd, folder, ev->name);
                     if (isDir || TagReader::isAudioFile(ev->name, std::strlen(ev->name))) {
                         if (dirty.isEmpty())
                             firstEvent = std::chrono::steady_clock::now();

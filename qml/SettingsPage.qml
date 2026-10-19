@@ -120,10 +120,11 @@ Item {
                             onClicked: folderDialog.open()
                         }
                         PillButton {
-                            text: Library.scanner.running ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
+                            readonly property bool fullScan: Library.scanner.running && !Library.scanner.background
+                            text: fullScan ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
                             iconName: "refresh"
                             enabled: Library.roots.length > 0
-                            onClicked: Library.scanner.running ? Library.scanner.cancel() : Library.rescan()
+                            onClicked: fullScan ? Library.scanner.cancel() : Library.rescan()
                         }
                     }
 

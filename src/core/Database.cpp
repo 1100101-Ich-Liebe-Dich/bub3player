@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS playlist_items (
   PRIMARY KEY (playlist_id, pos)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_playlist_items_track ON playlist_items(track_id) WHERE track_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_playlist_items_missing ON playlist_items(playlist_id) WHERE track_id IS NULL;
 CREATE TRIGGER IF NOT EXISTS tracks_ad_playlist AFTER DELETE ON tracks BEGIN
   UPDATE playlist_items SET track_id = NULL WHERE track_id = old.id;
 END;
@@ -277,6 +278,14 @@ void migrate()
     migrateV2(db);
     db.exec(SchemaV3);
     db.exec(SchemaV4);
+    {   // V4: device of each folder, to tell an unmounted drive from deleted folders
+        bool hasDev = false;
+        Stmt s(db, "PRAGMA table_info(folders)");
+        while (s.step())
+            hasDev = hasDev || s.str(1) == QLatin1String("dev");
+        if (!hasDev)
+            db.exec("ALTER TABLE folders ADD COLUMN dev INTEGER NOT NULL DEFAULT 0");
+    }
     {   // test builds of 0.6 created artist_stats without a name
         bool hasName = false;
         Stmt s(db, "PRAGMA table_info(artist_stats)");

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QThreadPool>
+#include <atomic>
 #include <functional>
 #include <QUrl>
 #include <QVariantList>
@@ -27,6 +28,7 @@ class PlaylistStore : public QObject
     Q_OBJECT
     Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged) // [{id, name, smart, count, missing}]
     Q_PROPERTY(QVariantList normalPlaylists READ normalPlaylists NOTIFY playlistsChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY busyChanged) // an edit is being written: no new moves until it is done
 
 public:
     explicit PlaylistStore(PlayQueue *queue, QObject *parent = nullptr);
@@ -34,12 +36,13 @@ public:
     static PlaylistStore *instance();
 
     QVariantList playlists() const { return m_list; }
+    bool busy() const { return m_pendingWrites > 0; }
     QVariantList normalPlaylists() const;
     // Sidebar entries for Library::views (plus "Neue Playlist").
     QVariantList views() const;
 
     Q_INVOKABLE QVariantMap get(qint64 id) const;
-    Q_INVOKABLE QString uniqueName(const QString &base) const;
+    Q_INVOKABLE QString uniqueName(const QString &base, qint64 except = 0) const; // `except`: a playlist being renamed
     // `rules` empty: a normal playlist, else a smart playlist with these rules.
     Q_INVOKABLE qint64 create(const QString &name, const QVariantMap &rules = {});
     Q_INVOKABLE bool rename(qint64 id, const QString &name);
@@ -79,11 +82,13 @@ signals:
     void contentChanged(qint64 id);
     void previewReady(int serial, qint64 count, qint64 durationMs, const QString &error);
     void message(const QString &text);
+    void busyChanged();
 
 private:
     void reload();
-    void append(qint64 id, QVector<qint64> trackIds, bool announce = true); // in the background
-    void touch(qint64 id);
+    // In the background: these tracks, or the tracks of `spec` (queried in the writer).
+    void append(qint64 id, QVector<qint64> trackIds, bool announce = true, QVariantMap spec = {});
+    void setPending(int delta);
     // Runs a change in the writer thread, then reloads and announces it.
     void writeAsync(qint64 id, std::function<void(DbConnection &)> work, std::function<void()> after = {});
     QString hintFor(DbConnection &db, qint64 trackId);
@@ -93,5 +98,6 @@ private:
     QVariantList m_list;
     int m_previewSerial = 0;
     int m_pendingWrites = 0;
+    std::atomic<bool> m_relinkQueued{false};
     QThreadPool m_writer;
 };

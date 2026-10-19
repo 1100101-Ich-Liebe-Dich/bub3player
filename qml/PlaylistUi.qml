@@ -44,7 +44,7 @@ Item {
     function importFile() { importDlg.open() }
     function exportFile(id) {
         exportDlg.playlistId = id
-        exportDlg.selectedFile = exportDlg.currentFolder + "/" + Playlists.suggestedExportName(id)
+        exportDlg.selectedFile = exportDlg.currentFolder + "/" + encodeURIComponent(Playlists.suggestedExportName(id))
         exportDlg.open()
     }
 

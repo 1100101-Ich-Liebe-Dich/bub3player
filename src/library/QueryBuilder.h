@@ -12,6 +12,7 @@
 //                                       withinDays olderThanDays under(folder path)
 //                                   field "playlist" (op eq / ne, value = playlist id): in / not in
 //   match:   all (default) | any    how filters combine
+//   require: [{field, op, value}]   must match as well, whatever `match` says
 //   playlist: id                    the tracks of this playlist, in its order (sort "position")
 //   sort:    album | title | artist | year | added | mtime | duration | playCount
 //            | lastPlayed | codec | genre | path | random | bpm | energy | position

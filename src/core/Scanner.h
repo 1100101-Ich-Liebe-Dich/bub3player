@@ -45,7 +45,8 @@ public:
         bool cancelled = false;
         int mode = Full;
         QStringList missingRoots;
-        QStringList scanned; // Subset: the roots, Folders: the folders
+        QStringList scanned;    // Subset: the roots, Folders: the folders
+        QStringList newFolders; // folders that appeared (top of each new subtree)
     };
 
     explicit Scanner(QObject *parent = nullptr);

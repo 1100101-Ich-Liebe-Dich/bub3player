@@ -61,7 +61,9 @@ mkdir -p "$gio"
 
 mkdir -p AppDir/apprun-hooks
 cat > AppDir/apprun-hooks/bub3player-env.sh <<'HOOK'
-# GStreamer and GIO from inside the AppImage
+# GStreamer and GIO from inside the AppImage. APPDIR is set by the AppImage
+# runtime; when AppRun is started directly (extracted), it is this folder.
+export APPDIR="${APPDIR:-$this_dir}"
 export GST_REGISTRY_REUSE_PLUGIN_SCANNER="no"
 export GST_PLUGIN_SYSTEM_PATH_1_0="${APPDIR}/usr/lib/gstreamer-1.0"
 export GST_PLUGIN_PATH_1_0="${APPDIR}/usr/lib/gstreamer-1.0"
@@ -72,7 +74,7 @@ HOOK
 
 echo "== Abhängigkeiten einsammeln"
 export QML_SOURCES_PATHS="$ROOT/qml"
-export EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so"
+export EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so;libqoffscreen.so"
 export EXTRA_QT_MODULES="svg"
 [ -n "${QMAKE:-}" ] || export QMAKE=$(command -v qmake6 || command -v qmake)
 desktop=AppDir/usr/share/applications/de.bauenundbooten.BuB3Player.desktop

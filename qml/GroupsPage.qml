@@ -10,6 +10,11 @@ Item {
     property string subtitle: ""
     property bool showBack: StackView.view ? StackView.view.depth > 1 : false
     readonly property var baseSpec: view.spec || ({})
+    // All tracks of this view (its filters, without the grouping).
+    function tracksSpec() {
+        return { filters: baseSpec.filters || [], match: baseSpec.match || "all", require: baseSpec.require || [],
+                 playlist: baseSpec.playlist || 0, sort: "album" }
+    }
     readonly property string groupBy: baseSpec.groupBy || "album"
     readonly property string layout: view.layout || "grid"
     readonly property bool round: groupBy === "albumArtist" || groupBy === "artist"
@@ -88,13 +93,13 @@ Item {
                 text: qsTr("Alle abspielen")
                 iconName: "play"
                 enabled: groups.count > 0
-                onClicked: Library.playSpec({ filters: page.baseSpec.filters || [], sort: "album" }, false)
+                onClicked: Library.playSpec(page.tracksSpec(), false)
             }
             PillButton {
                 text: qsTr("Zufällig")
                 iconName: "shuffle"
                 enabled: groups.count > 0
-                onClicked: Library.playSpec({ filters: page.baseSpec.filters || [], sort: "album" }, true)
+                onClicked: Library.playSpec(page.tracksSpec(), true)
             }
             PillButton {
                 text: qsTr("Sortieren")

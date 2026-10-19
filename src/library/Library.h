@@ -119,7 +119,8 @@ private:
 
     FolderWatcher *m_watcher;
     QStringList m_watchRoots;       // roots the watcher was started with
-    QStringList m_dirtyFolders;     // reported by the watcher, not scanned yet
+    QSet<QString> m_dirtyFolders;   // reported by the watcher, not scanned yet
+    bool m_fullPending = false;     // full scan wanted while a small one ran
     QElapsedTimer m_firstDirty;
     QTimer m_dirtyTimer;            // waits until a copy is done
     bool m_checkAll = false;        // events were lost: look at everything

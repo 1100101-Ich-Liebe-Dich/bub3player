@@ -18,7 +18,8 @@ Item {
     // Playlists: a normal one can be edited and reordered, a smart one has rules.
     property var playlistId: 0
     property bool smart: false
-    readonly property var playlist: playlistId > 0 ? Playlists.get(playlistId) : ({})
+    // re-read whenever the playlists change (counts, missing entries)
+    readonly property var playlist: (Playlists.playlists, playlistId > 0 ? Playlists.get(playlistId) : ({}))
     readonly property bool editable: playlistId > 0 && !smart
     // A shuffled smart playlist keeps its order while the page is open.
     readonly property int seed: Math.floor(Math.random() * 1000000000) + 1
@@ -88,7 +89,7 @@ Item {
         sortKey: page.sortKey
         sortDesc: page.sortDesc
         extraColumn: page.extraFor(page.sortKey)
-        reorderable: page.editable && page.sortKey === "position" && !page.sortDesc
+        reorderable: page.editable && page.sortKey === "position" && !page.sortDesc && !Playlists.busy
         onMoveRequested: (row, to) => Playlists.moveRows(page.playlistId, tracks, row, to)
         onSortRequested: (key) => {
             if (key === page.sortKey) {
@@ -127,7 +128,7 @@ Item {
                     var n = tracks.count === 1 ? qsTr("1 Titel") : qsTr("%1 Titel").arg(Library.formatCount(tracks.count))
                     var parts = [n + ", " + Library.formatDuration(tracks.totalDurationMs, true)]
                     if (missing !== "") parts.push(missing)
-                    if (tracks.selectionCount > 0) parts.push(qsTr("%1 ausgewählt").arg(Library.formatCount(tracks.selectionCount)))
+                    if (tracks.selectionCount > 1) parts.push(qsTr("%1 ausgewählt").arg(Library.formatCount(tracks.selectionCount)))
                     return parts.join(" · ")
                 }
                 PillButton {
@@ -277,6 +278,7 @@ Item {
         }
         HMenuItem {
             visible: page.editable
+            enabled: !Playlists.busy
             height: visible ? implicitHeight : 0
             text: qsTr("Aus der Playlist entfernen")
             onTriggered: Playlists.removeRows(page.playlistId, tracks, menu.row)

@@ -261,10 +261,10 @@ void TrackListModel::select(int row, int mode)
         for (int r = std::min(m_anchor, row), e = std::max(m_anchor, row); r <= e; ++r)
             setBit(r, true);
     } else {
-        // A plain click only clears an existing selection; the clicked row
-        // becomes the anchor for Shift.
+        // A plain click selects just this row (and is the anchor for Shift).
         std::fill(m_sel.begin(), m_sel.end(), 0);
         m_selCount = 0;
+        setBit(row, true);
         m_anchor = row;
     }
     selectionUpdated();

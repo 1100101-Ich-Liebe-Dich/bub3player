@@ -285,11 +285,12 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
         m_phase = Walking;
         part.start();
         {
-            Stmt selFolder(db, "SELECT id FROM folders WHERE path = ?");
-            Stmt insFolder(db, "INSERT INTO folders(source_id, parent_id, path, name, mtime, seen) VALUES (1, ?, ?, ?, ?, ?)");
-            Stmt updFolder(db, "UPDATE folders SET parent_id = ?, mtime = ?, seen = ? WHERE id = ?");
+            Stmt selFolder(db, "SELECT id, dev FROM folders WHERE path = ?");
+            Stmt insFolder(db, "INSERT INTO folders(source_id, parent_id, path, name, mtime, seen, dev) VALUES (1, ?, ?, ?, ?, ?, ?)");
+            Stmt updFolder(db, "UPDATE folders SET parent_id = ?, mtime = ?, seen = ?, dev = ? WHERE id = ?");
             Stmt selTracks(db, "SELECT id, filename, size, mtime FROM tracks WHERE folder_id = ?");
-            Stmt selChildren(db, "SELECT id, path FROM folders WHERE parent_id = ? AND source_id = 1");
+            Stmt selChildren(db, "SELECT id, path, dev FROM folders WHERE parent_id = ? AND source_id = 1");
+            Stmt knownBelow(db, "SELECT EXISTS(SELECT 1 FROM folders WHERE source_id = 1 AND path >= ? AND path < ?)");
             Stmt insTrack(db, "INSERT INTO tracks(source_id, folder_id, filename, size, mtime, added_at, title, codec) "
                               "VALUES (1, ?, ?, ?, ?, ?, ?, ?)");
             Stmt updTrack(db, "UPDATE tracks SET size = ?, mtime = ?, tags_read = 0 WHERE id = ?");
@@ -301,6 +302,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
 
             Batcher batch(db);
             std::unordered_set<DevIno, DevInoHash> visited;
+            std::unordered_set<qint64> insertedIds;
 
             struct Pending { std::string path; qint64 parent; };
             struct Existing { qint64 id, size, mtime; bool seen; };
@@ -318,10 +320,34 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                 delTreeFolders.exec();
                 batch.op();
             };
-            auto rootUsable = [](const QString &root) {
+            // A root is usable if it is there, readable, and not an empty mount
+            // point (a drive in /etc/fstab that is not mounted right now leaves
+            // its empty folder behind) while we know music below it.
+            auto rootUsable = [&](const QString &root) {
                 const QByteArray b = QFile::encodeName(root);
                 struct stat rs;
-                return stat(b.constData(), &rs) == 0 && S_ISDIR(rs.st_mode) && access(b.constData(), R_OK | X_OK) == 0;
+                if (stat(b.constData(), &rs) != 0 || !S_ISDIR(rs.st_mode) || access(b.constData(), R_OK | X_OK) != 0)
+                    return false;
+                bool empty = true;
+                if (DIR *d = opendir(b.constData())) {
+                    while (dirent *e = readdir(d))
+                        if (std::strcmp(e->d_name, ".") != 0 && std::strcmp(e->d_name, "..") != 0) {
+                            empty = false;
+                            break;
+                        }
+                    closedir(d);
+                }
+                if (!empty)
+                    return true;
+                knownBelow.bind(1, root + QLatin1Char('/')).bind(2, root + QLatin1Char('0'));
+                const bool known = knownBelow.step() && knownBelow.i64(0) != 0;
+                knownBelow.reset();
+                return !known;
+            };
+            auto keepTree = [&](const QString &path) {
+                keepRoot.bind(1, gen).bind(2, path).bind(3, path + QLatin1Char('/')).bind(4, path + QLatin1Char('0'));
+                keepRoot.exec();
+                batch.op();
             };
 
             // Reads folders from the stack. `onlyNew`: descend only into subfolders
@@ -348,10 +374,14 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
 
                     std::vector<std::string> subdirs;
                     std::vector<std::pair<std::string, FileStat>> files;
+                    bool anyEntry = false;
                     while (dirent *e = readdir(dir)) {
                         const char *n = e->d_name;
+                        if (n[0] == '.' && (n[1] == 0 || (n[1] == '.' && n[2] == 0)))
+                            continue;
+                        anyEntry = true;
                         if (n[0] == '.')
-                            continue; // ".", "..", hidden folders and files
+                            continue; // hidden folders and files
                         const size_t len = std::strlen(n);
                         if (e->d_type == DT_DIR) {
                             subdirs.emplace_back(n, len);
@@ -375,21 +405,33 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
 
                     // Folder row
                     const QString qpath = QFile::decodeName(QByteArray(cur.path.data(), int(cur.path.size())));
-                    qint64 folderId = 0;
+                    qint64 folderId = 0, knownDev = 0;
                     selFolder.bind(1, qpath);
-                    if (selFolder.step())
+                    if (selFolder.step()) {
                         folderId = selFolder.i64(0);
+                        knownDev = selFolder.i64(1);
+                    }
                     selFolder.reset();
+                    const qint64 dev = qint64(dst.st_dev);
+                    if (folderId != 0 && knownDev != 0 && knownDev != dev && !anyEntry) {
+                        // Was on another drive and is empty now: an unmounted mount
+                        // point, not deleted music. Keep everything below.
+                        keepTree(qpath);
+                        continue;
+                    }
                     if (folderId == 0) {
                         const size_t slash = cur.path.rfind('/');
                         const std::string name = slash == std::string::npos ? cur.path : cur.path.substr(slash + 1);
                         insFolder.bind(1, cur.parent).bind(2, qpath)
                             .bind(3, QFile::decodeName(QByteArray(name.data(), int(name.size()))))
-                            .bind(4, qint64(dst.st_mtime)).bind(5, gen);
+                            .bind(4, qint64(dst.st_mtime)).bind(5, gen).bind(6, dev);
                         insFolder.exec();
                         folderId = sqlite3_last_insert_rowid(db);
+                        if (!insertedIds.count(cur.parent))
+                            st.newFolders << qpath;
+                        insertedIds.insert(folderId);
                     } else {
-                        updFolder.bind(1, cur.parent).bind(2, qint64(dst.st_mtime)).bind(3, gen).bind(4, folderId);
+                        updFolder.bind(1, cur.parent).bind(2, qint64(dst.st_mtime)).bind(3, gen).bind(4, dev).bind(5, folderId);
                         updFolder.exec();
                     }
                     batch.op();
@@ -450,15 +492,31 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                             const QByteArray nb = QFile::encodeName(child.mid(child.lastIndexOf(QLatin1Char('/')) + 1));
                             const std::string n(nb.constData(), size_t(nb.size()));
                             knownNames.insert(n);
-                            if (!onDisk.count(n))
+                            const qint64 childDev = selChildren.i64(2);
+                            // gone from a folder on another drive: that drive was unmounted
+                            if (!onDisk.count(n) && (childDev == 0 || childDev == dev))
                                 gone << child;
                         }
                         selChildren.reset();
                         for (const QString &g : std::as_const(gone))
                             deleteTree(g);
-                        for (auto &sd : subdirs)
-                            if (!knownNames.count(sd))
-                                stack.push_back({cur.path + '/' + sd, folderId});
+                        for (auto &sd : subdirs) {
+                            if (knownNames.count(sd))
+                                continue;
+                            const std::string sub = cur.path + '/' + sd;
+                            // A new link to a folder that is already in the library
+                            // (the full scan reaches it there): don't add it twice.
+                            struct stat ls;
+                            if (lstat(sub.c_str(), &ls) == 0 && S_ISLNK(ls.st_mode)) {
+                                const QString real = QFileInfo(QFile::decodeName(QByteArray(sub.data(), int(sub.size())))).canonicalFilePath();
+                                bool inside = false;
+                                for (const QString &r : std::as_const(roots))
+                                    inside = inside || real == r || real.startsWith(r + QLatin1Char('/'));
+                                if (inside)
+                                    continue;
+                            }
+                            stack.push_back({sub, folderId});
+                        }
                     } else {
                         for (auto &sd : subdirs)
                             stack.push_back({cur.path + '/' + sd, folderId});
@@ -516,9 +574,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                     if (!rootUsable(root)) {
                         // Unplugged disk or unmounted share: keep everything we know about it.
                         st.missingRoots << root;
-                        keepRoot.bind(1, gen).bind(2, root).bind(3, root + QLatin1Char('/')).bind(4, root + QLatin1Char('0'));
-                        keepRoot.exec();
-                        batch.op();
+                        keepTree(root);
                         continue;
                     }
                     if (mode == Subset)
@@ -532,6 +588,21 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
             batch.flush();
 
             if (!m_cancel.load() && mode != Folders) {
+                // A folder that lived on another drive than its parent and is gone
+                // now was a mount point (udisks removes /media/<user>/DISK when the
+                // drive is unplugged): keep it, like a missing root.
+                {
+                    Stmt mounts(db, "SELECT c.path FROM folders c JOIN folders p ON p.id = c.parent_id "
+                                    "WHERE c.source_id = 1 AND c.seen <> ? AND c.dev <> 0 AND p.dev <> 0 AND c.dev <> p.dev");
+                    mounts.bind(1, gen);
+                    QStringList keep;
+                    while (mounts.step())
+                        keep << mounts.str(0);
+                    mounts.reset();
+                    for (const QString &k : std::as_const(keep))
+                        keepTree(k);
+                    batch.flush();
+                }
                 // Prune folders (and their tracks) that disappeared. Missing roots were
                 // marked as seen above, so an unplugged disk is never wiped.
                 // A full scan also drops folders of roots no longer in the library;
@@ -667,8 +738,12 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
             m_phase = Indexing;
             Database::restoreFtsTriggers(db);
         }
-        db.exec("PRAGMA optimize");
-        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        if (mode == Full) {
+            db.exec("PRAGMA optimize");
+            db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        } else {
+            db.exec("PRAGMA wal_checkpoint(PASSIVE)"); // small scans: never wait for readers
+        }
         st.indexSec = part.elapsed() / 1000.0;
         if (verbose && bulk)
             std::printf("Phase 3 (Sortier- und Suchindex): %.2f s\n", st.indexSec);

@@ -169,8 +169,7 @@ void Library::startWatching()
 void Library::foldersChanged(const QStringList &paths)
 {
     for (const QString &p : paths)
-        if (!m_dirtyFolders.contains(p))
-            m_dirtyFolders << p;
+        m_dirtyFolders.insert(p);
     if (!m_firstDirty.isValid())
         m_firstDirty.start();
     // Wait until the copying is done, but not forever (a long copy job).
@@ -198,7 +197,7 @@ void Library::scanChangedFolders()
     }
     if (m_dirtyFolders.isEmpty())
         return;
-    const QStringList folders = m_dirtyFolders;
+    const QStringList folders(m_dirtyFolders.begin(), m_dirtyFolders.end());
     m_dirtyFolders.clear();
     m_firstDirty.invalidate();
     m_scanner->startFolders(m_roots, folders);
@@ -253,8 +252,10 @@ QString Library::watchStatus() const
     const QStringList net = m_watcher->networkRoots();
     if (!net.isEmpty())
         parts << tr("Netzlaufwerke werden alle 15 Minuten geprüft (%1).").arg(net.join(QStringLiteral(", ")));
-    if (!m_missing.isEmpty())
-        parts << tr("Sobald %1 wieder da ist, wird es eingelesen.").arg(QStringList(m_missing.values()).join(QStringLiteral(", ")));
+    if (m_missing.size() == 1)
+        parts << tr("Sobald %1 wieder da ist, wird es eingelesen.").arg(*m_missing.begin());
+    else if (m_missing.size() > 1)
+        parts << tr("Sobald %1 wieder da sind, werden sie eingelesen.").arg(QStringList(m_missing.values()).join(QStringLiteral(", ")));
     return parts.join(QLatin1Char(' '));
 }
 
@@ -269,12 +270,19 @@ QString Library::watchHint() const
 void Library::scanFinished()
 {
     const Scanner::Stats &st = m_scanner->lastStats();
+    if (m_fullPending) {
+        // "Jetzt scannen" or a new folder while a small scan was running
+        rescan();
+        return;
+    }
     if (st.mode == Scanner::Full) {
         emit message(m_scanner->summary());
         m_missing = QSet<QString>(st.missingRoots.begin(), st.missingRoots.end());
-        if (!st.cancelled)
-            startWatching();
+        startWatching();
     } else {
+        if (st.cancelled && st.mode == Scanner::Folders)
+            for (const QString &f : st.scanned)
+                m_dirtyFolders.insert(f); // not done yet: next time
         // Small automatic scans: say what changed, if anything did.
         const QLocale de(QLocale::German);
         QStringList parts;
@@ -284,10 +292,14 @@ void Library::scanFinished()
             parts << (st.removed == 1 ? tr("1 Titel entfernt") : tr("%1 Titel entfernt").arg(de.toString(st.removed)));
         if (!parts.isEmpty())
             emit message(tr("Bibliothek aktualisiert: %1").arg(parts.join(QStringLiteral(", "))));
-        if (watchFolders())
-            m_watcher->addTrees(st.scanned);
+        if (watchFolders()) {
+            if (st.mode == Scanner::Subset && m_watcher->limited())
+                m_watcher->resync(); // maybe the limit was raised in the meantime
+            else
+                m_watcher->addTrees(st.newFolders);
+        }
     }
-    if (auto *p = PlaylistStore::instance())
+    if (auto *p = PlaylistStore::instance(); p && (st.mode == Scanner::Full || st.added > 0))
         p->relink(); // tracks that came back (drive plugged in, file moved)
     if (!m_dirtyFolders.isEmpty() || !m_subsetQueue.isEmpty() || m_checkAll)
         m_dirtyTimer.start(500);
@@ -328,8 +340,15 @@ void Library::removeRoot(const QString &path)
 
 void Library::rescan()
 {
-    if (m_scanner->running())
+    if (m_scanner->running()) {
+        // A small automatic scan gives way; the full one starts when it has stopped.
+        if (m_scanner->background()) {
+            m_fullPending = true;
+            m_scanner->cancel();
+        }
         return;
+    }
+    m_fullPending = false;
     m_scanner->start(m_roots, scanThreads());
 }
 
