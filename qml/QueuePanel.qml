@@ -17,6 +17,12 @@ Rectangle {
         Text {
             x: 24
             y: 22
+            // shrinks a little in narrow panels instead of running under the buttons
+            width: saveBtn.x - x - 6
+            height: 28
+            verticalAlignment: Text.AlignVCenter
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 15
             text: qsTr("Warteschlange")
             font.family: Theme.displayFont
             font.pixelSize: 21

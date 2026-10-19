@@ -289,6 +289,13 @@ Jahrzehnt, Tempo, Tonart und Energie.
 - **Import und Export** als M3U/M3U8 – deine Listen aus anderen Playern kommen mit, auch mit
   relativen Pfaden für den USB-Stick.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/images/playlists.jpg" alt="Playlist mit Mehrfachauswahl und Menü „Zur Playlist hinzufügen“"></td>
+<td width="50%"><img src="docs/images/smart-playlist.jpg" alt="Smart-Playlist-Editor mit Live-Zählung"></td>
+</tr>
+</table>
+
 ### 👀 Ordnerüberwachung
 
 Neue, geänderte, verschobene und gelöschte Dateien erscheinen **nach wenigen Sekunden** in der
