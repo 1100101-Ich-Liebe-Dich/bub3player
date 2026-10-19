@@ -305,13 +305,30 @@ Abständen. Auch hier gilt: Ein ausgehängtes Laufwerk löscht nichts.
 
 ### 🎚️ Klang
 
+Alles unter **Einstellungen → Klang** (`Strg + E`):
+
 - **Lückenlos** (gapless) auf Sample-Ebene.
 - **ReplayGain** für Titel oder Album, mit Limiter und Vorverstärkung. Titel ohne Tags werden über
   die gemessene Lautheit angeglichen (Bezug −18 LUFS wie ReplayGain 2).
-- **10-Band-Equalizer** mit Voreinstellungen, eigenen Kurven und Vorverstärkung.
-- **Ausgabegerät wählen** – direkt im Player, ohne Umweg über die Systemeinstellungen.
-- **Bit-Perfect über ALSA**: Das Signal geht unverändert an deinen DAC, ohne Umrechnung und ohne
-  Software-Lautstärke – die Abtastrate folgt dem Titel.
+- **10-Band-Equalizer** (31 Hz bis 16 kHz) mit 14 Voreinstellungen, eigenen gespeicherten Kurven
+  und Vorverstärkung – automatisch so viel leiser, wie das lauteste Band anhebt, damit nichts
+  übersteuert. Ausgeschaltet ist er gar nicht erst in der Kette.
+- **Ausgabegerät wählen** – Kopfhörer, Boxen, HDMI … direkt im Player, ohne Umweg über die
+  Systemeinstellungen. Ist das Gerät weg, spielt der Player über den Systemstandard weiter und
+  versucht es beim nächsten Titel, den du startest, wieder.
+- **Bit-Perfect über ALSA**: Jeder Titel kommt in seiner eigenen Abtastrate und Bittiefe beim DAC
+  an, Sample für Sample wie in der Datei – kein Soundserver, keine Software-Lautstärke, nichts
+  umgerechnet. Die Einstellungen zeigen, was gerade beim Gerät ankommt („24 Bit · 96 kHz → Gerät:
+  32 Bit · 96 kHz ✓“). Kann das Gerät eine Abtastrate nicht, rechnet der Player sie um und sagt es.
+- Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
+  was GStreamer abspielt.
+
+<p align="center">
+  <img src="docs/images/klang.jpg" alt="Equalizer in den Klang-Einstellungen, Theme Aurora" width="80%">
+</p>
+
+> **Ohne Equalizer und mit „Systemstandard“** läuft die Wiedergabe genau wie in Version 1.0 –
+> kein zusätzliches Element in der Kette, der Ton geht unverändert an den Soundserver.
 - Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
   was GStreamer abspielt.
 
@@ -351,6 +368,7 @@ Abständen. Auch hier gilt: Ein ausgehängtes Laufwerk löscht nichts.
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
 | `Strg + T` | Theme wechseln |
+| `Strg + E` | Klang: Ausgabe und Equalizer |
 | `Strg + A` | Alle Titel der Liste markieren |
 | `Strg + Klick` / `Umschalt + Klick` | Mehrere Titel markieren |
 | `Alt + ←` | Zurück |
@@ -401,7 +419,7 @@ sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel qt6-qtdeclarative-de
 ```sh
 sudo apt install build-essential cmake ninja-build qt6-base-dev qt6-declarative-dev qt6-svg-dev \
   qt6-shadertools-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good \
-  gstreamer1.0-libav libtag1-dev libsqlite3-dev qml6-module-qtquick qml6-module-qtquick-controls \
+  gstreamer1.0-libav gstreamer1.0-alsa libtag1-dev libsqlite3-dev qml6-module-qtquick qml6-module-qtquick-controls \
   qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-dialogs \
   qml6-module-qtquick-templates qml6-module-qtqml-workerscript
 ```

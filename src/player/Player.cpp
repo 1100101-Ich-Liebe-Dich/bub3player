@@ -5,6 +5,7 @@
 #include "core/Database.h"
 #include "jellyfin/JellyfinAccess.h"
 #include "library/TrackCache.h"
+#include "player/AudioOutput.h"
 #include "player/PlayQueue.h"
 
 #include <QDateTime>
@@ -15,6 +16,7 @@
 #include <QUrl>
 #include <QtConcurrent>
 #include <cmath>
+#include <gst/audio/audio.h>
 #include <gst/controller/gstdirectcontrolbinding.h>
 #include <gst/controller/gstinterpolationcontrolsource.h>
 #include <gst/gst.h>
@@ -28,6 +30,10 @@ namespace {
 constexpr int SpectrumBands = 256;
 constexpr int Bars = 40;
 constexpr double FloorDb = -72.0;
+
+// playbin flags
+constexpr int FlagSoftVolume = 1 << 4;
+constexpr int FlagNativeAudio = 1 << 5; // no converters, no resampler in front of the sink
 
 GstBusSyncReply busTrampoline(GstBus *bus, GstMessage *msg, gpointer deck)
 {
@@ -92,6 +98,36 @@ GstPadProbeReturn onStreamEvent(GstPad *, GstPadProbeInfo *info, gpointer data)
     return GST_PAD_PROBE_OK;
 }
 
+// Bit-perfect: audioconvert (no dither) ! audioresample ! device. Puts the
+// samples into a container the device takes (16 bit into 32: zero bits added,
+// nothing else) and lets playbin see a sink that takes every decoder (with
+// NATIVE_AUDIO it only plugs decoders whose output the sink accepts directly).
+// Both pass the samples through untouched whenever the device takes the
+// track's format and rate; only a rate the device lacks gets converted (the
+// settings show it), instead of a stream that cannot start.
+GstElement *bitPerfectSink(GstElement *device)
+{
+    GstElement *conv = gst_element_factory_make("audioconvert", nullptr);
+    GstElement *resample = gst_element_factory_make("audioresample", nullptr);
+    if (!conv || !resample) {
+        if (conv) gst_object_unref(conv);
+        if (resample) gst_object_unref(resample);
+        return device;
+    }
+    g_object_set(conv, "dithering", 0, "noise-shaping", 0, nullptr);
+    GstElement *bin = gst_bin_new(nullptr);
+    gst_bin_add_many(GST_BIN(bin), conv, resample, device, nullptr);
+    if (!gst_element_link_many(conv, resample, device, nullptr)) {
+        qWarning() << "Bit-Perfect-Ausgabe konnte nicht verbunden werden";
+        gst_object_unref(bin);
+        return nullptr;
+    }
+    GstPad *pad = gst_element_get_static_pad(conv, "sink");
+    gst_element_add_pad(bin, gst_ghost_pad_new("sink", pad));
+    gst_object_unref(pad);
+    return bin;
+}
+
 QVector<QPair<qint64, double>> fadeOutCurve(qint64 from, qint64 len, bool hold)
 {
     QVector<QPair<qint64, double>> p;
@@ -122,7 +158,7 @@ QVector<QPair<qint64, double>> fadeInCurve(qint64 from, qint64 len)
 
 } // namespace
 
-Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(queue)
+Player::Player(PlayQueue *queue, AudioOutput *output, QObject *parent) : QObject(parent), m_queue(queue), m_out(output)
 {
     QSettings s;
     m_volume = std::clamp(s.value(QStringLiteral("player/volume"), 0.8).toDouble(), 0.0, 1.0);
@@ -133,6 +169,10 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
     m_albumGapless = s.value(QStringLiteral("player/albumGapless"), true).toBool();
     m_skipSilence = s.value(QStringLiteral("player/skipSilence"), true).toBool();
     m_loudnessMatch = s.value(QStringLiteral("player/loudnessMatch"), true).toBool();
+    m_rgAvailable = AudioOutput::hasElement("rgvolume") && AudioOutput::hasElement("rglimiter");
+    m_spectrumAvailable = AudioOutput::hasElement("spectrum");
+    m_levelsAvailable = AudioOutput::hasElement("level");
+    m_bitPerfect = m_out && m_out->bitPerfectActive();
 
     if (!initDeck(m_deck[0], 0)) {
         m_error = tr("GStreamer 'playbin' fehlt. Bitte gst-plugins-base installieren.");
@@ -144,6 +184,10 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
     m_posTimer.setInterval(250);
     connect(&m_posTimer, &QTimer::timeout, this, &Player::pollPosition);
     connect(m_queue, &PlayQueue::upcomingChanged, this, &Player::armNext);
+    if (m_out) {
+        connect(m_out, &AudioOutput::chainChanged, this, [this] { rebuildChains(); });
+        connect(m_out, &AudioOutput::eqGainsChanged, this, &Player::applyEq);
+    }
 
     if (AnalysisService *a = AnalysisService::instance()) {
         connect(a, &AnalysisService::waveformReady, this, [this](qint64 id, const QVariantList &values) {
@@ -163,6 +207,7 @@ Player::Player(PlayQueue *queue, QObject *parent) : QObject(parent), m_queue(que
     }
     applyVolume();
     applyReplayGain();
+    applyEq();
     m_bars.fill(0.f, Bars);
 }
 
@@ -179,23 +224,27 @@ bool Player::initDeck(Deck &d, int index)
     flags &= ~((1 << 0) | (1 << 2) | (1 << 3)); // VIDEO, TEXT, VIS
     flags |= (1 << 1);                         // AUDIO
     g_object_set(d.playbin, "flags", flags, nullptr);
-
-    // Two prepared filter chains; ReplayGain "off" swaps in the chain without rgvolume.
-    d.binRg = buildFilterBin(d, true);
-    d.binPlain = buildFilterBin(d, false);
+    d.baseFlags = flags;
 
     g_signal_connect(d.playbin, "about-to-finish", G_CALLBACK(aboutToFinishTrampoline), &d);
     GstBus *bus = gst_element_get_bus(d.playbin);
     gst_bus_set_sync_handler(bus, busTrampoline, &d, nullptr);
     gst_object_unref(bus);
-    selectFilterBin(d);
+    configureDeck(d);
     return true;
 }
 
-GstElement *Player::buildFilterBin(Deck &d, bool withRg)
+GstElement *Player::buildFilterBin(Deck &d)
 {
-    // audioconvert ! [rgvolume ! rglimiter] ! audioconvert ! [volume (fader)] ! [spectrum] ! [level]
+    // audioconvert ! [rgvolume ! rglimiter] ! audioconvert ! [F32 ! volume (preamp) ! equalizer]
+    //   ! [volume (fader)] ! [spectrum] ! [level]
     // Meters come after the fader: they show what is heard, blends included.
+    // Bit-perfect: audioconvert ! volume (fader, mute only) ! spectrum ! level, converter
+    // without dither: samples pass unchanged (a format the meters cannot read, like
+    // 24 bit in 32, is widened losslessly). The container for the device: bitPerfectSink.
+    const bool bitPerfect = m_bitPerfect;
+    const bool withRg = !bitPerfect && m_rgMode != 0 && m_rgAvailable;
+    const bool withEq = !bitPerfect && m_out && m_out->chainHasEq();
     GstElement *conv1 = make("audioconvert", nullptr);
     GstElement *conv2 = make("audioconvert", nullptr);
     if (!conv1 || !conv2) {
@@ -209,18 +258,35 @@ GstElement *Player::buildFilterBin(Deck &d, bool withRg)
         gst_object_unref(rg);
         rg = nullptr; // never apply gain without the clipping guard
     }
-    if (withRg && !rg) {
-        gst_object_unref(conv1);
-        gst_object_unref(conv2);
-        return nullptr;
+    GstElement *eqCaps = nullptr, *eqPre = nullptr, *eq = nullptr;
+    if (withEq) {
+        // In float: boosts never clip inside the chain, the preamp makes room.
+        eqCaps = make("capsfilter", nullptr);
+        eqPre = make("volume", nullptr);
+        eq = make("equalizer-10bands", nullptr);
+        if (eqCaps && eqPre && eq) {
+            GstCaps *caps = gst_caps_new_simple("audio/x-raw", "format", G_TYPE_STRING, GST_AUDIO_NE(F32), nullptr);
+            g_object_set(eqCaps, "caps", caps, nullptr);
+            gst_caps_unref(caps);
+        } else {
+            for (GstElement *e : {eqCaps, eqPre, eq})
+                if (e)
+                    gst_object_unref(e);
+            eqCaps = eqPre = eq = nullptr;
+        }
     }
     GstElement *spectrum = make("spectrum", nullptr);
     GstElement *level = make("level", nullptr);
     GstElement *fader = make("volume", nullptr);
+    if (bitPerfect) {
+        gst_object_unref(conv2);
+        conv2 = nullptr;
+        g_object_set(conv1, "dithering", 0, "noise-shaping", 0, nullptr); // none
+    }
 
     GstElement *bin = gst_bin_new(nullptr);
     QVector<GstElement *> chain;
-    for (GstElement *e : {conv1, rg, limiter, conv2, fader, spectrum, level})
+    for (GstElement *e : {conv1, rg, limiter, conv2, eqCaps, eqPre, eq, fader, spectrum, level})
         if (e) {
             chain << e;
             gst_bin_add(GST_BIN(bin), e);
@@ -247,47 +313,72 @@ GstElement *Player::buildFilterBin(Deck &d, bool withRg)
                      "post-messages", FALSE, "message-magnitude", TRUE, nullptr);
     if (level)
         g_object_set(level, "interval", interval, "post-messages", FALSE, "peak-ttl", guint64(300 * GST_MSECOND), nullptr);
-    GstControlSource *ctl = nullptr;
     if (fader) {
-        ctl = gst_interpolation_control_source_new();
-        g_object_set(ctl, "mode", GST_INTERPOLATION_MODE_LINEAR, nullptr);
+        d.ctl = gst_interpolation_control_source_new();
+        g_object_set(d.ctl, "mode", GST_INTERPOLATION_MODE_LINEAR, nullptr);
     }
-    if (withRg) {
-        d.rgRg = rg;
-        d.spectrumRg = spectrum;
-        d.levelRg = level;
-        d.faderRg = fader;
-        d.ctlRg = ctl;
-    } else {
-        d.spectrumPlain = spectrum;
-        d.levelPlain = level;
-        d.faderPlain = fader;
-        d.ctlPlain = ctl;
-    }
+    d.rg = rg;
+    d.eq = eq;
+    d.eqPre = eqPre;
+    d.spectrum = spectrum;
+    d.level = level;
+    d.fader = fader;
     gst_object_ref_sink(bin); // we own it; playbin takes its own reference
     return bin;
 }
 
-void Player::selectFilterBin(Deck &d)
+void Player::freeChain(Deck &d)
+{
+    if (d.ctl)
+        gst_object_unref(d.ctl);
+    if (d.bin)
+        gst_object_unref(d.bin);
+    d.bin = d.spectrum = d.level = d.fader = d.rg = d.eq = d.eqPre = nullptr;
+    d.ctl = nullptr;
+    d.controlled = false;
+}
+
+void Player::configureDeck(Deck &d)
 {
     if (!d.playbin)
         return;
-    const bool useRg = m_rgMode != 0 && d.binRg;
-    GstElement *bin = useRg ? d.binRg : d.binPlain;
-    if (d.controlled)
-        setFader(d, 1.0); // drop the curve of the chain we leave
-    d.spectrum = useRg ? d.spectrumRg : d.spectrumPlain;
-    d.level = useRg ? d.levelRg : d.levelPlain;
-    d.fader = useRg ? d.faderRg : d.faderPlain;
-    d.ctl = useRg ? d.ctlRg : d.ctlPlain;
-    d.rg = useRg ? d.rgRg : nullptr;
+    GstElement *old = d.bin;
+    GstControlSource *oldCtl = d.ctl;
+    d.bin = d.spectrum = d.level = d.fader = d.rg = d.eq = d.eqPre = nullptr;
+    d.ctl = nullptr;
+    d.controlled = false;
+    d.bin = buildFilterBin(d);
+    g_object_set(d.playbin, "audio-filter", d.bin, nullptr); // drops playbin's hold on the old one
+    if (oldCtl)
+        gst_object_unref(oldCtl);
+    if (old)
+        gst_object_unref(old);
+
+    // The sink: untouched unless a device was chosen (system default = playbin's own choice).
+    GstElement *sink = m_out ? m_out->createSink() : nullptr;
+    if (sink && m_bitPerfect)
+        sink = bitPerfectSink(sink);
+    if (sink || d.customSink)
+        g_object_set(d.playbin, "audio-sink", sink, nullptr);
+    d.customSink = sink != nullptr;
+
+    // Bit-perfect: nothing of playsink between chain and device (no converter,
+    // no resampler, no software volume); bitPerfectSink fits the format.
+    const int flags = m_bitPerfect ? (d.baseFlags | FlagNativeAudio) & ~FlagSoftVolume : d.baseFlags;
+    gint current = 0;
+    g_object_get(d.playbin, "flags", &current, nullptr);
+    if (current != flags)
+        g_object_set(d.playbin, "flags", flags, nullptr);
+    updateMeters(d);
+}
+
+void Player::updateMeters(Deck &d)
+{
     const bool isActive = &d == &m_deck[m_active];
     if (d.spectrum)
         g_object_set(d.spectrum, "post-messages", m_spectrumEnabled && isActive ? TRUE : FALSE, nullptr);
     if (d.level)
         g_object_set(d.level, "post-messages", (m_levelsEnabled && isActive) || lcMix().isDebugEnabled() ? TRUE : FALSE, nullptr);
-    if (bin)
-        g_object_set(d.playbin, "audio-filter", bin, nullptr);
 }
 
 void Player::freeDeck(Deck &d)
@@ -300,13 +391,7 @@ void Player::freeDeck(Deck &d)
         gst_object_unref(d.playbin);
         d.playbin = nullptr;
     }
-    for (GstControlSource *c : {d.ctlRg, d.ctlPlain})
-        if (c)
-            gst_object_unref(c);
-    for (GstElement *b : {d.binRg, d.binPlain})
-        if (b)
-            gst_object_unref(b);
-    d.binRg = d.binPlain = nullptr;
+    freeChain(d);
 }
 
 Player::~Player()
@@ -509,9 +594,17 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
     case GST_MESSAGE_STATE_CHANGED: {
         GstState oldS, newS, pending;
         gst_message_parse_state_changed(msg, &oldS, &newS, &pending);
+        if (m_volumeAfterRebuild && newS >= GST_STATE_PAUSED) {
+            // A new sink with its own volume (PulseAudio) starts at the volume the
+            // server remembers; playsink only takes ours when it changes.
+            m_volumeAfterRebuild = false;
+            applyVolume();
+        }
         if (newS == GST_STATE_PLAYING) {
             m_switching = false;
             setState(1);
+            // GST_DEBUG_DUMP_DOT_DIR=DIR: the whole pipeline as a graph (else does nothing).
+            GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS(GST_BIN(d.playbin), GST_DEBUG_GRAPH_SHOW_ALL, "halcyon-playing");
         } else if (newS == GST_STATE_PAUSED && pending == GST_STATE_VOID_PENDING && !m_switching) {
             setState(2);
         } else if (newS == GST_STATE_PAUSED && pending == GST_STATE_VOID_PENDING && m_switching) {
@@ -532,7 +625,7 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
             const qint64 old = m_duration;
             m_duration = dur / GST_MSECOND;
             emit durationChanged();
-            if (std::llabs(old - m_duration) > 1000 && m_transition != 0)
+            if (std::llabs(old - m_duration) > 1000 && transitionMode() != 0)
                 plan(); // the tags were wrong about the length
         }
         if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ASYNC_DONE && m_pendingSeek >= 0) {
@@ -581,6 +674,12 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         GError *err = nullptr;
         gchar *dbg = nullptr;
         gst_message_parse_error(msg, &err, &dbg);
+        if (handleOutputError(msg, err)) {
+            // Not the track's fault: it plays on with another output.
+            g_clear_error(&err);
+            g_free(dbg);
+            break;
+        }
         if (TrackCache::instance().get(m_playingId).isRemote())
             m_error = tr("Titel vom Jellyfin-Server konnte nicht geladen werden. Ist der Server erreichbar?");
         else
@@ -593,6 +692,12 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         gst_element_set_state(d.playbin, GST_STATE_READY);
         // Skip unreadable files, but never spin through a whole broken queue.
         if (++m_consecutiveErrors < 5 && m_queue->advance()) {
+            if (m_suspectId == m_playingId) {
+                // It failed on the system default too: the decoder was missing, not
+                // the device. The next track goes to the chosen output again.
+                m_suspectId = 0;
+                retryOutput(Resume::None);
+            }
             load(m_queue->currentId(), m_wantPlay);
         } else {
             m_switching = false;
@@ -603,7 +708,11 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
     case GST_MESSAGE_WARNING: {
         GError *err = nullptr;
         gst_message_parse_warning(msg, &err, nullptr);
-        qWarning() << "GStreamer:" << (err ? err->message : "");
+        // Bit-perfect has no volume on purpose; playsink says so on every track.
+        const bool expected = m_bitPerfect && err && err->domain == GST_STREAM_ERROR && err->code == GST_STREAM_ERROR_NOT_IMPLEMENTED
+                              && GST_IS_BIN(GST_MESSAGE_SRC(msg)) && g_str_has_prefix(GST_MESSAGE_SRC_NAME(msg), "playsink");
+        if (!expected)
+            qWarning() << "GStreamer:" << (err ? err->message : "");
         g_clear_error(&err);
         break;
     }
@@ -688,7 +797,7 @@ void Player::setAnalysisHz(int hz)
     m_analysisHz = hz;
     const guint64 interval = guint64(1000 / hz) * GST_MSECOND;
     for (Deck &d : m_deck)
-        for (GstElement *e : {d.spectrumRg, d.spectrumPlain, d.levelRg, d.levelPlain})
+        for (GstElement *e : {d.spectrum, d.level})
             if (e)
                 g_object_set(e, "interval", interval, nullptr);
     emit analysisHzChanged();
@@ -815,7 +924,7 @@ void Player::armNext()
     plan();
     const qint64 next = m_queue->nextId();
     // Gapless hand-over on the playing deck (also used for album runs when blending is on).
-    const bool gapless = next > 0 && (m_transition == 0 || (m_plan.valid && m_plan.gapless));
+    const bool gapless = next > 0 && (transitionMode() == 0 || (m_plan.valid && m_plan.gapless));
     const QByteArray uri = gapless ? uriFor(next) : QByteArray();
     active().gainNext = fallbackGain(next);
     QMutexLocker lock(&m_mutex);
@@ -835,13 +944,14 @@ void Player::plan()
     }
     p.valid = true;
     p.nextId = next;
+    const int mode = transitionMode();
     const TrackRow a = TrackCache::instance().get(cur);
     const TrackRow b = TrackCache::instance().get(next);
     const bool sameAlbum = !a.album.isEmpty() && a.album.compare(b.album, Qt::CaseInsensitive) == 0
                            && a.aa.compare(b.aa, Qt::CaseInsensitive) == 0
                            && ((b.discNo == a.discNo && b.trackNo == a.trackNo + 1) || (b.discNo == a.discNo + 1 && b.trackNo == 1));
-    if (m_transition == 0 || next == cur) {
-        p.reason = m_transition == 0 ? QString() : tr("Lückenlos");
+    if (mode == 0 || next == cur) {
+        p.reason = mode == 0 ? QString() : tr("Lückenlos");
     } else if (m_albumGapless && sameAlbum) {
         p.reason = tr("Lückenlos (Album)");
     } else {
@@ -854,7 +964,7 @@ void Player::plan()
         const qint64 endA = (m_skipSilence && fa.valid && fa.endMs > 0) ? std::min(fa.endMs, durA) : durA;
         const qint64 startB = (m_skipSilence && fb.valid && canSeek(next)) ? fb.startMs : 0;
         qint64 len = base;
-        if (m_transition == 2) {
+        if (mode == 2) {
             const bool naturalOut = fa.valid && endA - fa.outroMs >= 2500;
             const bool naturalIn = fb.valid && fb.introMs - fb.startMs >= 2000;
             bool tempoMatch = false;
@@ -940,7 +1050,7 @@ void Player::prepareNext()
     d.expectAdvance = false;
     ++d.gen;
     gst_element_set_state(d.playbin, GST_STATE_READY);
-    selectFilterBin(d);
+    updateMeters(d);
     d.gainNow = fallbackGain(m_plan.nextId);
     if (d.rg)
         g_object_set(d.rg, "fallback-gain", d.gainNow.load(), nullptr);
@@ -998,12 +1108,8 @@ void Player::startBlend()
     m_tailEndMs = std::max(posA, m_plan.startMs) + m_plan.outMs + 300;
     m_curveOnActive = false;
     m_active = to.index;
-    for (Deck *d : {&from, &to}) {
-        if (d->spectrum)
-            g_object_set(d->spectrum, "post-messages", (m_spectrumEnabled && d == &to) ? TRUE : FALSE, nullptr);
-        if (d->level)
-            g_object_set(d->level, "post-messages", (m_levelsEnabled && d == &to) || lcMix().isDebugEnabled() ? TRUE : FALSE, nullptr);
-    }
+    for (Deck *d : {&from, &to})
+        updateMeters(*d);
     m_handingOver = true;
     m_queue->advance();
     m_handingOver = false;
@@ -1073,7 +1179,7 @@ void Player::setCurve(Deck &d, const QVector<QPair<qint64, double>> &points)
 
 // ---------------------------------------------------------------- loading
 
-bool Player::load(qint64 id, bool startPlaying, qint64 seekMs)
+bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
 {
     Deck &d = active();
     if (!d.playbin || id <= 0)
@@ -1087,7 +1193,7 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs)
     m_switching = true;
     ++d.gen; // whatever the previous stream still has queued is stale now
     gst_element_set_state(d.playbin, GST_STATE_READY);
-    setFader(d, 1.0);
+    setFader(d, unity());
     d.gainNow = fallbackGain(id);
     if (d.rg)
         g_object_set(d.rg, "fallback-gain", d.gainNow.load(), nullptr);
@@ -1095,7 +1201,12 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs)
     d.trackId = id;
     m_wantPlay = startPlaying;
     m_pendingSeek = seekMs > 0 ? seekMs : -1;
-    updateMeta(id);
+    if (sameTrack) {
+        m_lastPollPos = std::max<qint64>(0, seekMs); // listening time goes on
+        armNext();
+    } else {
+        updateMeta(id);
+    }
     m_position = std::max<qint64>(0, seekMs);
     emit positionChanged();
     gst_element_set_state(d.playbin, startPlaying ? GST_STATE_PLAYING : GST_STATE_PAUSED);
@@ -1118,6 +1229,7 @@ void Player::playCurrent(bool interruptIsSkip)
     if (m_state != 0)
         finishTrack(interruptIsSkip);
     m_consecutiveErrors = 0;
+    retryOutput(Resume::None);
     load(m_queue->currentId(), true);
 }
 
@@ -1140,12 +1252,16 @@ void Player::play()
     if (!active().playbin)
         return;
     if (m_state == 2) {
+        if (retryOutput(Resume::Play))
+            return; // continues on the chosen output
         gst_element_set_state(active().playbin, GST_STATE_PLAYING);
         if (m_tail >= 0)
             gst_element_set_state(m_deck[m_tail].playbin, GST_STATE_PLAYING);
     } else if (m_state == 0) {
-        if (m_queue->currentId() > 0)
+        if (m_queue->currentId() > 0) {
+            retryOutput(Resume::None);
             load(m_queue->currentId(), true);
+        }
     }
 }
 
@@ -1174,10 +1290,13 @@ void Player::stop()
 
 void Player::next()
 {
+    const bool paused = m_state == 2;
     if (m_state != 0)
         finishTrack(true);
-    if (m_queue->advance())
-        load(m_queue->currentId(), m_state != 2);
+    if (m_queue->advance()) {
+        retryOutput(Resume::None);
+        load(m_queue->currentId(), !paused);
+    }
 }
 
 void Player::previous()
@@ -1187,10 +1306,13 @@ void Player::previous()
         seek(0);
         return;
     }
+    const bool paused = m_state == 2;
     if (m_state != 0)
         finishTrack(true);
-    if (m_queue->back())
-        load(m_queue->currentId(), m_state != 2);
+    if (m_queue->back()) {
+        retryOutput(Resume::None);
+        load(m_queue->currentId(), !paused);
+    }
 }
 
 void Player::seek(qint64 ms)
@@ -1281,6 +1403,10 @@ void Player::setVolume(double v)
         return;
     m_volume = v;
     applyVolume();
+    if (m_bitPerfect && !m_volumeHinted && m_out) {
+        m_volumeHinted = true;
+        m_out->volumeIgnored();
+    }
     emit volumeChanged();
 }
 
@@ -1297,9 +1423,17 @@ void Player::applyVolume()
 {
     // Cubic curve: the slider feels linear to the ear.
     const double linear = m_muted ? 0.0 : m_volume * m_volume * m_volume;
-    for (Deck &d : m_deck)
-        if (d.playbin)
+    for (Deck &d : m_deck) {
+        if (!d.playbin)
+            continue;
+        if (m_bitPerfect) {
+            // No software volume: the amplifier or DAC sets the level; mute on the fader.
+            if (!d.controlled)
+                setFader(d, unity());
+        } else {
             g_object_set(d.playbin, "volume", linear, nullptr);
+        }
+    }
 }
 
 void Player::setReplayGain(int mode)
@@ -1307,27 +1441,11 @@ void Player::setReplayGain(int mode)
     mode = std::clamp(mode, 0, 2);
     if (mode == m_rgMode)
         return;
-    const bool chainChanges = (mode == 0) != (m_rgMode == 0);
+    const bool chainChanges = (mode == 0) != (m_rgMode == 0) && m_rgAvailable && !m_bitPerfect;
     m_rgMode = mode;
     applyReplayGain();
-    if (chainChanges && active().playbin) {
-        // Swap the filter chain: needs a stopped pipeline, then resume where we were.
-        const int wasState = m_state;
-        const qint64 pos = m_position;
-        const qint64 id = m_playingId;
-        stopTail();
-        cancelPrepared();
-        m_switching = true;
-        for (Deck &d : m_deck)
-            if (d.playbin) {
-                gst_element_set_state(d.playbin, GST_STATE_NULL);
-                selectFilterBin(d);
-            }
-        if (wasState != 0 && id > 0)
-            load(id, wasState == 1, pos);
-        else
-            m_switching = false;
-    }
+    if (chainChanges)
+        rebuildChains(); // with or without rgvolume
     emit settingsChanged();
 }
 
@@ -1344,8 +1462,135 @@ void Player::setPreamp(double db)
 void Player::applyReplayGain()
 {
     for (Deck &d : m_deck)
-        if (d.rgRg)
-            g_object_set(d.rgRg, "album-mode", m_rgMode == 2 ? TRUE : FALSE, "pre-amp", m_preamp, "headroom", 0.0, nullptr);
+        if (d.rg)
+            g_object_set(d.rg, "album-mode", m_rgMode == 2 ? TRUE : FALSE, "pre-amp", m_preamp, "headroom", 0.0, nullptr);
+}
+
+void Player::applyEq()
+{
+    if (!m_out)
+        return;
+    const double pre = std::pow(10.0, m_out->eqEffectivePreamp() / 20.0);
+    for (Deck &d : m_deck) {
+        if (d.eqPre)
+            g_object_set(d.eqPre, "volume", pre, nullptr);
+        if (d.eq)
+            for (int i = 0; i < AudioOutput::Bands; ++i)
+                g_object_set(d.eq, QByteArray("band" + QByteArray::number(i)).constData(), m_out->bandGain(i), nullptr);
+    }
+}
+
+void Player::rebuildChains(Resume how)
+{
+    if (!active().playbin)
+        return;
+    // Where we are: after the rebuild the same track continues at the same spot
+    // (also a track that is just loading, e.g. when its device failed).
+    const qint64 id = m_playingId, pos = m_position;
+    const bool resume = how != Resume::None && id > 0 && (m_state != 0 || m_switching);
+    const bool play = how == Resume::Play || (m_switching ? m_wantPlay : m_state == 1);
+    stopTail();
+    cancelPrepared();
+    m_switching = true;
+    m_bitPerfect = m_out && m_out->bitPerfectActive();
+    for (Deck &d : m_deck)
+        if (d.playbin) {
+            gst_element_set_state(d.playbin, GST_STATE_NULL);
+            ++d.gen; // its last state messages belong to the old chain
+            d.expectAdvance = false;
+            configureDeck(d);
+        }
+    applyVolume();
+    m_volumeAfterRebuild = true;
+    applyReplayGain();
+    applyEq();
+    qCDebug(lcMix) << "chains rebuilt" << (m_bitPerfect ? "(bit-perfect)" : "") << "resume" << resume << play << pos;
+    if (!resume || !load(id, play, pos, true)) {
+        m_switching = false;
+        if (m_state != 0)
+            setState(0);
+        armNext();
+    }
+    emit settingsChanged(); // bitPerfect, and with it the transitions in use
+    emit planChanged();
+}
+
+// The chosen output failed. Returns true when it was handled (other output, same track).
+bool Player::handleOutputError(GstMessage *msg, const GError *err)
+{
+    if (!m_out || !m_out->customSink() || !err)
+        return false;
+    GstObject *src = GST_MESSAGE_SRC(msg);
+    const bool fromSink = src && GST_IS_ELEMENT(src) && !GST_IS_BIN(src) && GST_OBJECT_FLAG_IS_SET(src, GST_ELEMENT_FLAG_SINK);
+    // A sound-server device that is gone (headphones unplugged) opens fine but
+    // takes no format: playbin then finds "no decoder". If the decoder is really
+    // missing, the system default fails the same way and the track is skipped.
+    const bool noDecoder = (err->domain == GST_CORE_ERROR && err->code == GST_CORE_ERROR_MISSING_PLUGIN)
+                           || (err->domain == GST_STREAM_ERROR && err->code == GST_STREAM_ERROR_CODEC_NOT_FOUND);
+    if (!fromSink && !noDecoder)
+        return false;
+    const bool busy = err->domain == GST_RESOURCE_ERROR && err->code == GST_RESOURCE_ERROR_BUSY;
+    if (!m_out->outputFailed(busy))
+        return false;
+    m_suspectId = noDecoder && !fromSink ? m_playingId : 0;
+    qWarning() << "Ausgabe nicht nutzbar:" << err->message << "– weiter über den Systemstandard";
+    rebuildChains();
+    return true;
+}
+
+bool Player::retryOutput(Resume how)
+{
+    if (!m_out || !m_out->retryChosen())
+        return false;
+    rebuildChains(how);
+    return true;
+}
+
+QVariantMap Player::signalPath() const
+{
+    QVariantMap out;
+    const Deck &d = m_deck[m_active];
+    if (!d.playbin || !d.bin || m_state == 0)
+        return out;
+    auto padCaps = [](GstElement *e, const char *pad) -> GstCaps * {
+        GstPad *p = e ? gst_element_get_static_pad(e, pad) : nullptr;
+        GstCaps *c = p ? gst_pad_get_current_caps(p) : nullptr;
+        if (p)
+            gst_object_unref(p);
+        return c;
+    };
+    GstCaps *in = padCaps(d.bin, "sink");
+    // What the device (or the sound server) gets: the input of the real sink
+    // (inside a bin: autoaudiosink, bit-perfect), else the chain's output.
+    GstElement *sink = nullptr;
+    g_object_get(d.playbin, "audio-sink", &sink, nullptr);
+    while (sink && GST_IS_BIN(sink)) {
+        GstIterator *it = gst_bin_iterate_sinks(GST_BIN(sink));
+        GValue v = G_VALUE_INIT;
+        GstElement *inner = nullptr;
+        if (gst_iterator_next(it, &v) == GST_ITERATOR_OK) {
+            inner = GST_ELEMENT(g_value_get_object(&v));
+            gst_object_ref(inner);
+            g_value_unset(&v);
+        }
+        gst_iterator_free(it);
+        gst_object_unref(sink);
+        sink = inner;
+    }
+    GstCaps *outCaps = sink ? padCaps(sink, "sink") : nullptr;
+    if (!outCaps)
+        outCaps = padCaps(d.bin, "src");
+    out.insert(QStringLiteral("input"), AudioOutput::describeCaps(in));
+    out.insert(QStringLiteral("output"), AudioOutput::describeCaps(outCaps));
+    out.insert(QStringLiteral("exact"), m_bitPerfect && AudioOutput::sameSignal(in, outCaps));
+    out.insert(QStringLiteral("lossy"), AudioOutput::floatSamples(in)); // lossy decoders give floats
+    if (in)
+        gst_caps_unref(in);
+    if (outCaps)
+        gst_caps_unref(outCaps);
+    if (sink)
+        gst_object_unref(sink);
+    return out;
 }
 
 void Player::setSpectrumEnabled(bool on)

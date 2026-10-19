@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 1.0.0 LANGUAGES CXX)
+project(Halcyon VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Qml Concurrent DBus Svg ShaderTools Network)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.18 gstreamer-controller-1.0>=1.18)
+pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.18 gstreamer-audio-1.0>=1.18 gstreamer-controller-1.0>=1.18)
 pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.11)
 pkg_check_modules(SQLITE REQUIRED IMPORTED_TARGET sqlite3>=3.35)
 
@@ -34,6 +34,7 @@ add_executable(halcyon
   src/library/ViewRegistry.h   src/library/ViewRegistry.cpp
   src/player/PlayQueue.h       src/player/PlayQueue.cpp
   src/player/Player.h          src/player/Player.cpp
+  src/player/AudioOutput.h     src/player/AudioOutput.cpp
   src/analysis/Fft.h
   src/analysis/AudioAnalyzer.h src/analysis/AudioAnalyzer.cpp
   src/analysis/AnalysisService.h src/analysis/AnalysisService.cpp

@@ -25,9 +25,13 @@
 #
 # The --ui-test actions are listed in qml/Main.qml (uiTestTimer): playall, play,
 # row=N, radio=ID, seek=MS, pauseat=/playat=/nextat=MS, queue, now-playing,
-# album, theme-tab, mix-tab, jellyfin-tab, jf-login=URL, jf-quick, cycle,
-# cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay, search,
-# mkpl, plopen=N, pledit, plnew, plsel.
+# album, theme-tab, mix-tab, klang-tab, jellyfin-tab, jf-login=URL, jf-quick,
+# cycle, cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay,
+# search, mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS.
+#
+# Audio tests: HALCYON_TEST_SINK="filesink location=/tmp/x.raw" replaces the
+# output device (any GStreamer sink description), GST_DEBUG_DUMP_DOT_DIR=DIR
+# writes the pipeline as a graph when playback starts.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PROFIL=${PROFIL:-test}

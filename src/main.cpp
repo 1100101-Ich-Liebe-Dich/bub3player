@@ -12,6 +12,7 @@
 #include <QSettings>
 #include "library/QueryBuilder.h"
 #include "library/TrackListModel.h"
+#include "player/AudioOutput.h"
 #include "player/Mpris.h"
 #include "player/PlayQueue.h"
 #include "ui/Memory.h"
@@ -220,11 +221,13 @@ int main(int argc, char *argv[])
 
     AnalysisService analysis;
     PlayQueue queue;
-    Player player(&queue);
+    AudioOutput audio;
+    Player player(&queue, &audio);
     Library library(&player, &queue);
     PlaylistStore playlists(&queue);
     QObject::connect(&playlists, &PlaylistStore::playlistsChanged, &library, &Library::reloadViews);
     QObject::connect(&playlists, &PlaylistStore::message, &library, &Library::message);
+    QObject::connect(&audio, &AudioOutput::message, &library, &Library::message);
     library.reloadViews();
     Theme theme;
     Memory memory;
@@ -267,6 +270,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Analysis", &analysis);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Recommend", &recommender);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Playlists", &playlists);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Audio", &audio);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
@@ -288,7 +292,7 @@ int main(int argc, char *argv[])
     player.restoreSession();
 
     if (parser.isSet(QStringLiteral("add-folder")))
-        library.addRoot(parser.value(QStringLiteral("add-folder")));
+        library.addRoot(QDir(parser.value(QStringLiteral("add-folder"))).absolutePath());
     else
         QTimer::singleShot(800, &library, [&library, scan = !parser.isSet(QStringLiteral("no-scan"))] { library.startupScan(scan); });
 

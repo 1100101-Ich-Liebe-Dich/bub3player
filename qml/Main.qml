@@ -224,6 +224,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+J"; onActivated: window.queueOpen = !window.queueOpen }
     Shortcut { sequence: "Ctrl+L"; onActivated: window.nowPlayingOpen = !window.nowPlayingOpen }
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
+    Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
     Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
     Shortcut { sequence: StandardKey.Quit; onActivated: Qt.quit() }
     Shortcut { sequence: "Alt+Left"; enabled: !!window.stack && window.stack.depth > 1; onActivated: window.stack.pop() }
@@ -274,7 +275,8 @@ ApplicationWindow {
     }
 
     // Scripted states for automated screenshots (--ui-test).
-    // "pauseat=MS playat=MS nextat=MS": player actions at fixed times (transition tests)
+    // "pauseat=MS playat=MS nextat=MS": player actions at fixed times (transition tests),
+    // "eqonat=MS eqoffat=MS bassat=MS": equalizer on, off, preset "Mehr Bass" (chain rebuild tests)
     Component {
         id: actTimer
         Timer {
@@ -284,6 +286,9 @@ ApplicationWindow {
                 if (act === "pause") Player.pause()
                 else if (act === "play") Player.play()
                 else if (act === "next") Player.next()
+                else if (act === "eqon") Audio.eqEnabled = true
+                else if (act === "eqoff") Audio.eqEnabled = false
+                else if (act === "bass") Audio.applyPreset("Mehr Bass")
                 destroy()
             }
         }
@@ -347,7 +352,7 @@ ApplicationWindow {
                 Library.playSpec({ sort: "album" }, false)
             else if (a.indexOf("play") >= 0)
                 Library.playSpec({ sort: "album", filters: [{ field: "bits", op: "ge", value: 24 }] }, false)
-            var acts = ["pause", "play", "next"]
+            var acts = ["pause", "play", "next", "eqon", "eqoff", "bass"]
             for (var ai = 0; ai < acts.length; ++ai) {
                 var re = new RegExp(acts[ai] + "at=(\\d+)", "g"), mm
                 while ((mm = re.exec(a)) !== null)
@@ -363,7 +368,8 @@ ApplicationWindow {
                 stack.currentItem.openFirst()
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
             if (a.indexOf("mix-tab") >= 0) window.openSettings(2)
-            if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(3)
+            if (a.indexOf("klang-tab") >= 0) window.openSettings(3)
+            if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(4)
             var sk = a.match(/seek=(\d+)/)
             if (sk) seekTimer.to = Number(sk[1]), seekTimer.start()
             var jl = a.match(/jf-login=([^ ]+)/)

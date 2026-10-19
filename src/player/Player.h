@@ -14,7 +14,9 @@ typedef struct _GstElement GstElement;
 typedef struct _GstMessage GstMessage;
 typedef struct _GstBus GstBus;
 typedef struct _GstControlSource GstControlSource;
+typedef struct _GError GError;
 
+class AudioOutput;
 class PlayQueue;
 
 // GStreamer playback on two decks (two playbins). One deck plays; the other
@@ -34,6 +36,12 @@ class PlayQueue;
 // ReplayGain tags get their gain from the analysed loudness (else -6 dB).
 // Every optional element is probed first: a missing plugin disables a
 // feature, it never breaks playback.
+//
+// Output and equalizer come from AudioOutput. Each deck has one filter chain,
+// built from the settings; ReplayGain on/off, equalizer on/off, another
+// device or bit-perfect rebuild it (short stop, then on at the same spot).
+// Without a chosen device and without equalizer the pipeline is exactly the
+// one of 1.0: no sink set, no extra element.
 class Player : public QObject
 {
     Q_OBJECT
@@ -84,9 +92,11 @@ class Player : public QObject
     Q_PROPERTY(bool loudnessMatch READ loudnessMatch WRITE setLoudnessMatch NOTIFY settingsChanged)
     Q_PROPERTY(bool blending READ blending NOTIFY blendingChanged)           // a transition is audible right now
     Q_PROPERTY(QString nextTransition READ nextTransition NOTIFY planChanged) // "Überblenden, 6 s" / "Lückenlos (Album)"
+    // The chain runs bit-perfect right now: no volume, ReplayGain, equalizer or blends.
+    Q_PROPERTY(bool bitPerfect READ bitPerfect NOTIFY settingsChanged)
 
 public:
-    explicit Player(PlayQueue *queue, QObject *parent = nullptr);
+    Player(PlayQueue *queue, AudioOutput *output, QObject *parent = nullptr);
     ~Player() override;
 
     int state() const { return m_state; }
@@ -112,13 +122,13 @@ public:
     bool spectrumEnabled() const { return m_spectrumEnabled; }
     void setSpectrumEnabled(bool on);
     QVariantList spectrum() const { return m_spectrumOut; }
-    bool spectrumAvailable() const { return m_deck[0].spectrumRg || m_deck[0].spectrumPlain; }
-    bool replayGainAvailable() const { return m_deck[0].rgRg != nullptr; }
+    bool spectrumAvailable() const { return m_spectrumAvailable; }
+    bool replayGainAvailable() const { return m_rgAvailable; }
     QString error() const { return m_error; }
     QVariantList coverPalette() const { return m_coverPalette; }
     bool levelsEnabled() const { return m_levelsEnabled; }
     void setLevelsEnabled(bool on);
-    bool levelsAvailable() const { return m_deck[0].levelRg || m_deck[0].levelPlain; }
+    bool levelsAvailable() const { return m_levelsAvailable; }
     double levelL() const { return m_levelL; }
     double levelR() const { return m_levelR; }
     double peakL() const { return m_peakL; }
@@ -145,6 +155,11 @@ public:
     void setLoudnessMatch(bool on);
     bool blending() const { return m_tail >= 0; }
     QString nextTransition() const;
+    bool bitPerfect() const { return m_bitPerfect; }
+
+    // What reaches the chain and what leaves for the device, for the settings:
+    // {input, output, exact} – "16 bit · 44,1 kHz · Stereo"; exact: unchanged samples.
+    Q_INVOKABLE QVariantMap signalPath() const;
 
     // interruptIsSkip: the track playing now counts as skipped (not when a radio starts from it)
     Q_INVOKABLE void playCurrent(bool interruptIsSkip = true);
@@ -196,14 +211,12 @@ public:
         Player *owner = nullptr;
         int index = 0;
         GstElement *playbin = nullptr;
-        GstElement *binRg = nullptr, *binPlain = nullptr;
-        GstElement *rgRg = nullptr;                          // rgvolume (ReplayGain chain only)
-        GstElement *spectrumRg = nullptr, *spectrumPlain = nullptr;
-        GstElement *levelRg = nullptr, *levelPlain = nullptr;
-        GstElement *faderRg = nullptr, *faderPlain = nullptr;
-        GstControlSource *ctlRg = nullptr, *ctlPlain = nullptr;
-        // the chain in use
+        int baseFlags = 0;                                   // playbin flags of the normal chain
+        bool customSink = false;                             // "audio-sink" was set by us
+        // the filter chain (rebuilt when the settings change it)
+        GstElement *bin = nullptr;
         GstElement *spectrum = nullptr, *level = nullptr, *fader = nullptr, *rg = nullptr;
+        GstElement *eq = nullptr, *eqPre = nullptr;          // equalizer and its preamp (only while on)
         GstControlSource *ctl = nullptr;
         bool controlled = false;                             // fader follows a curve right now
         std::atomic<int> gen{0};                             // bumped on errors: later errors of the same stream are stale
@@ -235,12 +248,24 @@ private:
 
     bool initDeck(Deck &d, int index);
     void freeDeck(Deck &d);
-    GstElement *buildFilterBin(Deck &d, bool withRg);
-    void selectFilterBin(Deck &d);
+    void freeChain(Deck &d);
+    GstElement *buildFilterBin(Deck &d);
+    void configureDeck(Deck &d);   // chain, sink and flags from the settings (deck stopped)
+    void updateMeters(Deck &d);    // only the playing deck posts spectrum/level
+    enum class Resume { Keep, Play, None };
+    // Stop, configure both decks, then (Keep) continue where we were, (Play)
+    // the same but playing, (None) stay stopped – a load follows.
+    void rebuildChains(Resume resume = Resume::Keep);
+    bool retryOutput(Resume how);  // the listener starts something: try the chosen output again
+    bool handleOutputError(GstMessage *msg, const GError *err);
+    void applyEq();
+    int transitionMode() const { return m_bitPerfect ? 0 : m_transition; }
+    double unity() const { return m_bitPerfect && m_muted ? 0.0 : 1.0; } // fader at rest (bit-perfect mutes here)
     Deck &active() { return m_deck[m_active]; }
     Deck &other() { return m_deck[1 - m_active]; }
 
-    bool load(qint64 id, bool startPlaying, qint64 seekMs = 0);
+    // sameTrack: the playing track again after a rebuild (no new track for listeners)
+    bool load(qint64 id, bool startPlaying, qint64 seekMs = 0, bool sameTrack = false);
     void setState(int s);
     void updateMeta(qint64 id);
     void updateTrackInfo();
@@ -264,7 +289,13 @@ private:
     bool canSeek(qint64 id) const;
 
     PlayQueue *m_queue;
+    AudioOutput *m_out;
     Deck m_deck[2];
+    bool m_rgAvailable = false, m_spectrumAvailable = false, m_levelsAvailable = false;
+    bool m_bitPerfect = false;     // the chains were built bit-perfect
+    bool m_volumeHinted = false;
+    bool m_volumeAfterRebuild = false; // set the volume again once the new chain runs
+    qint64 m_suspectId = 0;            // fell back for "no decoder": maybe the track, not the device
     std::atomic<int> m_active{0};
     int m_tail = -1;               // deck fading out, -1 none
     qint64 m_tailEndMs = 0;        // ... until this position
@@ -296,8 +327,8 @@ private:
     double m_preamp = 0.0;
     bool m_spectrumEnabled = false;
     int m_consecutiveErrors = 0;
-    bool m_wantPlay = false;
-    bool m_handingOver = false;    // startBlend: queue already advanced, track info not yet       // the last load was meant to play (not a paused restore)
+    bool m_wantPlay = false;       // the last load was meant to play (not a paused restore)
+    bool m_handingOver = false;    // startBlend: queue already advanced, track info not yet
 
     int m_transition = 0;
     int m_fadeSec = 6;

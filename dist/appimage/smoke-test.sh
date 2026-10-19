@@ -27,6 +27,16 @@ for skin in klassik soft glas aurora vintage synthwave tower terminal; do
         --ui-test "mkpl plopen=1 pledit" --screenshot "$out/$skin.png" --screenshot-delay 4500 >> start.txt 2>&1
     [ -s "$out/$skin.png" ] || { echo "FEHLER: Theme $skin startet nicht"; fail=1; }
 done
+echo "== Klang: Wiedergabe mit Equalizer"
+mkdir -p musik && cp ton.wav musik/
+xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --add-folder "$dir/musik" \
+    --ui-test "playall klang-tab eqonat=1500" --screenshot "$out/klang.png" --screenshot-delay 4500 >> start.txt 2>&1
+[ -s "$out/klang.png" ] || { echo "FEHLER: Klang-Seite startet nicht"; fail=1; }
+if grep -q "GStreamer-Element fehlt" start.txt; then
+    grep "GStreamer-Element fehlt" start.txt | sort -u
+    echo "::warning title=GStreamer::$(grep "GStreamer-Element fehlt" start.txt | sort -u | tr '\n' ' ')"
+    fail=1
+fi
 # QML problems (e.g. with another Qt version than the one it was written with)
 qml=$(grep -E "qrc:/|QML|ReferenceError|TypeError" start.txt | sort | uniq -c | sort -rn | head -40)
 if [ -n "$qml" ]; then
