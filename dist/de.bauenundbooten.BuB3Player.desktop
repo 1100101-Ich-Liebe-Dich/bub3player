@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=BuB3Player
+GenericName=Musikplayer
+GenericName[en]=Music Player
+Comment=Musikplayer für riesige Bibliotheken und Jellyfin
+Comment[en]=Music player for huge libraries and Jellyfin
+Exec=halcyon %U
+Icon=de.bauenundbooten.BuB3Player
+Terminal=false
+Categories=AudioVideo;Audio;Player;Qt;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;audio/x-wav;audio/x-aiff;audio/x-ape;audio/x-wavpack;audio/x-ms-wma;audio/x-mpegurl;
+Keywords=music;player;jellyfin;flac;automix;playlist;musik;
+StartupWMClass=halcyon
+X-GNOME-UsesNotifications=false

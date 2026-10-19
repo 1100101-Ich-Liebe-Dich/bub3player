@@ -278,18 +278,30 @@ Jahrzehnt, Tempo, Tonart und Energie.
 
 ### 📝 Playlists und Smart-Playlists
 
-- **Playlists** anlegen, per Drag & Drop füllen und sortieren, aus jeder Liste und jedem
-  Rechtsklick-Menü heraus ergänzen.
+- **Playlists** anlegen und aus jeder Liste und jedem Rechtsklick-Menü heraus ergänzen – einzelne
+  Titel, eine Auswahl (Strg/Umschalt + Klick), ganze Alben, Künstler, Ordner oder die Warteschlange.
+  Die Reihenfolge änderst du per Drag & Drop.
+- **Nichts fällt heraus**: Ist ein Titel gerade nicht da (Laufwerk abgezogen, Datei verschoben,
+  Server aus), bleibt er in der Playlist und wird von selbst wieder verknüpft, sobald er auftaucht.
 - **Smart-Playlists** aus Regeln, die sich von selbst aktuell halten: alle Felder der Bibliothek
   sind erlaubt, auch **Tempo, Tonart und Energie** – zum Beispiel *„Hi-Res, 120–130 BPM, lange
   nicht gehört, höchstens 50 Titel, zufällig“*.
-- **Import und Export** als M3U/M3U8 – deine Listen aus anderen Playern kommen mit.
+- **Import und Export** als M3U/M3U8 – deine Listen aus anderen Playern kommen mit, auch mit
+  relativen Pfaden für den USB-Stick.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/playlists.jpg" alt="Playlist mit Mehrfachauswahl und Menü „Zur Playlist hinzufügen“"></td>
+<td width="50%"><img src="docs/images/smart-playlist.jpg" alt="Smart-Playlist-Editor mit Live-Zählung"></td>
+</tr>
+</table>
 
 ### 👀 Ordnerüberwachung
 
 Neue, geänderte, verschobene und gelöschte Dateien erscheinen **nach wenigen Sekunden** in der
-Bibliothek – ohne Neu-Scan, ohne Knopfdruck. Für Netzlaufwerke, die keine Änderungen melden,
-prüft der Player in Abständen nach. Auch hier gilt: Ein ausgehängtes Laufwerk löscht nichts.
+Bibliothek – ohne Neu-Scan, ohne Knopfdruck. Gelesen wird nur der Ordner, in dem sich etwas getan
+hat. Ein wieder eingestecktes Laufwerk wird sofort eingelesen, Netzlaufwerke prüft der Player in
+Abständen. Auch hier gilt: Ein ausgehängtes Laufwerk löscht nichts.
 
 ### 🎚️ Klang
 
@@ -339,6 +351,8 @@ prüft der Player in Abständen nach. Auch hier gilt: Ein ausgehängtes Laufwerk
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
 | `Strg + T` | Theme wechseln |
+| `Strg + A` | Alle Titel der Liste markieren |
+| `Strg + Klick` / `Umschalt + Klick` | Mehrere Titel markieren |
 | `Alt + ←` | Zurück |
 | `Strg + Q` | Beenden |
 
@@ -360,7 +374,8 @@ chmod +x BuB3Player-x86_64.AppImage
 ./BuB3Player-x86_64.AppImage
 ```
 
-Läuft auf jeder aktuellen x86-64-Distribution, ohne Installation und ohne Root-Rechte.
+Läuft ohne Installation und ohne Root-Rechte auf jeder x86-64-Distribution ab Ubuntu 22.04,
+Debian 12, Fedora 36 oder Linux Mint 21 – Arch, Manjaro und Co. sowieso.
 Beim ersten Start auf **„Musikordner hinzufügen“** klicken – die ersten Titel erscheinen schon
 während des Scans.
 

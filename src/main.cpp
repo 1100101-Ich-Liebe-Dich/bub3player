@@ -8,6 +8,7 @@
 #include "library/GroupModel.h"
 #include "jellyfin/Jellyfin.h"
 #include "library/Library.h"
+#include "library/PlaylistStore.h"
 #include <QSettings>
 #include "library/QueryBuilder.h"
 #include "library/TrackListModel.h"
@@ -177,8 +178,9 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("halcyon"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("BuB3Player"));
     QGuiApplication::setApplicationVersion(QStringLiteral(HALCYON_VERSION));
-    QGuiApplication::setDesktopFileName(QStringLiteral("halcyon"));
-    QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("audio-x-generic")));
+    QGuiApplication::setDesktopFileName(QStringLiteral("de.bauenundbooten.BuB3Player"));
+    QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("de.bauenundbooten.BuB3Player"),
+                                                    QIcon(QStringLiteral(":/icons/de.bauenundbooten.BuB3Player.svg"))));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("BuB3Player – Musikplayer für große Bibliotheken. Projekt präsentiert von www.BAUENUNDBOOTEN.de"));
@@ -186,7 +188,7 @@ int main(int argc, char *argv[])
     parser.addOption({QStringLiteral("db"), QStringLiteral("Andere Datenbankdatei verwenden."), QStringLiteral("file")});
     parser.addOption({QStringLiteral("add-folder"), QStringLiteral("Musikordner zur Bibliothek hinzufügen."), QStringLiteral("dir")});
     parser.addOption({QStringLiteral("view"), QStringLiteral("Mit dieser Ansicht starten (z. B. albums)."), QStringLiteral("id")});
-    parser.addOption({QStringLiteral("skin"), QStringLiteral("Theme wählen: klassik, aurora, synthwave, studio."), QStringLiteral("id")});
+    parser.addOption({QStringLiteral("skin"), QStringLiteral("Theme wählen: klassik, soft, glas, aurora, vintage, synthwave, tower, terminal."), QStringLiteral("id")});
     parser.addOption({QStringLiteral("theme"), QStringLiteral("Farbschema des Themes wählen (z. B. tiefsee)."), QStringLiteral("id")});
     parser.addOption({QStringLiteral("skin-opt"), QStringLiteral("Theme-Einstellung setzen, z. B. material=carbon (mehrfach möglich)."), QStringLiteral("key=value")});
     parser.addOption({QStringLiteral("no-scan"), QStringLiteral("Beim Start nicht nach Änderungen suchen.")});
@@ -220,6 +222,10 @@ int main(int argc, char *argv[])
     PlayQueue queue;
     Player player(&queue);
     Library library(&player, &queue);
+    PlaylistStore playlists(&queue);
+    QObject::connect(&playlists, &PlaylistStore::playlistsChanged, &library, &Library::reloadViews);
+    QObject::connect(&playlists, &PlaylistStore::message, &library, &Library::message);
+    library.reloadViews();
     Theme theme;
     Memory memory;
     analysis.setScanner(library.scanner());
@@ -260,6 +266,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Jellyfin", &jellyfin);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Analysis", &analysis);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Recommend", &recommender);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Playlists", &playlists);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
@@ -282,8 +289,8 @@ int main(int argc, char *argv[])
 
     if (parser.isSet(QStringLiteral("add-folder")))
         library.addRoot(parser.value(QStringLiteral("add-folder")));
-    else if (!parser.isSet(QStringLiteral("no-scan")))
-        QTimer::singleShot(800, &library, &Library::startupScan);
+    else
+        QTimer::singleShot(800, &library, [&library, scan = !parser.isSet(QStringLiteral("no-scan"))] { library.startupScan(scan); });
 
     if (parser.isSet(QStringLiteral("screenshot")) && window) {
         const QString file = parser.value(QStringLiteral("screenshot"));

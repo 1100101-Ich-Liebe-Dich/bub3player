@@ -16,6 +16,11 @@
 //                  (kind to spinning disks), with a small thread pool. Resumable: if
 //                  the app quits mid-scan, the next run continues where it stopped.
 // Safety:          a library folder that is missing (unmounted disk) is never pruned.
+//
+// Besides the full scan there are two smaller ones, both "in the background"
+// (no progress bar): a subset of the roots (network shares checked from time
+// to time, a drive that came back) and single folders reported by the folder
+// watcher (their files, plus new subfolders as a whole).
 class Scanner : public QObject
 {
     Q_OBJECT
@@ -26,9 +31,11 @@ class Scanner : public QObject
     Q_PROPERTY(qint64 tagsDone READ tagsDone NOTIFY progressChanged)
     Q_PROPERTY(qint64 tagsTotal READ tagsTotal NOTIFY progressChanged)
     Q_PROPERTY(QString summary READ summary NOTIFY runningChanged)
+    Q_PROPERTY(bool background READ background NOTIFY runningChanged) // small automatic scan: no progress bar
 
 public:
     enum Phase { Idle = 0, Walking = 1, Tagging = 2, Indexing = 3 };
+    enum Mode { Full = 0, Subset = 1, Folders = 2 };
 
     struct Stats
     {
@@ -36,7 +43,10 @@ public:
         qint64 tagged = 0, failed = 0;
         double walkSec = 0, tagSec = 0, indexSec = 0, totalSec = 0;
         bool cancelled = false;
+        int mode = Full;
         QStringList missingRoots;
+        QStringList scanned;    // Subset: the roots, Folders: the folders
+        QStringList newFolders; // folders that appeared (top of each new subtree)
     };
 
     explicit Scanner(QObject *parent = nullptr);
@@ -44,6 +54,10 @@ public:
 
     // threads = 0: auto (fewer on spinning disks)
     Q_INVOKABLE void start(const QStringList &roots, int threads = 0);
+    // Only these roots (all of them must be library roots); prunes only inside them.
+    void startSubset(const QStringList &roots, int threads = 0);
+    // Only these folders (inside `roots`): their files, gone and new subfolders.
+    void startFolders(const QStringList &roots, const QStringList &folders);
     Q_INVOKABLE void cancel();
 
     // Synchronous run for the command line benchmark.
@@ -56,6 +70,7 @@ public:
     qint64 tagsDone() const { return m_tagsDone.load(); }
     qint64 tagsTotal() const { return m_tagsTotal.load(); }
     QString summary() const { return m_summary; }
+    bool background() const { return m_running && m_mode != Full; }
     const Stats &lastStats() const { return m_stats; }
 
     static int autoThreads(const QStringList &roots);
@@ -67,13 +82,15 @@ signals:
     void finished();
 
 private:
-    void run(QStringList roots, int threads, bool verbose);
+    void run(QStringList roots, int threads, bool verbose, int mode = Full, QStringList folders = {});
+    void launch(const QStringList &roots, int threads, int mode, const QStringList &folders);
     void poll();
 
     std::thread m_thread;
     QTimer m_poll;
     QElapsedTimer m_sinceNotify;
     bool m_running = false;
+    int m_mode = Full;
     QString m_summary;
     Stats m_stats;
 

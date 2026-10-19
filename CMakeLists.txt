@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 0.6.0 LANGUAGES CXX)
+project(Halcyon VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,9 +21,11 @@ add_executable(halcyon
   src/core/Database.h          src/core/Database.cpp
   src/core/TagReader.h         src/core/TagReader.cpp
   src/core/Scanner.h           src/core/Scanner.cpp
+  src/core/FolderWatcher.h     src/core/FolderWatcher.cpp
   src/core/CoverProvider.h     src/core/CoverProvider.cpp
   src/core/IconProvider.h      src/core/IconProvider.cpp
   src/library/Library.h        src/library/Library.cpp
+  src/library/PlaylistStore.h  src/library/PlaylistStore.cpp
   src/library/TrackCache.h     src/library/TrackCache.cpp
   src/library/QueryBuilder.h   src/library/QueryBuilder.cpp
   src/library/TrackListModel.h src/library/TrackListModel.cpp
@@ -51,6 +53,7 @@ file(GLOB THEME_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS the
 qt_add_resources(halcyon "ui" PREFIX "/" FILES ${QML_FILES} ${THEME_FILES})
 file(GLOB SHADER_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS shaders/*.frag shaders/*.vert)
 qt_add_shaders(halcyon "shaders" PREFIX "/" FILES ${SHADER_FILES})
+qt_add_resources(halcyon "appicon" PREFIX "/icons" BASE dist/icons FILES dist/icons/de.bauenundbooten.BuB3Player.svg)
 file(GLOB FONT_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS assets/fonts/*.ttf)
 qt_add_resources(halcyon "fonts" PREFIX "/fonts" BASE assets/fonts FILES ${FONT_FILES})
 
@@ -63,4 +66,6 @@ target_compile_options(halcyon PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 include(GNUInstallDirs)
 install(TARGETS halcyon RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES dist/halcyon.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES dist/de.bauenundbooten.BuB3Player.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES dist/icons/de.bauenundbooten.BuB3Player.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+install(FILES dist/de.bauenundbooten.BuB3Player.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)

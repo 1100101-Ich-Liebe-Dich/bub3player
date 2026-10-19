@@ -1,12 +1,15 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
+#include <QSet>
 #include <QSettings>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 
+class FolderWatcher;
 class Scanner;
 class Player;
 class PlayQueue;
@@ -28,6 +31,10 @@ class Library : public QObject
     Q_PROPERTY(bool scanOnStart READ scanOnStart WRITE setScanOnStart NOTIFY settingsChanged)
     Q_PROPERTY(int scanThreads READ scanThreads WRITE setScanThreads NOTIFY settingsChanged)
     Q_PROPERTY(bool empty READ empty NOTIFY statsChanged)
+    // Folder watching: changes show up within seconds, without a scan.
+    Q_PROPERTY(bool watchFolders READ watchFolders WRITE setWatchFolders NOTIFY settingsChanged)
+    Q_PROPERTY(QString watchStatus READ watchStatus NOTIFY watchStatusChanged)
+    Q_PROPERTY(QString watchHint READ watchHint NOTIFY watchStatusChanged) // how to allow more watched folders
 
 public:
     explicit Library(Player *player, PlayQueue *queue, QObject *parent = nullptr);
@@ -46,6 +53,10 @@ public:
     void setScanOnStart(bool on);
     int scanThreads() const;
     void setScanThreads(int n);
+    bool watchFolders() const;
+    void setWatchFolders(bool on);
+    QString watchStatus() const;
+    QString watchHint() const;
 
     Q_INVOKABLE void addRoot(const QVariant &pathOrUrl);
     Q_INVOKABLE void removeRoot(const QString &path);
@@ -62,13 +73,15 @@ public:
     // Playback helpers
     Q_INVOKABLE void playList(TrackListModel *model, int row, bool shuffle = false);
     Q_INVOKABLE void enqueueList(TrackListModel *model, int row, bool next);
+    Q_INVOKABLE void playSelection(TrackListModel *model, int row); // the selected rows (or `row`) only
+    Q_INVOKABLE void enqueueIds(const QVariantList &ids, bool next);
     Q_INVOKABLE void playFolder(FolderModel *model, int row);
     Q_INVOKABLE void playFolderTree(const QString &path, bool shuffle = false);
     Q_INVOKABLE void playGroup(GroupModel *model, int row, bool shuffle = false);
     Q_INVOKABLE void enqueueGroup(GroupModel *model, int row, bool next);
     Q_INVOKABLE void playSpec(const QVariantMap &spec, bool shuffle = false);
 
-    void startupScan();
+    void startupScan(bool scan = true); // scan = false: only start watching (--no-scan)
     // Something other than the scanner changed tracks (e.g. a Jellyfin sync).
     void notifyExternalChange();
 
@@ -79,9 +92,17 @@ signals:
     void settingsChanged();
     void changed(); // library content changed: models reload
     void message(const QString &text);
+    void watchStatusChanged();
 
 private:
     void refreshStats();
+    void scanFinished();
+    void startWatching();
+    void foldersChanged(const QStringList &paths);
+    void scanChangedFolders();
+    void periodicCheck();
+    void checkMounts();
+    QStringList localRoots() const;
     void playIds(QVector<qint64> ids, int start, bool shuffle);
     QVector<qint64> idsForSpec(const QVariantMap &spec);
 
@@ -95,4 +116,16 @@ private:
     QString m_viewsError;
     qint64 m_trackCount = 0;
     qint64 m_folderCount = 0;
+
+    FolderWatcher *m_watcher;
+    QStringList m_watchRoots;       // roots the watcher was started with
+    QSet<QString> m_dirtyFolders;   // reported by the watcher, not scanned yet
+    bool m_fullPending = false;     // full scan wanted while a small one ran
+    QElapsedTimer m_firstDirty;
+    QTimer m_dirtyTimer;            // waits until a copy is done
+    bool m_checkAll = false;        // events were lost: look at everything
+    QTimer m_periodic;              // network shares, folders over the watch limit
+    QTimer m_mounts;                // drives coming back
+    QSet<QString> m_missing;        // roots not reachable right now
+    QStringList m_subsetQueue;      // roots to check as soon as the scanner is free
 };

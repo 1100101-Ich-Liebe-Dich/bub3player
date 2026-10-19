@@ -800,12 +800,12 @@ void Recommender::startRadioFromGroup(GroupModel *model, int row)
 {
     if (!model)
         return;
-    const QVariantMap spec = model->trackSpec(row);
+    QVariantMap spec = model->trackSpec(row);
     const QString title = model->get(row).value(QStringLiteral("title")).toString();
-    const QueryBuilder::Built q = QueryBuilder::trackIds({{QStringLiteral("filters"), spec.value(QStringLiteral("filters"))},
-                                                          {QStringLiteral("sort"), QStringLiteral("playCount")},
-                                                          {QStringLiteral("desc"), true},
-                                                          {QStringLiteral("limit"), 200}});
+    spec.insert(QStringLiteral("sort"), QStringLiteral("playCount"));
+    spec.insert(QStringLiteral("desc"), true);
+    spec.insert(QStringLiteral("limit"), 200);
+    const QueryBuilder::Built q = QueryBuilder::trackIds(spec);
     if (!q.ok)
         return;
     setBusy(true);

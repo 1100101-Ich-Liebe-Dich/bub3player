@@ -92,6 +92,8 @@ const QHash<QString, SortDef> &sortMap()
         {QStringLiteral("genre"), {split(QStringLiteral("t.genre COLLATE NOCASE|t.aa COLLATE NOCASE|t.album COLLATE NOCASE|") + albumTail), 1, false}},
         {QStringLiteral("path"), {split(QStringLiteral("f.path|t.filename")), 2, true}},
         {QStringLiteral("random"), {split(QStringLiteral("RANDOM()")), 0, false}},
+        // playlist order (only with spec.playlist)
+        {QStringLiteral("position"), {split(QStringLiteral("p.pos")), 1, false}},
         // unanalysed tracks last, either direction
         {QStringLiteral("bpm"), {split(QStringLiteral("(a.bpm_conf IS NULL OR a.bpm_conf < 0.3)|a.bpm|t.id")), 0, false, true}},
         {QStringLiteral("energy"), {split(QStringLiteral("(a.energy IS NULL)|a.energy|t.id")), 0, false, true}},
@@ -124,11 +126,18 @@ std::atomic<bool> g_hideDuplicates{false};
 
 bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds, QString &error, bool *analysis)
 {
-    // Jellyfin copies of tracks that also exist locally (see JellyfinWriter::markDuplicates).
-    if (g_hideDuplicates.load(std::memory_order_relaxed))
+    const qint64 playlist = spec.value(QStringLiteral("playlist")).toLongLong();
+    if (playlist > 0) {
+        // Tracks of one playlist (alias p, joined by the caller). Everything the
+        // user put there is shown, local copies or not.
+        where << QStringLiteral("p.playlist_id = ?");
+        binds << QVariant::fromValue<qint64>(playlist);
+    } else if (g_hideDuplicates.load(std::memory_order_relaxed)) {
+        // Jellyfin copies of tracks that also exist locally (see JellyfinWriter::markDuplicates).
         where << QStringLiteral("t.dup = 0");
-    const QVariantList filters = spec.value(QStringLiteral("filters")).toList();
+    }
     const qint64 now = QDateTime::currentSecsSinceEpoch();
+    auto addFilters = [&](const QVariantList &filters, QStringList &out) -> bool {
     for (const QVariant &fv : filters) {
         const QVariantMap f = fv.toMap();
         const QString name = f.value(QStringLiteral("field")).toString();
@@ -140,8 +149,21 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
             QString p = value.toString();
             while (p.size() > 1 && p.endsWith(QLatin1Char('/')))
                 p.chop(1);
-            where << QStringLiteral("t.folder_id IN (SELECT id FROM folders WHERE path = ? OR (path >= ? AND path < ?))");
+            out << QStringLiteral("t.folder_id IN (SELECT id FROM folders WHERE path = ? OR (path >= ? AND path < ?))");
             binds << p << (p + QLatin1Char('/')) << (p + QLatin1Char('0'));
+            continue;
+        }
+        if (name == QLatin1String("playlist")) {
+            // In (eq) or not in (ne) a playlist. NOT IN must skip missing items
+            // (NULL), or it would match nothing.
+            if (op != QLatin1String("eq") && op != QLatin1String("ne")) {
+                error = QStringLiteral("Unbekannter Operator: %1").arg(op);
+                return false;
+            }
+            out << (op == QLatin1String("eq")
+                        ? QStringLiteral("t.id IN (SELECT track_id FROM playlist_items WHERE playlist_id = ?)")
+                        : QStringLiteral("t.id NOT IN (SELECT track_id FROM playlist_items WHERE playlist_id = ? AND track_id IS NOT NULL)"));
+            binds << QVariant::fromValue<qint64>(value.toLongLong());
             continue;
         }
 
@@ -156,37 +178,54 @@ bool buildWhere(const QVariantMap &spec, QStringList &where, QVariantList &binds
             *analysis = true;
 
         if (op == QLatin1String("eq")) {
-            where << e + QStringLiteral(" = ?") + coll;
+            out << e + QStringLiteral(" = ?") + coll;
             binds << value;
         } else if (op == QLatin1String("ne")) {
-            where << e + QStringLiteral(" <> ?") + coll;
+            out << e + QStringLiteral(" <> ?") + coll;
             binds << value;
         } else if (op == QLatin1String("lt") || op == QLatin1String("le") || op == QLatin1String("gt") || op == QLatin1String("ge")) {
             static const QHash<QString, QString> sym = {{QStringLiteral("lt"), QStringLiteral("<")}, {QStringLiteral("le"), QStringLiteral("<=")},
                                                         {QStringLiteral("gt"), QStringLiteral(">")}, {QStringLiteral("ge"), QStringLiteral(">=")}};
-            where << QStringLiteral("%1 %2 ?").arg(e, sym.value(op));
+            out << QStringLiteral("%1 %2 ?").arg(e, sym.value(op));
             binds << value;
         } else if (op == QLatin1String("contains")) {
-            where << e + QStringLiteral(" LIKE ? ESCAPE '\\'");
+            out << e + QStringLiteral(" LIKE ? ESCAPE '\\'");
             binds << QStringLiteral("%%1%").arg(likeEscape(value.toString()));
         } else if (op == QLatin1String("startsWith")) {
-            where << e + QStringLiteral(" LIKE ? ESCAPE '\\'");
+            out << e + QStringLiteral(" LIKE ? ESCAPE '\\'");
             binds << QStringLiteral("%1%").arg(likeEscape(value.toString()));
         } else if (op == QLatin1String("empty")) {
-            where << (it->text ? e + QStringLiteral(" = ''") : e + QStringLiteral(" = 0"));
+            // analysis values: "not analysed (or not sure)" is NULL
+            out << (it->analysis ? e + QStringLiteral(" IS NULL")
+                    : it->text   ? e + QStringLiteral(" = ''") : e + QStringLiteral(" = 0"));
         } else if (op == QLatin1String("notEmpty")) {
-            where << (it->text ? e + QStringLiteral(" <> ''") : e + QStringLiteral(" > 0"));
+            out << (it->analysis ? e + QStringLiteral(" IS NOT NULL")
+                    : it->text   ? e + QStringLiteral(" <> ''") : e + QStringLiteral(" > 0"));
         } else if (op == QLatin1String("withinDays")) {
-            where << e + QStringLiteral(" >= ?");
+            out << e + QStringLiteral(" >= ?");
             binds << QVariant::fromValue<qint64>(now - qint64(value.toDouble() * 86400));
         } else if (op == QLatin1String("olderThanDays")) {
-            where << e + QStringLiteral(" < ?");
+            out << e + QStringLiteral(" < ?");
             binds << QVariant::fromValue<qint64>(now - qint64(value.toDouble() * 86400));
         } else {
             error = QStringLiteral("Unbekannter Operator: %1").arg(op);
             return false;
         }
     }
+
+    return true;
+    };
+
+    // Filters: all must match, or with "match": "any" at least one.
+    // "require" always has to match as well (e.g. the group opened from a view).
+    const bool any = spec.value(QStringLiteral("match")).toString() == QLatin1String("any");
+    QStringList conds;
+    if (!addFilters(spec.value(QStringLiteral("filters")).toList(), any ? conds : where))
+        return false;
+    if (any && !conds.isEmpty())
+        where << QStringLiteral("(") + conds.join(QStringLiteral(" OR ")) + QStringLiteral(")");
+    if (!addFilters(spec.value(QStringLiteral("require")).toList(), where))
+        return false;
 
     const QString search = spec.value(QStringLiteral("search")).toString().trimmed();
     if (!search.isEmpty()) {
@@ -235,28 +274,53 @@ Built trackIds(const QVariantMap &spec)
         b.ok = false;
         return b;
     }
-    const QString sortKey = spec.value(QStringLiteral("sort"), QStringLiteral("album")).toString();
+    const bool playlist = spec.value(QStringLiteral("playlist")).toLongLong() > 0;
+    QString sortKey = spec.value(QStringLiteral("sort"), playlist ? QStringLiteral("position") : QStringLiteral("album")).toString();
+    if (sortKey == QLatin1String("position") && !playlist)
+        sortKey = QStringLiteral("album");
     const SortDef sd = sortMap().value(sortKey, sortMap().value(QStringLiteral("album")));
     const bool desc = spec.value(QStringLiteral("desc")).toBool();
     QStringList order;
-    for (int i = 0; i < sd.keys.size(); ++i) {
-        // bpm/energy: the value itself follows the direction, "not analysed" stays last
-        const bool dir = sd.needsAnalysis ? i == 1 : i < sd.directional;
-        order << sd.keys[i] + ((desc && dir) ? QStringLiteral(" DESC") : QString());
+    const qint64 seed = spec.value(QStringLiteral("seed")).toLongLong();
+    if (sortKey == QLatin1String("random") && seed > 0) {
+        // Shuffled, but the same order on every reload until the seed changes
+        // (a smart playlist must not reshuffle while a scan updates the library).
+        // x = a·id + s1, then x² + s2 (mod p): a different seed gives a different
+        // order, not just a rotation of the same one. Stays below 2^62.
+        const QString x = QStringLiteral("((t.id * 1103515245 + %1) % 2147483647)").arg(seed % 2147483647LL);
+        order << QStringLiteral("((%1 * %1 + %2) % 2147483647)").arg(x).arg((seed * 7919) % 2147483647LL) << QStringLiteral("t.id");
+    } else {
+        for (int i = 0; i < sd.keys.size(); ++i) {
+            // bpm/energy: the value itself follows the direction, "not analysed" stays last
+            const bool dir = sd.needsAnalysis ? i == 1 : i < sd.directional;
+            order << sd.keys[i] + ((desc && dir) ? QStringLiteral(" DESC") : QString());
+        }
     }
 
-    QString from = QStringLiteral(" FROM tracks t");
+    QString from = playlist ? QStringLiteral(" FROM playlist_items p JOIN tracks t ON t.id = p.track_id")
+                            : QStringLiteral(" FROM tracks t");
     if (sd.needsFolder)
         from += QStringLiteral(" JOIN folders f ON f.id = t.folder_id");
     if (analysis || sd.needsAnalysis)
         from += QLatin1String(AnalysisJoin);
     if (!where.isEmpty())
         from += QStringLiteral(" WHERE ") + where.join(QStringLiteral(" AND "));
-    b.sql = QStringLiteral("SELECT t.id") + from + QStringLiteral(" ORDER BY ") + order.join(QStringLiteral(", "));
+    // Playlists: the position comes along, it identifies the entry (a track may appear twice).
+    b.withKeys = playlist;
+    b.sql = (playlist ? QStringLiteral("SELECT t.id, p.pos") : QStringLiteral("SELECT t.id")) + from
+            + QStringLiteral(" ORDER BY ") + order.join(QStringLiteral(", "));
     b.sumSql = QStringLiteral("SELECT COALESCE(SUM(t.duration_ms), 0)") + from;
     const int limit = spec.value(QStringLiteral("limit")).toInt();
-    if (limit > 0)
+    if (limit > 0) {
         b.sql += QStringLiteral(" LIMIT %1").arg(limit);
+        // only the tracks that make the cut count
+        b.sumSql = QStringLiteral("SELECT COALESCE(SUM(d), 0) FROM (SELECT t.duration_ms AS d") + from + QStringLiteral(" ORDER BY ")
+                   + order.join(QStringLiteral(", ")) + QStringLiteral(" LIMIT %1)").arg(limit);
+        b.countSql = QStringLiteral("SELECT COUNT(*), COALESCE(SUM(d), 0) FROM (SELECT t.duration_ms AS d") + from
+                     + QStringLiteral(" ORDER BY ") + order.join(QStringLiteral(", ")) + QStringLiteral(" LIMIT %1)").arg(limit);
+    } else {
+        b.countSql = QStringLiteral("SELECT COUNT(*), COALESCE(SUM(t.duration_ms), 0)") + from;
+    }
     return b;
 }
 
@@ -273,7 +337,9 @@ Built groups(const QVariantMap &spec)
     const bool byAnalysis = by == QLatin1String("tempo") || by == QLatin1String("key");
     if (byAnalysis) // only tracks that have a value
         where << QStringLiteral("%1 IS NOT NULL").arg(QLatin1String(fieldMap().value(by).expr));
-    const QString join = (analysis || byAnalysis) ? QString::fromLatin1(AnalysisJoin) : QString();
+    QString join = (analysis || byAnalysis) ? QString::fromLatin1(AnalysisJoin) : QString();
+    if (spec.value(QStringLiteral("playlist")).toLongLong() > 0)
+        join = QStringLiteral(" JOIN playlist_items p ON p.track_id = t.id") + join;
     const QString gsort = spec.value(QStringLiteral("groupSort"), QStringLiteral("name")).toString();
     const bool desc = spec.value(QStringLiteral("desc")).toBool();
     const QString dir = desc ? QStringLiteral(" DESC") : QString();

@@ -5,6 +5,7 @@
 #include "library/QueryBuilder.h"
 
 #include <QDateTime>
+#include <bit>
 #include <QLocale>
 #include <QPointer>
 #include <QtConcurrent>
@@ -27,7 +28,7 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         {AlbumArtistRole, "albumArtist"}, {YearRole, "year"}, {DurationRole, "duration"},
         {DurationMsRole, "durationMs"}, {FormatRole, "format"}, {TrackNoRole, "trackNo"}, {DiscNoRole, "discNo"},
         {GenreRole, "genre"}, {AddedRole, "added"}, {MtimeRole, "mtime"}, {PlayCountRole, "playCount"},
-        {LastPlayedRole, "lastPlayed"}, {FileNameRole, "fileName"}, {ValidRole, "valid"},
+        {LastPlayedRole, "lastPlayed"}, {FileNameRole, "fileName"}, {ValidRole, "valid"}, {SelectedRole, "selected"},
     };
 }
 
@@ -61,6 +62,8 @@ QVariant TrackListModel::data(const QModelIndex &index, int role) const
         return {};
     if (role == IdRole)
         return m_ids[index.row()];
+    if (role == SelectedRole)
+        return isSelected(index.row());
     const TrackRow &r = rowAt(index.row());
     switch (role) {
     case TitleRole: return r.title;
@@ -118,7 +121,7 @@ void TrackListModel::reload()
         qint64 total = 0;
         for (const TrackRow &r : TrackCache::instance().fetch(ids))
             total += r.durationMs;
-        apply(gen, std::move(ids), total, {});
+        apply(gen, std::move(ids), {}, total, {});
         return;
     }
     if (!m_loading) {
@@ -128,7 +131,7 @@ void TrackListModel::reload()
     const QueryBuilder::Built q = QueryBuilder::trackIds(m_spec);
     QPointer<TrackListModel> self(this);
     (void)QtConcurrent::run([self, gen, q] {
-        QVector<qint64> ids;
+        QVector<qint64> ids, keys;
         QString error = q.error;
         DbConnection db;
         if (q.ok) {
@@ -137,17 +140,20 @@ void TrackListModel::reload()
                 Stmt s(db, q.sql);
                 for (int i = 0; i < q.binds.size(); ++i)
                     s.bind(i + 1, q.binds[i]);
-                while (s.step())
+                while (s.step()) {
                     ids.push_back(s.i64(0));
+                    if (q.withKeys)
+                        keys.push_back(s.i64(1));
+                }
             } catch (const std::exception &e) {
                 error = QString::fromUtf8(e.what());
             }
         }
         const qsizetype n = ids.size();
         // Ids first: the list is usable now; the total duration follows.
-        QMetaObject::invokeMethod(qApp, [self, gen, ids = std::move(ids), error]() mutable {
+        QMetaObject::invokeMethod(qApp, [self, gen, ids = std::move(ids), keys = std::move(keys), error]() mutable {
             if (self)
-                self->apply(gen, std::move(ids), -1, error);
+                self->apply(gen, std::move(ids), std::move(keys), -1, error);
         }, Qt::QueuedConnection);
         if (!q.ok || n == 0 || !db.isOpen())
             return;
@@ -170,12 +176,12 @@ void TrackListModel::reload()
     });
 }
 
-void TrackListModel::apply(int generation, QVector<qint64> ids, qint64 totalMs, QString error)
+void TrackListModel::apply(int generation, QVector<qint64> ids, QVector<qint64> keys, qint64 totalMs, QString error)
 {
     if (generation != m_generation)
         return; // a newer query superseded this one
     TrackCache::instance().invalidate();
-    if (ids == m_ids) {
+    if (ids == m_ids && keys == m_keys) {
         // Same rows (e.g. tags updated during a scan): refresh visible data without
         // resetting, so the scroll position stays put.
         m_pages.clear();
@@ -185,6 +191,13 @@ void TrackListModel::apply(int generation, QVector<qint64> ids, qint64 totalMs, 
     } else {
         beginResetModel();
         m_ids = std::move(ids);
+        m_keys = std::move(keys);
+        const bool hadSelection = m_selCount > 0;
+        m_sel.clear();
+        m_selCount = 0;
+        m_anchor = -1;
+        if (hadSelection)
+            emit selectionChanged();
         m_pages.clear();
         m_lru.clear();
         endResetModel();
@@ -196,4 +209,110 @@ void TrackListModel::apply(int generation, QVector<qint64> ids, qint64 totalMs, 
     emit countChanged();
     emit loadingChanged();
     emit reloaded();
+}
+
+// ---------- selection ----------
+
+bool TrackListModel::isSelected(int row) const
+{
+    if (row < 0 || m_sel.empty())
+        return false;
+    const size_t w = size_t(row) >> 6;
+    return w < m_sel.size() && (m_sel[w] >> (row & 63)) & 1;
+}
+
+void TrackListModel::setBit(int row, bool on)
+{
+    if (row < 0 || row >= m_ids.size())
+        return;
+    if (m_sel.empty()) {
+        if (!on)
+            return;
+        m_sel.assign((size_t(m_ids.size()) + 63) / 64, 0);
+    }
+    quint64 &w = m_sel[size_t(row) >> 6];
+    const quint64 bit = quint64(1) << (row & 63);
+    if (bool(w & bit) == on)
+        return;
+    w ^= bit;
+    m_selCount += on ? 1 : -1;
+}
+
+void TrackListModel::selectionUpdated()
+{
+    if (m_selCount == 0)
+        m_sel.clear();
+    if (!m_ids.isEmpty())
+        emit dataChanged(index(0), index(int(m_ids.size()) - 1), {SelectedRole});
+    emit selectionChanged();
+}
+
+void TrackListModel::select(int row, int mode)
+{
+    if (row < 0 || row >= m_ids.size())
+        return;
+    if (mode == Toggle) {
+        setBit(row, !isSelected(row));
+        m_anchor = row;
+    } else if (mode == Range && m_anchor >= 0 && m_anchor < m_ids.size()) {
+        // Shift: from the anchor to here, replacing the rest (like file managers)
+        std::fill(m_sel.begin(), m_sel.end(), 0);
+        m_selCount = 0;
+        for (int r = std::min(m_anchor, row), e = std::max(m_anchor, row); r <= e; ++r)
+            setBit(r, true);
+    } else {
+        // A plain click selects just this row (and is the anchor for Shift).
+        std::fill(m_sel.begin(), m_sel.end(), 0);
+        m_selCount = 0;
+        setBit(row, true);
+        m_anchor = row;
+    }
+    selectionUpdated();
+}
+
+void TrackListModel::selectAll()
+{
+    if (m_ids.isEmpty())
+        return;
+    m_sel.assign((size_t(m_ids.size()) + 63) / 64, ~quint64(0));
+    if (const int rest = int(m_ids.size() & 63))
+        m_sel.back() = (quint64(1) << rest) - 1;
+    m_selCount = int(m_ids.size());
+    selectionUpdated();
+}
+
+void TrackListModel::clearSelection()
+{
+    if (m_selCount == 0)
+        return;
+    m_sel.clear();
+    m_selCount = 0;
+    selectionUpdated();
+}
+
+QVector<int> TrackListModel::actionRows(int row) const
+{
+    QVector<int> rows;
+    if (m_selCount > 0 && (row < 0 || isSelected(row))) {
+        rows.reserve(m_selCount);
+        for (size_t w = 0; w < m_sel.size(); ++w) {
+            quint64 bits = m_sel[w];
+            while (bits) {
+                const int b = std::countr_zero(bits);
+                rows << int(w * 64 + size_t(b));
+                bits &= bits - 1;
+            }
+        }
+    } else if (row >= 0 && row < m_ids.size()) {
+        rows << row;
+    }
+    return rows;
+}
+
+QVector<qint64> TrackListModel::actionIds(int row) const
+{
+    QVector<qint64> ids;
+    for (int r : actionRows(row))
+        ids << m_ids[r];
+    return ids;
 }

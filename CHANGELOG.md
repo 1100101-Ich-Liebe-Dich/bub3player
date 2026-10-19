@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen an BuB3Player. Die neueste Version steht oben.
 
+## 0.9.0 – Playlists, Ordnerüberwachung, AppImage
+
+- **Playlists**: anlegen, umbenennen, löschen; Titel, Alben, Künstler, Genres, Ordner, Suchergebnisse
+  und die Warteschlange per Rechtsklick oder Knopf „Zur Playlist“ hinzufügen; Reihenfolge per
+  Ziehen ändern; jeder Titel nur einmal. Einträge merken sich Pfad, Titel und Künstler: Ist ein
+  Titel gerade nicht da (Laufwerk ab, Datei verschoben, Server weg), bleibt er in der Liste und
+  wird beim nächsten Scan wieder verknüpft.
+- **Smart-Playlists** aus Regeln über alle Felder, auch Tempo, Tonart, Energie, Lautheit, Quelle,
+  Ordner und andere Playlists; „alle“ oder „mindestens eine“ Regel; Sortierung und Höchstzahl;
+  Live-Zählung im Editor; „Als feste Playlist speichern“.
+- **M3U/M3U8** importieren (UTF-8 und alte Kodierung, relative Pfade, Windows-Pfade, `#EXTINF`)
+  und exportieren (relativ, wenn die Titel neben der Playlist liegen).
+- **Mehrfachauswahl** in allen Titellisten: Strg + Klick, Umschalt + Klick, Strg + A.
+- **Warteschlange**: Reihenfolge per Ziehen ändern, als Playlist speichern.
+- **Ordnerüberwachung** (inotify): neue, geänderte, verschobene und gelöschte Dateien sind nach
+  wenigen Sekunden in der Bibliothek, ohne Scan. Netzlaufwerke und Ordner über der Grenze des
+  Systems werden alle 15 Minuten geprüft, ein wieder eingestecktes Laufwerk sofort.
+  Nicht erreichbare Laufwerke löschen weiterhin nie etwas.
+- Titel werden nur noch lesend geöffnet (andere Programme sehen keine „Änderung“ mehr).
+- **AppImage**: wird bei jedem Stand automatisch gebaut und ausprobiert; ein Release bekommt die
+  Datei angehängt. App-Symbol, Desktop-Eintrag und AppStream-Daten.
+
 ## 0.6.0 – Audioanalyse, Empfehlungen, Automix
 
 - **Audioanalyse** jedes Titels in einem Durchgang: Tempo (BPM, Sicherheit, erster Schlag),

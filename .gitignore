@@ -1,5 +1,7 @@
 build/
+build-appimage/
 *.db
 *.db-wal
 *.db-shm
 .cache/
+*.AppImage

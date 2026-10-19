@@ -120,10 +120,11 @@ Item {
                             onClicked: folderDialog.open()
                         }
                         PillButton {
-                            text: Library.scanner.running ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
+                            readonly property bool fullScan: Library.scanner.running && !Library.scanner.background
+                            text: fullScan ? qsTr("Scan abbrechen") : qsTr("Jetzt scannen")
                             iconName: "refresh"
                             enabled: Library.roots.length > 0
-                            onClicked: Library.scanner.running ? Library.scanner.cancel() : Library.rescan()
+                            onClicked: fullScan ? Library.scanner.cancel() : Library.rescan()
                         }
                     }
 
@@ -169,6 +170,54 @@ Item {
                         color: Theme.textDim
                     }
 
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Ordner überwachen: neue und geänderte Musik sofort aufnehmen")
+                        checked: Library.watchFolders
+                        onToggled: Library.watchFolders = checked
+                    }
+                    Text {
+                        visible: text !== ""
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: Library.watchStatus
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+                    Column {
+                        visible: Library.watchHint !== ""
+                        width: col.width
+                        spacing: 6
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            text: qsTr("Damit alle Ordner überwacht werden, einmal im Terminal ausführen. Der Player merkt es bei der nächsten Prüfung von selbst:")
+                            font.family: Theme.uiFont
+                            font.pixelSize: 13
+                            color: Theme.textDim
+                        }
+                        Rectangle {
+                            width: parent.width
+                            height: hintCmd.implicitHeight + 16
+                            radius: Math.min(10, Theme.radius)
+                            color: Theme.alpha(Theme.text, 0.06)
+                            TextEdit {
+                                id: hintCmd
+                                x: 12
+                                y: 8
+                                width: parent.width - 24
+                                readOnly: true
+                                selectByMouse: true
+                                wrapMode: TextEdit.WrapAnywhere
+                                text: Library.watchHint
+                                font.family: "monospace"
+                                font.pixelSize: 12
+                                color: Theme.text
+                                selectionColor: Theme.alpha(Theme.accent, 0.45)
+                            }
+                        }
+                    }
                     HToggle {
                         width: col.width
                         label: qsTr("Beim Start nach Änderungen suchen")

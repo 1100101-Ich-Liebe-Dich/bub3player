@@ -147,7 +147,7 @@ Rectangle {
         // Scan status
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: Library.scanner.running ? 54 : 0
+            Layout.preferredHeight: Library.scanner.running && !Library.scanner.background ? 54 : 0
             visible: Layout.preferredHeight > 0
             clip: true
             Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }

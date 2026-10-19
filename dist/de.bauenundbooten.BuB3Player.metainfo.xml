@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>de.bauenundbooten.BuB3Player</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>BuB3Player</name>
+  <summary xml:lang="de">Musikplayer für riesige Bibliotheken und Jellyfin</summary>
+  <summary>Music player for huge libraries and Jellyfin</summary>
+  <developer id="de.bauenundbooten">
+    <name>BAUENUNDBOOTEN.de</name>
+  </developer>
+  <description>
+    <p xml:lang="de">
+      BuB3Player spielt Sammlungen mit einer Million Titeln flüssig, auch auf älteren Rechnern.
+      Acht komplett verschiedene Themes, Automix mit Audioanalyse (Tempo, Tonart, Lautheit),
+      Empfehlungen, die nur auf dem eigenen Rechner lernen, Playlists und Smart-Playlists,
+      Ordnerüberwachung und Jellyfin in derselben Bibliothek.
+    </p>
+    <p>
+      BuB3Player plays collections of a million tracks smoothly, even on older computers.
+      Eight completely different themes, automix with audio analysis (tempo, key, loudness),
+      recommendations that learn only on your computer, playlists and smart playlists,
+      folder watching and Jellyfin in the same library.
+    </p>
+  </description>
+  <launchable type="desktop-id">de.bauenundbooten.BuB3Player.desktop</launchable>
+  <url type="homepage">https://www.bauenundbooten.de</url>
+  <url type="vcs-browser">https://github.com/1100101-Ich-Liebe-Dich/bub3player</url>
+  <url type="bugtracker">https://github.com/1100101-Ich-Liebe-Dich/bub3player/issues</url>
+  <provides>
+    <binary>halcyon</binary>
+  </provides>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.9.0" date="2026-10-19"/>
+    <release version="0.6.0" date="2026-10-18"/>
+  </releases>
+</component>

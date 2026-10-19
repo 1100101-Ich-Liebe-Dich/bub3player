@@ -10,6 +10,8 @@
 #include <taglib/aifffile.h>
 #include <taglib/attachedpictureframe.h>
 #include <taglib/fileref.h>
+#include <taglib/tfilestream.h>
+#include <taglib/id3v2framefactory.h>
 #include <taglib/flacfile.h>
 #include <taglib/flacpicture.h>
 #include <taglib/flacproperties.h>
@@ -162,7 +164,10 @@ TrackTags read(const QString &path)
 {
     TrackTags t;
     const QByteArray fname = QFile::encodeName(path);
-    TagLib::FileRef ref(fname.constData(), true, TagLib::AudioProperties::Fast);
+    // Read-only: TagLib would otherwise open for writing, which the folder
+    // watcher (ours and other programs') sees as a changed file.
+    TagLib::FileStream stream(fname.constData(), true);
+    TagLib::FileRef ref = stream.isOpen() ? TagLib::FileRef(&stream, true, TagLib::AudioProperties::Fast) : TagLib::FileRef();
     if (ref.isNull() || !ref.file()) {
         t.title = QFileInfo(path).completeBaseName();
         t.codec = extLower(path).toUpper();
@@ -229,13 +234,16 @@ QByteArray embeddedCover(const QString &path)
 {
     const QByteArray fname = QFile::encodeName(path);
     const QString ext = extLower(path);
+    TagLib::FileStream stream(fname.constData(), true); // read-only, see read()
+    if (!stream.isOpen())
+        return {};
     try {
         if (ext == QLatin1String("mp3")) {
-            TagLib::MPEG::File f(fname.constData(), false);
+            TagLib::MPEG::File f(&stream, TagLib::ID3v2::FrameFactory::instance(), false);
             return fromId3(f.ID3v2Tag());
         }
         if (ext == QLatin1String("flac")) {
-            TagLib::FLAC::File f(fname.constData(), false);
+            TagLib::FLAC::File f(&stream, TagLib::ID3v2::FrameFactory::instance(), false);
             QByteArray b = fromFlacPictures(f.pictureList());
             if (b.isEmpty() && f.xiphComment())
                 b = fromFlacPictures(f.xiphComment()->pictureList());
@@ -245,7 +253,7 @@ QByteArray embeddedCover(const QString &path)
         }
         if (ext == QLatin1String("m4a") || ext == QLatin1String("m4b") || ext == QLatin1String("mp4")
             || ext == QLatin1String("alac") || ext == QLatin1String("aac")) {
-            TagLib::MP4::File f(fname.constData(), false);
+            TagLib::MP4::File f(&stream, false);
             if (!f.isValid() || !f.tag())
                 return {};
             const TagLib::MP4::Item item = f.tag()->item("covr");
@@ -256,27 +264,27 @@ QByteArray embeddedCover(const QString &path)
             return QByteArray(data.data(), int(data.size()));
         }
         if (ext == QLatin1String("opus")) {
-            TagLib::Ogg::Opus::File f(fname.constData(), false);
+            TagLib::Ogg::Opus::File f(&stream, false);
             return f.tag() ? fromFlacPictures(f.tag()->pictureList()) : QByteArray();
         }
         if (ext == QLatin1String("ogg") || ext == QLatin1String("oga")) {
-            TagLib::Ogg::Vorbis::File f(fname.constData(), false);
+            TagLib::Ogg::Vorbis::File f(&stream, false);
             return f.tag() ? fromFlacPictures(f.tag()->pictureList()) : QByteArray();
         }
         if (ext == QLatin1String("wav")) {
-            TagLib::RIFF::WAV::File f(fname.constData(), false);
+            TagLib::RIFF::WAV::File f(&stream, false);
             return fromId3(f.ID3v2Tag());
         }
         if (ext == QLatin1String("aif") || ext == QLatin1String("aiff")) {
-            TagLib::RIFF::AIFF::File f(fname.constData(), false);
+            TagLib::RIFF::AIFF::File f(&stream, false);
             return fromId3(f.tag());
         }
         if (ext == QLatin1String("ape")) {
-            TagLib::APE::File f(fname.constData(), false);
+            TagLib::APE::File f(&stream, false);
             return fromApe(f.APETag());
         }
         if (ext == QLatin1String("wv")) {
-            TagLib::WavPack::File f(fname.constData(), false);
+            TagLib::WavPack::File f(&stream, false);
             return fromApe(f.APETag());
         }
     } catch (...) {
