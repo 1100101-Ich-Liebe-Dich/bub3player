@@ -174,9 +174,18 @@ QString findArtistImage(const QString &trackFolder, const QString &artist)
         return {};
     QDir d(trackFolder);
     QString outer;
+    int outerLevel = 0;
     for (int level = 1; level <= 3 && d.cdUp(); ++level)
-        if (nameKey(d.dirName()) == want)
+        if (nameKey(d.dirName()) == want) {
             outer = d.absolutePath();
+            outerLevel = level;
+        }
+    // ".../Metallica/CD1": right above a disc folder is the album (a self-titled one),
+    // its cover.jpg is no artist picture – only an artist.jpg there counts.
+    static const QRegularExpression disc(QStringLiteral("^(cd|disc|disk|dis[ck]o|platte|seite|side)\\s*[0-9a-d]{1,2}\\b"),
+                                         QRegularExpression::CaseInsensitiveOption);
+    if (outerLevel == 1 && disc.match(QDir(trackFolder).dirName()).hasMatch())
+        return probeArtistFile(QDir(outer));
     if (!outer.isEmpty())
         return pickArtistImage(QDir(outer), artist);
     d = QDir(trackFolder);
@@ -212,9 +221,7 @@ bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
     if (sourceId != Database::LocalSource) {
         src.remoteSource = sourceId;
         src.remoteArtist = artist;
-        // The server's picture may change: fetched again once a week.
-        const qint64 week = QDateTime::currentSecsSinceEpoch() / (7 * 86400);
-        src.key = QStringLiteral("ja%1_%2_%3").arg(sourceId).arg(hashOf(artist.toCaseFolded())).arg(week);
+        src.key = QStringLiteral("ja%1_%2").arg(sourceId).arg(hashOf(artist.toCaseFolded())); // refreshed weekly, see produce()
         return true;
     }
     const QString cacheKey = folder + QChar(0x1f) + artist;
@@ -318,13 +325,19 @@ QImage produce(const Source &src, int bucket, QString *outPath)
         if (g_noArt.contains(src.key))
             return {};
     }
+    // A Jellyfin artist picture has no tag to notice changes by: refreshed (same
+    // file) when older than a week; the old one stays if the server is away.
+    QImage old;
     if (QFileInfo::exists(cached)) {
         QImage img(cached);
-        if (!img.isNull()) {
+        const bool stale = !src.remoteArtist.isEmpty()
+                           && QFileInfo(cached).lastModified().secsTo(QDateTime::currentDateTime()) > 7 * 86400;
+        if (!img.isNull() && !stale) {
             if (outPath)
                 *outPath = cached;
             return img;
         }
+        old = img;
     }
 
     QImage img;
@@ -381,6 +394,11 @@ QImage produce(const Source &src, int bucket, QString *outPath)
     } else {
         QImageReader reader(src.file);
         img = scaleSquare(reader, bucket);
+    }
+    if (img.isNull() && !old.isNull()) {
+        if (outPath)
+            *outPath = cached;
+        return old;
     }
     if (img.isNull()) {
         QMutexLocker lock(&g_mutex);

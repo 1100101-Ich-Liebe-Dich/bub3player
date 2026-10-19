@@ -145,7 +145,8 @@ QUrl artistSearchUrl(qint64 sourceId, const QString &artist)
     u.setPath(u.path() + QStringLiteral("/Artists"));
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("searchTerm"), QString::fromLatin1(QUrl::toPercentEncoding(artist)));
-    q.addQueryItem(QStringLiteral("Limit"), QStringLiteral("20"));
+    q.addQueryItem(QStringLiteral("Limit"), QStringLiteral("100")); // short names ("Air") have many partial hits
+    q.addQueryItem(QStringLiteral("SortBy"), QStringLiteral("SortName"));
     q.addQueryItem(QStringLiteral("Fields"), QStringLiteral("ImageTags"));
     if (!s.userId.isEmpty())
         q.addQueryItem(QStringLiteral("userId"), s.userId);

@@ -134,7 +134,9 @@ Column {
 
             delegate: Item {
                 id: cellItem
-                width: shelf.cell
+                // the one past the limit only tells that there are more
+                visible: index < sh.shown
+                width: visible ? shelf.cell : 0
                 height: row.height
                 CoverArt {
                     id: art
