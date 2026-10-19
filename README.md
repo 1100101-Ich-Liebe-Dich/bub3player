@@ -581,7 +581,9 @@ qml/skins/    die acht Themes
 skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
 themes/       Farbschemata für Klassik
 shaders/      Aurora-Licht, Milchglas, Neumorphism, Synthwave-Szene, Vinyl, CD, Bildröhre …
-tools/        mock-jellyfin.py – kleiner Test-Server mit der Jellyfin-API
+tools/        Testwerkzeuge: Vorführ- und Riesen-Bibliothek erzeugen, Klick- und
+              Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API)
+dist/         Desktop-Eintrag, AppStream, Symbol, AppImage-Skripte
 ```
 
 Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
@@ -589,6 +591,9 @@ Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
 
 **Grundsätze:** Alles, was dauert, läuft außerhalb des UI-Threads. Jede optionale
 GStreamer-Komponente wird vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
+
+Wer mitentwickeln möchte: [CLAUDE.md](CLAUDE.md) fasst Vorgaben, Aufbau, Tests und Fahrplan
+zusammen.
 
 Zum Ausprobieren ohne eigenen Jellyfin-Server:
 `tools/mock-jellyfin.py --audio <ordner>` (Benutzer `demo`, Passwort `demo`).
