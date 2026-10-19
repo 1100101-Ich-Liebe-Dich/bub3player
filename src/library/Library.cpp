@@ -1,9 +1,11 @@
 #include "library/Library.h"
 
 #include "core/Database.h"
+#include "core/FolderWatcher.h"
 #include "core/Scanner.h"
 #include "library/FolderModel.h"
 #include "library/GroupModel.h"
+#include "library/PlaylistStore.h"
 #include "library/QueryBuilder.h"
 #include "library/TrackCache.h"
 #include "library/TrackListModel.h"
@@ -21,7 +23,7 @@
 Library *Library::s_instance = nullptr;
 
 Library::Library(Player *player, PlayQueue *queue, QObject *parent)
-    : QObject(parent), m_scanner(new Scanner(this)), m_player(player), m_queue(queue)
+    : QObject(parent), m_scanner(new Scanner(this)), m_player(player), m_queue(queue), m_watcher(new FolderWatcher(this))
 {
     s_instance = this;
     m_roots = m_settings.value(QStringLiteral("library/roots")).toStringList();
@@ -30,7 +32,20 @@ Library::Library(Player *player, PlayQueue *queue, QObject *parent)
         refreshStats();
         emit changed();
     });
-    connect(m_scanner, &Scanner::finished, this, [this] { emit message(m_scanner->summary()); });
+    connect(m_scanner, &Scanner::finished, this, &Library::scanFinished);
+
+    connect(m_watcher, &FolderWatcher::foldersChanged, this, &Library::foldersChanged);
+    connect(m_watcher, &FolderWatcher::everythingChanged, this, [this] {
+        m_checkAll = true;
+        m_dirtyTimer.start(1500);
+    });
+    connect(m_watcher, &FolderWatcher::statusChanged, this, &Library::watchStatusChanged);
+    m_dirtyTimer.setSingleShot(true);
+    connect(&m_dirtyTimer, &QTimer::timeout, this, &Library::scanChangedFolders);
+    m_periodic.setInterval(15 * 60 * 1000);
+    connect(&m_periodic, &QTimer::timeout, this, &Library::periodicCheck);
+    m_mounts.setInterval(30 * 1000);
+    connect(&m_mounts, &QTimer::timeout, this, &Library::checkMounts);
     ViewRegistry::writeExampleIfMissing();
     reloadViews();
     refreshStats();
@@ -73,8 +88,12 @@ void Library::setScanThreads(int n)
     emit settingsChanged();
 }
 
-void Library::startupScan()
+void Library::startupScan(bool scan)
 {
+    if (!scan) {
+        startWatching();
+        return;
+    }
     bool ftsStale = false;
     try {
         ftsStale = Database::ftsDirty(TrackCache::instance().db());
@@ -82,7 +101,197 @@ void Library::startupScan()
     }
     // A previous import was interrupted: the scan also rebuilds the search index.
     if (!m_roots.isEmpty() && (scanOnStart() || ftsStale))
-        rescan();
+        rescan(); // watching starts when it is done
+    else
+        startWatching();
+}
+
+// ---------- folder watching ----------
+
+bool Library::watchFolders() const
+{
+    return m_settings.value(QStringLiteral("library/watch"), true).toBool();
+}
+
+void Library::setWatchFolders(bool on)
+{
+    if (on == watchFolders())
+        return;
+    m_settings.setValue(QStringLiteral("library/watch"), on);
+    emit settingsChanged();
+    if (on) {
+        // changes while it was off: one look at everything, then watch
+        if (!m_scanner->running() && !m_roots.isEmpty())
+            m_scanner->startSubset(m_roots, scanThreads());
+        startWatching();
+    } else {
+        m_watcher->stop();
+        m_watchRoots.clear();
+        m_periodic.stop();
+        m_mounts.stop();
+        m_dirtyTimer.stop();
+        m_dirtyFolders.clear();
+    }
+    emit watchStatusChanged();
+}
+
+QStringList Library::localRoots() const
+{
+    QStringList out;
+    const QStringList net = m_watcher->networkRoots();
+    for (const QString &r : m_roots)
+        if (!net.contains(r))
+            out << r;
+    return out;
+}
+
+void Library::startWatching()
+{
+    if (!watchFolders() || m_roots.isEmpty()) {
+        m_watcher->stop();
+        m_watchRoots.clear();
+        m_periodic.stop();
+        m_mounts.stop();
+        emit watchStatusChanged();
+        return;
+    }
+    if (m_watchRoots != m_roots || !m_watcher->active()) {
+        m_watcher->start(m_roots);
+        m_watchRoots = m_roots;
+    } else {
+        m_watcher->resync(); // new folders from the scan, retry after a limit
+    }
+    m_periodic.start();
+    m_mounts.start();
+    emit watchStatusChanged();
+}
+
+void Library::foldersChanged(const QStringList &paths)
+{
+    for (const QString &p : paths)
+        if (!m_dirtyFolders.contains(p))
+            m_dirtyFolders << p;
+    if (!m_firstDirty.isValid())
+        m_firstDirty.start();
+    // Wait until the copying is done, but not forever (a long copy job).
+    m_dirtyTimer.start(m_firstDirty.elapsed() > 10000 ? 0 : 1500);
+}
+
+void Library::scanChangedFolders()
+{
+    if (m_scanner->running())
+        return; // scanFinished comes back here
+    if (m_checkAll || m_dirtyFolders.size() > 300) {
+        m_checkAll = false;
+        m_dirtyFolders.clear();
+        m_firstDirty.invalidate();
+        const QStringList local = localRoots();
+        if (!local.isEmpty())
+            m_scanner->startSubset(local, scanThreads());
+        return;
+    }
+    if (!m_subsetQueue.isEmpty()) {
+        const QStringList roots = m_subsetQueue;
+        m_subsetQueue.clear();
+        m_scanner->startSubset(roots, scanThreads());
+        return;
+    }
+    if (m_dirtyFolders.isEmpty())
+        return;
+    const QStringList folders = m_dirtyFolders;
+    m_dirtyFolders.clear();
+    m_firstDirty.invalidate();
+    m_scanner->startFolders(m_roots, folders);
+}
+
+void Library::periodicCheck()
+{
+    // What inotify cannot see: network shares, and folders over the watch limit.
+    QStringList roots = m_watcher->networkRoots();
+    if (m_watcher->limited())
+        roots += localRoots();
+    for (const QString &r : std::as_const(roots))
+        if (!m_subsetQueue.contains(r) && !m_missing.contains(r))
+            m_subsetQueue << r;
+    if (!m_subsetQueue.isEmpty())
+        m_dirtyTimer.start(0);
+}
+
+void Library::checkMounts()
+{
+    // A drive that comes back (USB disk plugged in, share mounted) gets a look
+    // of its own; one that goes away keeps everything (see Scanner).
+    for (const QString &r : std::as_const(m_roots)) {
+        const QFileInfo fi(r);
+        const bool there = fi.isDir() && fi.isReadable() && fi.isExecutable();
+        if (!there) {
+            m_missing.insert(r);
+        } else if (m_missing.remove(r)) {
+            if (!m_subsetQueue.contains(r))
+                m_subsetQueue << r;
+            m_dirtyTimer.start(0);
+        }
+    }
+}
+
+QString Library::watchStatus() const
+{
+    const QLocale de(QLocale::German);
+    if (!watchFolders())
+        return tr("Aus. Änderungen findet der Scan beim Start oder „Jetzt scannen“.");
+    if (m_roots.isEmpty())
+        return {};
+    QStringList parts;
+    if (m_watcher->active() && !localRoots().isEmpty()) {
+        if (m_watcher->limited())
+            parts << tr("Überwacht %1 von %2 Ordnern, mehr erlaubt das System gerade nicht. Der Rest wird alle 15 Minuten geprüft.")
+                         .arg(de.toString(m_watcher->watched()), de.toString(std::max(m_watcher->total(), m_watcher->watched())));
+        else
+            parts << tr("Überwacht %1 Ordner: Neue, geänderte und gelöschte Dateien sind nach wenigen Sekunden in der Bibliothek.")
+                         .arg(de.toString(m_watcher->watched()));
+    }
+    const QStringList net = m_watcher->networkRoots();
+    if (!net.isEmpty())
+        parts << tr("Netzlaufwerke werden alle 15 Minuten geprüft (%1).").arg(net.join(QStringLiteral(", ")));
+    if (!m_missing.isEmpty())
+        parts << tr("Sobald %1 wieder da ist, wird es eingelesen.").arg(QStringList(m_missing.values()).join(QStringLiteral(", ")));
+    return parts.join(QLatin1Char(' '));
+}
+
+QString Library::watchHint() const
+{
+    if (!watchFolders() || !m_watcher->limited())
+        return {};
+    const qint64 want = std::max<qint64>(524288, (m_watcher->total() * 3 / 2 + 65535) / 65536 * 65536);
+    return QStringLiteral("echo fs.inotify.max_user_watches=%1 | sudo tee /etc/sysctl.d/90-bub3player.conf && sudo sysctl --system").arg(want);
+}
+
+void Library::scanFinished()
+{
+    const Scanner::Stats &st = m_scanner->lastStats();
+    if (st.mode == Scanner::Full) {
+        emit message(m_scanner->summary());
+        m_missing = QSet<QString>(st.missingRoots.begin(), st.missingRoots.end());
+        if (!st.cancelled)
+            startWatching();
+    } else {
+        // Small automatic scans: say what changed, if anything did.
+        const QLocale de(QLocale::German);
+        QStringList parts;
+        if (st.added > 0)
+            parts << (st.added == 1 ? tr("1 Titel neu") : tr("%1 Titel neu").arg(de.toString(st.added)));
+        if (st.removed > 0)
+            parts << (st.removed == 1 ? tr("1 Titel entfernt") : tr("%1 Titel entfernt").arg(de.toString(st.removed)));
+        if (!parts.isEmpty())
+            emit message(tr("Bibliothek aktualisiert: %1").arg(parts.join(QStringLiteral(", "))));
+        if (watchFolders())
+            m_watcher->addTrees(st.scanned);
+    }
+    if (auto *p = PlaylistStore::instance())
+        p->relink(); // tracks that came back (drive plugged in, file moved)
+    if (!m_dirtyFolders.isEmpty() || !m_subsetQueue.isEmpty() || m_checkAll)
+        m_dirtyTimer.start(500);
+    emit watchStatusChanged();
 }
 
 void Library::addRoot(const QVariant &pathOrUrl)
@@ -128,6 +337,8 @@ void Library::reloadViews()
 {
     m_viewsError.clear();
     m_views = ViewRegistry::builtIn() + ViewRegistry::userViews(&m_viewsError);
+    if (auto *p = PlaylistStore::instance())
+        m_views += p->views();
     emit viewsChanged();
 }
 
@@ -151,6 +362,8 @@ void Library::notifyExternalChange()
     TrackCache::instance().invalidate();
     refreshStats();
     emit changed();
+    if (auto *p = PlaylistStore::instance())
+        p->relink();
 }
 
 void Library::refreshStats()
@@ -204,9 +417,31 @@ void Library::enqueueList(TrackListModel *model, int row, bool next)
 {
     if (!model || row < 0 || row >= model->count())
         return;
-    const QVector<qint64> one{model->idAt(row)};
-    next ? m_queue->insertNext(one) : m_queue->append(one);
+    const QVector<qint64> ids = model->actionIds(row); // the selection, if the row is part of it
+    next ? m_queue->insertNext(ids) : m_queue->append(ids);
+    if (ids.size() == 1)
+        emit message(next ? tr("Wird als Nächstes gespielt") : tr("Zur Warteschlange hinzugefügt"));
+    else
+        emit message(next ? tr("%1 Titel werden als Nächstes gespielt").arg(QLocale(QLocale::German).toString(ids.size()))
+                          : tr("%1 Titel zur Warteschlange hinzugefügt").arg(QLocale(QLocale::German).toString(ids.size())));
+}
+
+void Library::enqueueIds(const QVariantList &list, bool next)
+{
+    QVector<qint64> ids;
+    for (const QVariant &v : list)
+        if (v.toLongLong() > 0)
+            ids << v.toLongLong();
+    if (ids.isEmpty())
+        return;
+    next ? m_queue->insertNext(ids) : m_queue->append(ids);
     emit message(next ? tr("Wird als Nächstes gespielt") : tr("Zur Warteschlange hinzugefügt"));
+}
+
+void Library::playSelection(TrackListModel *model, int row)
+{
+    if (model)
+        playIds(model->actionIds(row), 0, false);
 }
 
 void Library::playFolder(FolderModel *model, int row)

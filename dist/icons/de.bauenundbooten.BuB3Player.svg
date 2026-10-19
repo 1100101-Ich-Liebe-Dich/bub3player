@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2c2140"/>
+      <stop offset="1" stop-color="#120f1d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.78" r="0.62">
+      <stop offset="0" stop-color="#ff6a7a" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#ff6a7a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb04a"/>
+      <stop offset="0.55" stop-color="#ff6f6a"/>
+      <stop offset="1" stop-color="#ff4f9a"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#glow)"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="55.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <g fill="url(#bar)">
+    <rect x="64" y="122" width="34" height="76" rx="17"/>
+    <rect x="111" y="58" width="34" height="140" rx="17"/>
+    <rect x="158" y="100" width="34" height="98" rx="17"/>
+  </g>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#shine)"/>
+</svg>

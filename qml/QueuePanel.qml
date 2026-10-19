@@ -26,7 +26,7 @@ Rectangle {
         Text {
             x: 24
             y: 50
-            width: head.width - 120
+            width: head.width - 150
             elide: Text.ElideRight
             text: (Queue.radio !== "" ? Queue.radio + " · " : "")
                   + (Queue.count > 0 ? qsTr("Titel %1 von %2").arg(Library.formatCount(Queue.currentRow + 1)).arg(Library.formatCount(Queue.count)) : qsTr("Leer"))
@@ -35,6 +35,22 @@ Rectangle {
             color: Theme.textDim
         }
         IconButton {
+            id: saveBtn
+            anchors.right: autoBtn.left
+            anchors.rightMargin: 2
+            y: 22
+            iconName: "playlist-add"
+            iconSize: 18
+            tip: qsTr("Als Playlist speichern")
+            enabled: Queue.count > 0
+            onClicked: saveMenu.popup(saveBtn, 0, saveBtn.height)
+            PlaylistMenu {
+                id: saveMenu
+                onChosen: (id) => window.playlistUi.addTo(id, function (pid) { Playlists.addQueue(pid) })
+            }
+        }
+        IconButton {
+            id: autoBtn
             anchors.right: clearBtn.left
             anchors.rightMargin: 2
             y: 22
@@ -216,6 +232,16 @@ Rectangle {
                 onDoubleClicked: Player.playRow(index)
             }
         }
+    }
+
+    // Drag to reorder (the remove button on the right stays clickable).
+    RowDragArea {
+        anchors.fill: list
+        list: list
+        scrollBarWidth: 70
+        onRowClicked: (r, mods) => {}
+        onRowDoubleClicked: (r) => Player.playRow(r)
+        onMoveRequested: (from, to) => Queue.move(from, to > from ? to - 1 : to)
     }
 
     EmptyState {

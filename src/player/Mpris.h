@@ -29,7 +29,7 @@ public:
     bool canRaise() const { return true; }
     bool hasTrackList() const { return false; }
     QString identity() const { return QStringLiteral("BuB3Player"); }
-    QString desktopEntry() const { return QStringLiteral("halcyon"); }
+    QString desktopEntry() const { return QStringLiteral("de.bauenundbooten.BuB3Player"); }
     QStringList uriSchemes() const { return {QStringLiteral("file")}; }
     QStringList mimeTypes() const;
 

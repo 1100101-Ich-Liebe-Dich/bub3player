@@ -166,3 +166,15 @@ void FolderModel::reload()
     endResetModel();
     emit folderChanged();
 }
+
+QString FolderModel::folderPath(qint64 folderId) const
+{
+    try {
+        Stmt s(TrackCache::instance().db(), "SELECT path FROM folders WHERE id = ?");
+        s.bind(1, folderId);
+        if (s.step())
+            return s.str(0);
+    } catch (const std::exception &) {
+    }
+    return {};
+}

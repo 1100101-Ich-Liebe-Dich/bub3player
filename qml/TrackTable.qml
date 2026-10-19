@@ -13,9 +13,23 @@ Item {
     property string extraColumn: ""     // added | mtime | playCount | lastPlayed
     property alias list: list
     property alias header: list.header
+    property bool reorderable: false    // rows can be dragged into a new order (playlists)
     signal sortRequested(string key)
     signal activated(int row)
     signal contextRequested(int row, real x, real y)
+    signal moveRequested(int row, int to)
+
+    readonly property bool canSelect: !!table.model && typeof table.model.select === "function"
+    // Click with Ctrl toggles, Shift extends from the last clicked row, a plain
+    // click clears the selection.
+    function rowClick(row, modifiers) {
+        list.currentIndex = row
+        list.forceActiveFocus()
+        if (!canSelect) return
+        if (modifiers & Qt.ControlModifier) table.model.select(row, 1)
+        else if (modifiers & Qt.ShiftModifier) table.model.select(row, 2)
+        else table.model.select(row, 0)
+    }
 
     Connections {
         target: table.model
@@ -62,6 +76,16 @@ Item {
         focus: true
         Keys.onReturnPressed: if (currentIndex >= 0) table.activated(currentIndex)
         Keys.onPressed: (e) => {
+            if (table.canSelect && e.key === Qt.Key_A && (e.modifiers & Qt.ControlModifier)) {
+                table.model.selectAll()
+                e.accepted = true
+                return
+            }
+            if (table.canSelect && e.key === Qt.Key_Escape && table.model.selectionCount > 0) {
+                table.model.clearSelection()
+                e.accepted = true
+                return
+            }
             const page = Math.max(1, Math.floor(height / 54) - 1)
             if (e.key === Qt.Key_Home) { currentIndex = 0; positionViewAtBeginning() }
             else if (e.key === Qt.Key_End) { currentIndex = count - 1; positionViewAtEnd() }
@@ -85,7 +109,7 @@ Item {
             width: list.width
             height: 54
             readonly property bool isCurrent: model.trackId === Player.currentId
-            readonly property bool selected: ListView.isCurrentItem
+            readonly property bool selected: ListView.isCurrentItem || model.selected === true
 
             Surface {
                 anchors.fill: parent
@@ -97,7 +121,8 @@ Item {
                 quiet: true
                 hovered: mouse.containsMouse && Theme.style.controls !== "neu"
                 active: row.selected || row.isCurrent
-                flatColor: row.selected ? Theme.alpha(Theme.text, 0.09)
+                flatColor: model.selected === true ? Theme.alpha(Theme.accent, 0.2)
+                         : row.selected ? Theme.alpha(Theme.text, 0.09)
                          : row.isCurrent ? Theme.alpha(Theme.accent, 0.09)
                          : mouse.containsMouse ? Theme.alpha(Theme.text, 0.045) : "transparent"
             }
@@ -235,14 +260,30 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (m) => {
-                    list.currentIndex = index
-                    list.forceActiveFocus()
-                    if (m.button === Qt.RightButton)
+                    if (m.button === Qt.RightButton) {
+                        // acting on a row outside the selection: that row alone
+                        if (table.canSelect && model.selected !== true)
+                            table.rowClick(index, 0)
+                        list.currentIndex = index
+                        list.forceActiveFocus()
                         table.contextRequested(index, m.x, row.y - list.contentY + m.y)
+                    } else {
+                        table.rowClick(index, m.modifiers)
+                    }
                 }
                 onDoubleClicked: (m) => { if (m.button === Qt.LeftButton) table.activated(index) }
             }
         }
+    }
+
+    RowDragArea {
+        anchors.fill: list
+        list: list
+        enabled: table.reorderable
+        visible: enabled
+        onRowClicked: (r, mods) => table.rowClick(r, mods)
+        onRowDoubleClicked: (r) => table.activated(r)
+        onMoveRequested: (from, to) => { list.currentIndex = -1; table.moveRequested(from, to) }
     }
 
     // Column header, used as the list header so it scrolls away with the page header.

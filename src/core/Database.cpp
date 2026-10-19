@@ -10,7 +10,7 @@ namespace {
 QString g_path;
 bool g_hasFts = false;
 
-const int SchemaVersion = 3;
+const int SchemaVersion = 4;
 
 const char *SchemaV1 = R"SQL(
 CREATE TABLE IF NOT EXISTS sources (
@@ -240,6 +240,31 @@ CREATE TABLE IF NOT EXISTS artist_stats (
 ) WITHOUT ROWID;
 )SQL";
 
+// V4: playlists. Items keep a hint (path, title, artist, album, length) so a
+// track that disappears (moved file, drive away, server removed) stays in the
+// list as "missing" and is linked again when it shows up.
+const char *SchemaV4 = R"SQL(
+CREATE TABLE IF NOT EXISTS playlists (
+  id      INTEGER PRIMARY KEY,
+  name    TEXT NOT NULL,
+  smart   INTEGER NOT NULL DEFAULT 0,
+  spec    TEXT NOT NULL DEFAULT '',      -- smart playlists: rules as JSON
+  created INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS playlist_items (
+  playlist_id INTEGER NOT NULL,
+  pos         INTEGER NOT NULL,
+  track_id    INTEGER,                   -- NULL: track missing right now
+  hint        TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (playlist_id, pos)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_playlist_items_track ON playlist_items(track_id) WHERE track_id IS NOT NULL;
+CREATE TRIGGER IF NOT EXISTS tracks_ad_playlist AFTER DELETE ON tracks BEGIN
+  UPDATE playlist_items SET track_id = NULL WHERE track_id = old.id;
+END;
+)SQL";
+
 void migrate()
 {
     DbConnection db = open();
@@ -251,6 +276,7 @@ void migrate()
     db.exec(SchemaV1);
     migrateV2(db);
     db.exec(SchemaV3);
+    db.exec(SchemaV4);
     {   // test builds of 0.6 created artist_stats without a name
         bool hasName = false;
         Stmt s(db, "PRAGMA table_info(artist_stats)");

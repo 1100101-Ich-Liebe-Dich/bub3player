@@ -314,5 +314,11 @@ Item {
         HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueGroup(groups, ctx.row, true) }
         HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueGroup(groups, ctx.row, false) }
         HMenuItem { text: qsTr("Radio dazu starten"); onTriggered: Recommend.startRadioFromGroup(groups, ctx.row) }
+        PlaylistMenu {
+            onChosen: (id) => {
+                var r = ctx.row
+                window.playlistUi.addTo(id, function (pid) { Playlists.addGroup(pid, groups, r) })
+            }
+        }
     }
 }

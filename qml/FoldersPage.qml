@@ -63,6 +63,19 @@ Item {
                     iconName: "shuffle"
                     onClicked: Library.playFolderTree(folders.path, true)
                 }
+                PillButton {
+                    visible: folders.folderId > 0
+                    text: qsTr("Zur Playlist")
+                    iconName: "playlist-add"
+                    onClicked: folderAddMenu.popup()
+                    PlaylistMenu {
+                        id: folderAddMenu
+                        onChosen: (id) => {
+                            var p = folders.path
+                            window.playlistUi.addTo(id, function (pid) { Playlists.addFolder(pid, p) })
+                        }
+                    }
+                }
             }
             // Breadcrumbs
             Flow {
@@ -249,8 +262,16 @@ Item {
                 id: mouse
                 anchors.fill: parent
                 hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: model.isFolder ? Qt.PointingHandCursor : Qt.ArrowCursor
-                onClicked: {
+                onClicked: (m) => {
+                    if (m.button === Qt.RightButton) {
+                        fctx.isFolder = model.isFolder
+                        fctx.itemId = model.itemId
+                        fctx.row = index
+                        fctx.popup()
+                        return
+                    }
                     list.currentIndex = index
                     list.forceActiveFocus()
                     if (model.isFolder) {
@@ -258,7 +279,42 @@ Item {
                         folders.folderId = model.itemId
                     }
                 }
-                onDoubleClicked: if (!model.isFolder) Library.playFolder(folders, index)
+                onDoubleClicked: (m) => { if (m.button === Qt.LeftButton && !model.isFolder) Library.playFolder(folders, index) }
+            }
+        }
+    }
+
+    HMenu {
+        id: fctx
+        property bool isFolder: false
+        property var itemId: 0
+        property int row: -1
+        HMenuItem {
+            text: qsTr("Abspielen")
+            onTriggered: fctx.isFolder ? Library.playFolderTree(folders.folderPath(fctx.itemId), false) : Library.playFolder(folders, fctx.row)
+        }
+        HMenuItem {
+            visible: fctx.isFolder; height: visible ? implicitHeight : 0
+            text: qsTr("Zufällig abspielen")
+            onTriggered: Library.playFolderTree(folders.folderPath(fctx.itemId), true)
+        }
+        HMenuItem {
+            visible: !fctx.isFolder; height: visible ? implicitHeight : 0
+            text: qsTr("Als Nächstes spielen")
+            onTriggered: Library.enqueueIds([fctx.itemId], true)
+        }
+        HMenuItem {
+            visible: !fctx.isFolder; height: visible ? implicitHeight : 0
+            text: qsTr("Zur Warteschlange hinzufügen")
+            onTriggered: Library.enqueueIds([fctx.itemId], false)
+        }
+        PlaylistMenu {
+            onChosen: (id) => {
+                var isFolder = fctx.isFolder, item = fctx.itemId
+                window.playlistUi.addTo(id, function (pid) {
+                    if (isFolder) Playlists.addFolder(pid, folders.folderPath(item))
+                    else Playlists.addTrack(pid, item)
+                })
             }
         }
     }

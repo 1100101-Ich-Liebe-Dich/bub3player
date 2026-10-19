@@ -41,6 +41,7 @@ public:
     Q_INVOKABLE void up();
     QVector<qint64> trackIds() const;
     Q_INVOKABLE int trackIndexOfRow(int row) const { return row - int(m_folders.size()); }
+    Q_INVOKABLE QString folderPath(qint64 folderId) const; // full path of any folder
 
 signals:
     void folderChanged();

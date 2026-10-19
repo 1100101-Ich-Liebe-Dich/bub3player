@@ -87,6 +87,7 @@ ApplicationWindow {
     // ---------- navigation ----------
     function openView(v) {
         if (!v || !v.id || !stack) return
+        if (v.kind === "newPlaylist") { playlistUi.newPlaylist(); return }
         currentViewId = v.id
         nowPlayingOpen = false
         if (v.id !== "settings")
@@ -107,6 +108,10 @@ ApplicationWindow {
             break
         case "foryou":
             stack.replace(null, forYouPage, { pageId: v.id })
+            break
+        case "playlist":
+            stack.replace(null, tracksPage, { pageId: v.id, title: v.name, spec: v.spec || {}, playlistId: v.playlistId,
+                                              smart: v.smart === true, subtitle: v.smart ? qsTr("Smart-Playlist") : qsTr("Playlist") })
             break
         }
     }
@@ -192,6 +197,9 @@ ApplicationWindow {
             secondTrim.restart()
         }
     }
+
+    readonly property alias playlistUi: playlistUi
+    PlaylistUi { id: playlistUi }
 
     Toast {
         id: toast
@@ -289,6 +297,47 @@ ApplicationWindow {
             else if (ok) Jellyfin.login(url, "demo", "demo")
         }
     }
+    QtObject {
+        id: testPl
+        property var model: null
+        property var pid: 0
+        property Connections c: Connections {
+            target: testPl.model
+            function onReloaded() {
+                // a few rows of every second album, then the queue
+                for (var r = 0; r < testPl.model.count; r += 5) testPl.model.select(r, 1)
+                Playlists.addRows(testPl.pid, testPl.model, 0)
+            }
+        }
+    }
+    Timer {
+        id: openLater
+        property int idx: 0
+        interval: 900
+        onTriggered: {
+            var p = Playlists.playlists[idx]
+            if (p) playlistUi.openPlaylist(p.id)
+            if (uiTest.indexOf("plsel") >= 0) selLater.start()
+        }
+    }
+    Timer {
+        id: selLater
+        interval: 700
+        onTriggered: {
+            var t = stack.currentItem && stack.currentItem.resources
+            // the TrackListModel of the page
+            for (var i = 0; t && i < t.length; ++i)
+                if (t[i].selectAll !== undefined) { t[i].select(1, 0); t[i].select(2, 1); t[i].select(4, 1) }
+        }
+    }
+    Timer {
+        id: editLater
+        interval: 1200
+        onTriggered: {
+            for (var i = 0; i < Playlists.playlists.length; ++i)
+                if (Playlists.playlists[i].smart) { playlistUi.editRules(Playlists.playlists[i].id); return }
+        }
+    }
     Timer {
         id: uiTestTimer
         interval: 900
@@ -325,6 +374,18 @@ ApplicationWindow {
             if (a.indexOf("blendloop") >= 0) blendTimer.start()
             var sw = a.match(/swap-(\w+)/)
             if (sw) swapTimer.target = sw[1], swapTimer.start()
+            // playlists: mkpl (create examples), plopen=N, pledit, plnew, plsel
+            if (a.indexOf("mkpl") >= 0 && Playlists.playlists.length === 0) {
+                var pid = Playlists.create("Roadtrip")
+                var m = Qt.createQmlObject('import Halcyon; TrackListModel { spec: ({ sort: "album" }) }', window)
+                testPl.model = m
+                testPl.pid = pid
+                Playlists.create("Schnell und laut", { match: "all", filters: [{ field: "bpm", op: "ge", value: 120 }, { field: "energy", op: "ge", value: 0.3 }], sort: "bpm", desc: true })
+            }
+            var po = a.match(/plopen=(\d+)/)
+            if (po) openLater.start(), openLater.idx = Number(po[1])
+            if (a.indexOf("pledit") >= 0) editLater.start()
+            if (a.indexOf("plnew") >= 0) playlistUi.newPlaylist()
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
             if (a.indexOf("search") >= 0) {
                 if (window.skin && window.skin.setSearchText) window.skin.setSearchText("nord")
