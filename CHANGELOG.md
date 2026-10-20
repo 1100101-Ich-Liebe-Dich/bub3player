@@ -1,16 +1,4 @@
-# Änderungen
-
-Alle wichtigen Änderungen an BuB3Player, die neueste Version oben. Das Format folgt
-[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), die Versionsnummern folgen
-[Semantic Versioning](https://semver.org/lang/de/): Die letzte Stelle zählt Fehlerbehebungen,
-die mittlere neue Funktionen, die erste Änderungen, nach denen sich etwas anders bedienen lässt.
-
-Jede Version ist unterteilt in **Hinzugefügt** (neue Funktionen), **Geändert** (anders als
-vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
-
-## [Unveröffentlicht]
-
-## [1.2.1] - 2026-10-20
+## 1.2.1 - 2026-10-20
 
 Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Release, Hinweise.
 
@@ -45,7 +33,7 @@ Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Relea
   Server außerhalb des Heimnetzes nur über http, warnt der Player, dass Passwort und
   Zugangsschlüssel unverschlüsselt übertragen werden.
 
-## [1.2.0] - 2026-10-20
+## 1.2.0 - 2026-10-20
 
 ### Hinzugefügt
 - **Künstlerbilder**: Künstler zeigen ihr eigenes Bild statt eines Albumcovers – aus dem Ordner
@@ -70,7 +58,7 @@ Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Relea
 - **A–Z-Leiste**: Ein späteres Neuladen der Liste (Scan, Ordnerüberwachung) zog die Ansicht nach
   einem Sprung wieder nach oben.
 
-## [1.1.0] - 2026-10-20
+## 1.1.0 - 2026-10-20
 
 ### Hinzugefügt
 - Neuer Reiter **Einstellungen → Klang** (`Strg + E`), in allen acht Themes.
@@ -102,7 +90,7 @@ Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Relea
 - `--add-folder` nimmt auch relative Pfade.
 - „1 Datei geprüft“ in der Einzahl.
 
-## [1.0.0] - 2026-10-19
+## 1.0.0 - 2026-10-19
 
 Erste stabile Version: alles aus den Versionen 0.1 bis 0.9 in einem Paket, ausgiebig getestet
 auf alter Hardware und mit einer Bibliothek von einer Million Titeln – Bibliothek für 1 Mio+ Titel
