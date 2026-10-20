@@ -215,7 +215,7 @@ Ordnerüberwachung; AppImage für alle Distributionen ab glibc 2.35.
 - Theme Klassik mit sieben Farbschemata.
 
 [Unveröffentlicht]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/v1.2.1...HEAD
-[1.2.1]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/releases/tag/v1.0.0
+[1.2.1]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/ae6b144...v1.2.1
+[1.2.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/9d70c6e...ae6b144
+[1.1.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/compare/87c3290...9d70c6e
+[1.0.0]: https://github.com/1100101-Ich-Liebe-Dich/bub3player/tree/87c3290
