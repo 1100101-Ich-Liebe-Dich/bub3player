@@ -375,6 +375,7 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
 | `Strg + F` | Suchen |
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
+| `F11` | Vollbild an und aus |
 | `Strg + T` | Theme wechseln |
 | `Strg + E` | Klang: Ausgabe und Equalizer |
 | `Strg + A` | Alle Titel der Liste markieren |

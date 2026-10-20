@@ -36,6 +36,21 @@ ApplicationWindow {
     onPauseInactiveChanged: Library.setSetting("pauseInactive", pauseInactive)
 
     readonly property bool onScreen: visibility !== Window.Minimized && visibility !== Window.Hidden
+
+    // F11: full screen and back to how the window was (maximized or not).
+    property int visibilityBeforeFullScreen: Window.Windowed
+    function toggleFullScreen() {
+        if (visibility === Window.FullScreen) {
+            if (visibilityBeforeFullScreen === Window.Maximized)
+                showMaximized()
+            else
+                showNormal()
+        } else {
+            visibilityBeforeFullScreen = visibility
+            showFullScreen()
+            toast.show(qsTr("Vollbild – zurück mit F11"))
+        }
+    }
     // Effects run only while someone can see them (and optionally only while focused).
     readonly property bool animationsActive: onScreen && (!pauseInactive || active)
 
@@ -228,6 +243,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
     Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
     Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
+    Shortcut { sequence: "F11"; onActivated: window.toggleFullScreen() }
     Shortcut { sequence: StandardKey.Quit; onActivated: Qt.quit() }
     Shortcut { sequence: "Alt+Left"; enabled: !!window.stack && window.stack.depth > 1; onActivated: window.stack.pop() }
 
@@ -371,6 +387,7 @@ ApplicationWindow {
             if (a.indexOf("theme-tab") >= 0) window.openSettings(1)
             if (a.indexOf("mix-tab") >= 0) window.openSettings(2)
             if (a.indexOf("klang-tab") >= 0) window.openSettings(3)
+            if (a.indexOf("fullscreen") >= 0) window.toggleFullScreen()
             if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(4)
             var sk = a.match(/seek=(\d+)/)
             if (sk) seekTimer.to = Number(sk[1]), seekTimer.start()

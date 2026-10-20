@@ -198,6 +198,7 @@ Typischer Ablauf vor einem PR:
   privat, bis der Inhaber alles getestet hat.
 - **1.2.0**: Künstlerbilder (Ordner/Jellyfin), Suche mit Künstler- und Albenreihe, A–Z-Leiste
   repariert, Bit-Perfect nur mit Bestätigung (Lautstärke runter).
+- **1.2.1**: Vollbild mit F11.
 - **Als Nächstes** (in der README schon als vorhanden beschrieben, vor dem öffentlich Schalten
   des Repos fertig bauen!):
   - **Liedtexte**: aus Tags und `.lrc` neben der Datei, synchronisiert in der Großansicht

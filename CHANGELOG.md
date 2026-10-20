@@ -2,6 +2,12 @@
 
 Alle wichtigen Änderungen an BuB3Player. Die neueste Version steht oben.
 
+## 1.2.1 – Vollbild
+
+- **F11** schaltet das Vollbild an und aus; danach ist das Fenster wieder so groß wie vorher
+  (auch maximiert). Ein Hinweis zeigt, wie man zurückkommt. In allen Themes, im Terminal-Theme
+  auch in der Tastenleiste.
+
 ## 1.2.0 – Künstlerbilder, neue Suche
 
 - **Künstlerbilder**: Künstler zeigen ihr eigenes Bild statt eines Albumcovers – aus dem Ordner

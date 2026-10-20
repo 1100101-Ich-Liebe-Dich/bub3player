@@ -75,7 +75,7 @@ Item {
         height: 22
         spacing: 14
         Repeater {
-            model: [["Leer", "Play/Pause"], ["^F", "Suche"], ["^J", "Liste"], ["^L", "Vollbild"], ["^T", "Themes"], ["^←/→", "Titel"], ["Esc", "zurück"]]
+            model: [["Leer", "Play/Pause"], ["^F", "Suche"], ["^J", "Liste"], ["^L", "Großansicht"], ["F11", "Vollbild"], ["^T", "Themes"], ["^←/→", "Titel"], ["Esc", "zurück"]]
             Row {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
