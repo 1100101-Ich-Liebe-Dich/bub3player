@@ -51,9 +51,11 @@ TagLib 1.11, SQLite 3.35. Die Version steht in `CMakeLists.txt` (`project(Halcyo
 und wird als `HALCYON_VERSION` überall verwendet; dazu `dist/*.metainfo.xml` und `CHANGELOG.md`
 pflegen.
 
-**Änderungsprotokoll:** `CHANGELOG.md` nach Keep a Changelog: neue Einträge unter
-„Unveröffentlicht“ in „Hinzugefügt“, „Geändert“, „Behoben“, „Entfernt“, „Sicherheit“; bei einer
-neuen Version wird daraus `## [X.Y.Z] – Datum` und unten der Vergleichslink ergänzt.
+**Änderungsprotokoll:** `CHANGELOG.md`, neueste Version oben, so schlicht, wie der Inhaber es
+will: keine Kopfzeile, kein Abschnitt „Unveröffentlicht“, keine Links. Jede Version beginnt mit
+`## X.Y.Z - JJJJ-MM-TT` (Datum des PRs, der Inhaber passt es beim Release an, falls nötig),
+optional ein Satz, dann `### Hinzugefügt`, `### Geändert`, `### Behoben`, `### Entfernt`,
+`### Sicherheit` (nur die, die es gibt).
 
 **Lizenz:** GPL-3.0-or-later (`LICENSE`). Jede neue Quelldatei (C++, QML, Skripte, CMake) beginnt
 mit `SPDX-License-Identifier: GPL-3.0-or-later` (Shader und JSON nicht). Fremde Teile: Schriften
@@ -161,9 +163,9 @@ Typischer Ablauf vor einem PR:
 
 - Repo: `1100101-Ich-Liebe-Dich/bub3player`, Standard-Branch `main`. Neu angelegt am 2026-10-20
   mit umgeschriebener Historie (E-Mail des Inhabers → GitHub-Ersatzadresse); das alte Repo heißt
-  `bub3player-alt` (privat, mit den PR-Seiten #1–#10). Versionen bis 1.2.0 haben dort Tags, hier
-  nicht – das CHANGELOG verlinkt sie über Commit-Kennungen (1.0.0 = 87c3290, 1.1.0 = 9d70c6e,
-  1.2.0 = ae6b144).
+  `bub3player-alt` (privat, mit den PR-Seiten #1–#10 und den Releases bis 1.2.0).
+  Hier gibt es Tags erst ab v1.2.1; die älteren Versionen sind die Commits 87c3290 (1.0.0),
+  9d70c6e (1.1.0) und ae6b144 (1.2.0).
 - Die echte E-Mail des Inhabers darf nie in Commits landen: Commits der Sitzung laufen als
   `Claude <noreply@anthropic.com>`, Merges des Inhabers über die Ersatzadresse.
 - `gh pr create` funktioniert in der Sitzung nicht; PRs über
