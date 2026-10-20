@@ -116,13 +116,16 @@ LyricsText fromTags(const QString &audioPath)
     return plain;
 }
 
-LyricsText fromJellyfin(qint64 sourceId, const QString &itemId)
+using Stale = std::function<bool()>; // the search is no longer wanted (another track by now)
+
+LyricsText fromJellyfin(qint64 sourceId, const QString &itemId, const Stale &stale)
 {
     JellyfinAccess::Server server;
     if (!JellyfinAccess::isOnline(sourceId) || !JellyfinAccess::get(sourceId, server))
         return {};
     int status = 0;
-    const QByteArray bytes = JellyfinAccess::httpGet(JellyfinAccess::lyricsUrl(sourceId, itemId), server.token, 8000, &status);
+    const QByteArray bytes = Http::get(JellyfinAccess::lyricsUrl(sourceId, itemId), {{"Authorization", JellyfinAccess::authHeader(server.token)}},
+                                       8000, &status, stale);
     // {"Metadata": {…}, "Lyrics": [{"Text": "…", "Start": ticks}, …]} (Jellyfin 10.9+)
     const QJsonArray rows = QJsonDocument::fromJson(bytes).object().value(QStringLiteral("Lyrics")).toArray();
     LyricsText t;
@@ -167,7 +170,7 @@ QString lrclibText(const QJsonObject &o)
 
 std::atomic<qint64> g_lrclibRetryAt{0};
 
-LyricsText fromLrclib(const TrackInfo &info)
+LyricsText fromLrclib(const TrackInfo &info, const Stale &stale)
 {
     if (info.title.isEmpty() || info.artist.isEmpty())
         return {};
@@ -211,7 +214,9 @@ LyricsText fromLrclib(const TrackInfo &info)
         q.addQueryItem(QStringLiteral("album_name"), enc(info.album));
         q.addQueryItem(QStringLiteral("duration"), QString::number(secs));
         u.setQuery(q);
-        const QByteArray bytes = Http::get(u, headers, 10000, &status);
+        const QByteArray bytes = Http::get(u, headers, 10000, &status, stale);
+        if (stale())
+            return {}; // cancelled: no answer to keep, no reason to wait
         if (status == 200)
             text = lrclibText(QJsonDocument::fromJson(bytes).object());
     }
@@ -223,7 +228,9 @@ LyricsText fromLrclib(const TrackInfo &info)
         q.addQueryItem(QStringLiteral("track_name"), enc(info.title));
         q.addQueryItem(QStringLiteral("artist_name"), enc(info.artist));
         u.setQuery(q);
-        const QByteArray bytes = Http::get(u, headers, 10000, &status);
+        const QByteArray bytes = Http::get(u, headers, 10000, &status, stale);
+        if (stale())
+            return {}; // cancelled: no answer to keep, no reason to wait
         if (status == 200) {
             QString plain;
             for (const QJsonValue &v : QJsonDocument::fromJson(bytes).array()) {
@@ -261,13 +268,13 @@ LyricsText fromLrclib(const TrackInfo &info)
 
 // Everything up to the level asked for; the best find wins (synchronised before plain).
 // A search that is no longer wanted (another track by now) ends before the network.
-LyricsText find(const TrackInfo &info, bool network, const std::function<bool()> &stale = [] { return false; })
+LyricsText find(const TrackInfo &info, bool network, const Stale &stale = [] { return false; })
 {
     LyricsText best;
     if (stale())
         return best;
     if (info.sourceId != 1 && !info.remoteId.isEmpty()) {
-        best = fromJellyfin(info.sourceId, info.remoteId);
+        best = fromJellyfin(info.sourceId, info.remoteId, stale);
     } else if (!info.path.isEmpty()) {
         best = fromLrcFile(info.path);
         if (!best.synced()) {
@@ -277,7 +284,7 @@ LyricsText find(const TrackInfo &info, bool network, const std::function<bool()>
         }
     }
     if (network && !best.synced() && !stale()) {
-        LyricsText net = fromLrclib(info);
+        LyricsText net = fromLrclib(info, stale);
         if (net.synced() || best.isEmpty())
             best = std::move(net);
     }
@@ -394,7 +401,7 @@ Lyrics::Lyrics(Player *player, QObject *parent)
 
 Lyrics::~Lyrics()
 {
-    m_liveGen = ~quint64(0); // running searches skip the network
+    m_liveGen = ~quint64(0); // running searches end, also in the middle of a request
     m_pool.clear();
 }
 
@@ -538,8 +545,10 @@ void Lyrics::clear(int status)
 
 void Lyrics::updateCurrent(bool force)
 {
+    if (!force && m_textId != m_player->currentId())
+        return; // the old lines stay as they are until the new ones come
     int idx = -1;
-    if (m_text.synced() && m_player->currentId() == m_textId) { // not the old lines against the new track's time
+    if (m_text.synced() && m_player->currentId() == m_textId) {
         const qint64 pos = m_player->position() + LeadMs;
         idx = int(std::upper_bound(m_text.times.begin(), m_text.times.end(), pos) - m_text.times.begin()) - 1;
     }

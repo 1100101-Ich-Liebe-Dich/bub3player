@@ -9,7 +9,7 @@
 
 namespace Http {
 
-QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *status)
+QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *status, const std::function<bool()> &cancel)
 {
     QNetworkAccessManager nam;
     QNetworkRequest req(url);
@@ -23,6 +23,14 @@ QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *stat
     QObject::connect(&timer, &QTimer::timeout, reply, &QNetworkReply::abort);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     timer.start(timeoutMs);
+    QTimer poll;
+    if (cancel) {
+        QObject::connect(&poll, &QTimer::timeout, reply, [&] {
+            if (cancel())
+                reply->abort();
+        });
+        poll.start(100);
+    }
     loop.exec();
     const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     if (status)

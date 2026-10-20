@@ -87,7 +87,7 @@ snap)
     DISPLAY=$DISP import -window root "$DIR/shots/$1.png" && echo "Bild: $DIR/shots/$1.png"
     ;;
 stop)
-    pkill -f "[b]uild/halcyon" ; pkill -f "[X]vfb $DISP"; sleep 0.5
+    pkill -f "^$BIN" ; pkill -f "[X]vfb $DISP"; sleep 0.5 # "^": never the shell that runs this
     quiet "$DIR/run.log" 2>/dev/null
     ;;
 mem)
