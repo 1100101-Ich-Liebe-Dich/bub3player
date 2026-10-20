@@ -21,6 +21,7 @@ Bau-Systems; Updates dieser Bibliotheken kommen mit der nächsten Version.
   `~/.config/halcyon`, `~/.local/share/halcyon` und `~/.cache/halcyon` – und M3U-Dateien, wenn
   du eine Playlist exportierst.
 - **Netz:** nur zu Jellyfin-Servern, die du einträgst. Gespeichert wird der Zugangsschlüssel des
-  Servers, nie das Passwort.
+  Servers (unverschlüsselt in `~/.local/share/halcyon/library.db`), nie das Passwort. Ohne Angabe wird zuerst https versucht; bei http außerhalb des
+  Heimnetzes warnt der Player.
 - **Datenbank:** alle Werte aus Ansichten und Suche werden als Parameter gebunden, Felder und
   Operatoren sind auf eine feste Liste begrenzt.

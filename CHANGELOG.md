@@ -14,6 +14,8 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 - Lizenz: BuB3Player ist freie Software unter der **GNU General Public License v3.0 oder
   später** (`LICENSE`). Die Lizenztexte der Schriften, Symbole und mitgelieferten Bibliotheken
   liegen bei (`LICENSES/`, im AppImage unter `usr/share/licenses/`).
+- Jedes Release bekommt neben dem AppImage den Quellcode der darin mitgelieferten
+  Ubuntu-Pakete (`BuB3Player-<Version>-quellen.tar`).
 - AppStream-Daten mit Lizenz, Bildschirmfotos, Inhaltsangabe und Links für Software-Center.
 - Hinweise zum Mitmachen (`CONTRIBUTING.md`), zum Melden von Sicherheitslücken (`SECURITY.md`)
   und eine Vorlage für Pull Requests.
@@ -22,9 +24,20 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 ### Geändert
 - Dieses Änderungsprotokoll ist nach Kategorien gegliedert.
 - „Über“ in den Einstellungen nennt alle Schriften und die Lizenz.
-- Bau-Workflow: `actions/upload-artifact` v6 (Node.js 24).
+- Bau-Workflow: `actions/upload-artifact` v6 (Node.js 24); nur noch das Release darf ins
+  Repository schreiben.
+- README: Liedtexte stehen unter „Ausblick“, bis sie fertig sind.
 
-## [1.2.1] – 2026-10-20
+### Entfernt
+- Die Verknüpfung mit Audiodateien im Desktop-Eintrag: „Öffnen mit BuB3Player“ tat nichts.
+  Kommt wieder, wenn der Player Dateien direkt öffnen kann.
+
+### Sicherheit
+- Jellyfin: Ohne angegebenes Schema wird zuerst `https://` versucht, dann `http://`. Antwortet ein
+  Server außerhalb des Heimnetzes nur über http, warnt der Player, dass Passwort und
+  Zugangsschlüssel unverschlüsselt übertragen werden.
+
+## [1.2.1] - 2026-10-20
 
 ### Hinzugefügt
 - **F11** schaltet das Vollbild an und aus; danach ist das Fenster wieder so groß wie vorher
@@ -34,7 +47,7 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 ### Geändert
 - Terminal-Theme: In der Tastenleiste heißt `^L` jetzt „Großansicht“ (wie in den Einstellungen).
 
-## [1.2.0] – 2026-10-20
+## [1.2.0] - 2026-10-20
 
 ### Hinzugefügt
 - **Künstlerbilder**: Künstler zeigen ihr eigenes Bild statt eines Albumcovers – aus dem Ordner
@@ -59,7 +72,7 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 - **A–Z-Leiste**: Ein späteres Neuladen der Liste (Scan, Ordnerüberwachung) zog die Ansicht nach
   einem Sprung wieder nach oben.
 
-## [1.1.0] – 2026-10-19
+## [1.1.0] - 2026-10-20
 
 ### Hinzugefügt
 - Neuer Reiter **Einstellungen → Klang** (`Strg + E`), in allen acht Themes.
@@ -91,24 +104,21 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 - `--add-folder` nimmt auch relative Pfade.
 - „1 Datei geprüft“ in der Einzahl.
 
-## [1.0.0] – 2026-10-19
+## [1.0.0] - 2026-10-19
 
 Erste stabile Version: alles aus den Versionen 0.1 bis 0.9 in einem Paket, ausgiebig getestet
-auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
+auf alter Hardware und mit einer Bibliothek von einer Million Titeln – Bibliothek für 1 Mio+ Titel
+mit Zwei-Phasen-Scanner, Volltextsuche und vielen Ansichten; acht komplett verschiedene Themes;
+Wiedergabe lückenlos, mit Überblenden oder Automix, ReplayGain und Lautheitsausgleich;
+Audioanalyse im Hintergrund; Empfehlungen, Radio, Autoplay und „Für dich“ – gelernt nur auf dem
+eigenen Rechner; Jellyfin in derselben Bibliothek; Playlists, Smart-Playlists, M3U,
+Ordnerüberwachung; AppImage für alle Distributionen ab glibc 2.35.
 
 ### Hinzugefügt
 - `CLAUDE.md` für Mitentwickler (Vorgaben, Aufbau, Tests, Fahrplan) und die Testwerkzeuge in
   `tools/`: Vorführ-Bibliothek, Riesen-Bibliothek, Klick- und Speichertests.
 
-### Geändert
-- Zusammengefasst: Bibliothek für 1 Mio+ Titel mit Zwei-Phasen-Scanner, Volltextsuche und vielen
-  Ansichten; acht komplett verschiedene Themes; Wiedergabe lückenlos, mit Überblenden oder
-  Automix, ReplayGain und Lautheitsausgleich; Audioanalyse im Hintergrund; Empfehlungen, Radio,
-  Autoplay und „Für dich“ – gelernt nur auf dem eigenen Rechner; Jellyfin in derselben Bibliothek;
-  Playlists, Smart-Playlists, M3U, Ordnerüberwachung; AppImage für alle Distributionen ab
-  glibc 2.35.
-
-## 0.9.0 – 2026-10-19
+## 0.9.0 - 2026-10-19
 
 ### Hinzugefügt
 - **Playlists**: anlegen, umbenennen, löschen; Titel, Alben, Künstler, Genres, Ordner,
@@ -133,7 +143,7 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
 ### Behoben
 - Titel werden nur noch lesend geöffnet (andere Programme sehen keine „Änderung“ mehr).
 
-## 0.6.0 – 2026-10-18
+## 0.6.0 - 2026-10-18
 
 ### Hinzugefügt
 - **Audioanalyse** jedes Titels in einem Durchgang: Tempo (BPM, Sicherheit, erster Schlag),
@@ -152,7 +162,7 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
   Ansichten.
 - Kommandozeile: `--analyze`, `--recommend`.
 
-## 0.5.0 – 2026-10-18
+## 0.5.0 - 2026-10-18
 
 ### Hinzugefügt
 - **Jellyfin**: Anmeldung mit Passwort oder Quick Connect, nur der Zugangsschlüssel wird
@@ -164,7 +174,7 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
 - Doppelte (lokal und auf dem Server) nur einmal zeigen, lokal spielen.
 - `tools/mock-jellyfin.py` zum Testen ohne eigenen Server.
 
-## 0.4.1 – 2026-10-18
+## 0.4.1 - 2026-10-18
 
 ### Geändert
 - Cover nur in angezeigter Größe und nur solange sichtbar; Aufräumen nach Theme-Wechsel, im
@@ -174,7 +184,7 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
 - Speicherleck bei GStreamer-Nachrichten von Spektrum und Pegelmesser (gut 10 MB pro Minute
   Wiedergabe).
 
-## 0.4.0 – 2026-10-18
+## 0.4.0 - 2026-10-18
 
 ### Hinzugefügt
 - Wellenform zum Spulen (Klassik, Aurora, Synthwave).
@@ -183,13 +193,13 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
 ### Geändert
 - Feinschliff an allen Themes.
 
-## 0.3.0 – 2026-10-18
+## 0.3.0 - 2026-10-18
 
 ### Hinzugefügt
 - Themes **Hi-Fi Turm** (90er-Minianlage) und **Terminal** (Textmodus auf einer Bildröhre).
 - Vorschaubilder für alle Themes.
 
-## 0.2.0 – 2026-10-18
+## 0.2.0 - 2026-10-18
 
 ### Hinzugefügt
 - Theme-System: jedes Theme mit eigenem Aufbau, eigenen Effekten und einer aus einem Schema
@@ -197,7 +207,7 @@ auf alter Hardware und mit einer Bibliothek von einer Million Titeln.
 - Themes **Aurora**, **Synthwave**, **Soft**, **Glas** und **Vintage**; Sparmodus für ältere Rechner.
 - Musik-Analyse für die Oberfläche: Spektrum, Pegel, Energie, Takt.
 
-## 0.1.0 – 2026-10-18
+## 0.1.0 - 2026-10-18
 
 ### Hinzugefügt
 - Lokale Bibliothek mit Zwei-Phasen-Scanner für 1 Mio+ Titel, SQLite mit Volltextsuche.

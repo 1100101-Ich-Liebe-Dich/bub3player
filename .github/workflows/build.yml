@@ -2,7 +2,8 @@ name: Bauen
 
 # Every push to main and every pull request builds the AppImage and tries it
 # out (start, screenshot, audio analysis through the bundled GStreamer).
-# Publishing a release in the GitHub UI attaches the AppImage to it.
+# Publishing a release in the GitHub UI attaches the AppImage to it, together
+# with the source code of the Ubuntu packages inside (GPL/LGPL).
 on:
   push:
     branches: [main]
@@ -12,7 +13,7 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   appimage:
@@ -59,11 +60,46 @@ jobs:
           name: BuB3Player-AppImage
           path: |
             build-appimage/BuB3Player-x86_64.AppImage
+            build-appimage/quellpakete.txt
             build-appimage/*.png
           retention-days: 14
 
+  release:
+    name: Release
+    if: github.event_name == 'release'
+    needs: appimage
+    # same Ubuntu as the build: the source packages in exactly the bundled versions
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: BuB3Player-AppImage
+
+      - name: Quellcode der mitgelieferten Pakete
+        run: |
+          grep -h '^deb ' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null \
+            | grep -i ubuntu | sed 's/^deb /deb-src /' | sudo tee /etc/apt/sources.list.d/quellen.list > /dev/null
+          sudo apt-get update -qq
+          tag="${{ github.event.release.tag_name }}"
+          dir="BuB3Player-${tag#v}-quellen"
+          mkdir -p "$dir" && cd "$dir"
+          : > FEHLT.txt
+          while read -r spec; do
+            apt-get source --download-only "$spec" > /dev/null 2>&1 || echo "$spec" >> FEHLT.txt
+          done < ../quellpakete.txt
+          cp ../quellpakete.txt .
+          printf '%s\n' "Quellcode der Ubuntu-Pakete im AppImage von BuB3Player $tag, genau in den mitgelieferten Versionen (quellpakete.txt)." \
+            "Auspacken eines Pakets: dpkg-source -x PAKET_VERSION.dsc" \
+            "Qt: https://download.qt.io/archive/qt/ (Version in usr/share/licenses/bub3player/MITGELIEFERT.txt im AppImage)." \
+            "Nicht mehr im Archiv (siehe Launchpad): FEHLT.txt" > LIESMICH.txt
+          cd .. && tar -cf "$dir.tar" "$dir"
+          ls -l "$dir.tar"; cat "$dir/FEHLT.txt"
+
       - name: An das Release hängen
-        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" build-appimage/BuB3Player-x86_64.AppImage --clobber
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          gh release upload "$tag" BuB3Player-x86_64.AppImage "BuB3Player-${tag#v}-quellen.tar" --clobber --repo "${{ github.repository }}"

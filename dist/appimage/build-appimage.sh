@@ -90,33 +90,59 @@ patchelf --set-rpath '$ORIGIN/../..' "$helpers/gst-plugin-scanner"
 
 echo "== Lizenzen der mitgelieferten Bibliotheken"
 # The player's own texts come with "cmake --install". Here: for every bundled
-# library its package's copyright file, and a list of where the sources are.
+# library its package's copyright file (plus the common licence texts they
+# refer to), a list of packages with their sources, and quellpakete.txt for the
+# release job, which puts the matching source code next to the AppImage.
 lic=AppDir/usr/share/licenses
 notice="$lic/bub3player/MITGELIEFERT.txt"
+osname=$(. /etc/os-release && echo "$PRETTY_NAME") # in a subshell: it would overwrite $VERSION
+qtver=$("$QMAKE" -query QT_VERSION)
 {
     echo "BuB3Player $VERSION – mitgelieferte Bibliotheken"
     echo
-    echo "Das AppImage enthält Bibliotheken aus Ubuntu $(. /etc/os-release && echo "$VERSION_ID") und Qt $("$QMAKE" -query QT_VERSION)."
-    echo "Ubuntu-Pakete: Quellcode mit \"apt source PAKET\" oder unter https://packages.ubuntu.com/source/$(. /etc/os-release && echo "$VERSION_CODENAME")/PAKET,"
-    echo "Lizenzen jeweils in usr/share/licenses/PAKET/copyright."
-    echo "Qt: LGPL-3.0 (LGPL-3.0.txt), Quellcode unter https://download.qt.io/official_releases/qt/."
-    echo "Die Bibliotheken sind dynamisch gebunden und lassen sich nach --appimage-extract austauschen."
+    echo "Das AppImage enthält Bibliotheken aus $osname und Qt $qtver, dynamisch gebunden:"
+    echo "Nach \"--appimage-extract\" lassen sie sich in squashfs-root/usr/lib austauschen."
     echo
-    echo "Paket Version"
+    echo "Quellcode:"
+    echo "- Ubuntu-Pakete: beim Release als BuB3Player-<Version>-quellen.tar, genau in den Versionen unten;"
+    echo "  außerdem bei Launchpad (alle Versionen bleiben dort): https://launchpad.net/ubuntu/+source/QUELLPAKET/VERSION"
+    echo "- Qt $qtver (LGPL-3.0, Text in bub3player/LGPL-3.0.txt): https://download.qt.io/archive/qt/${qtver%.*}/$qtver/submodules/"
+    echo "- AppImage-Laufzeit (MIT, enthält libfuse unter LGPL-2.1): https://github.com/AppImage/type2-runtime"
+    echo
+    echo "Lizenzen: usr/share/licenses/PAKET/copyright; die darin genannten Texte unter"
+    echo "/usr/share/common-licenses/ liegen hier in usr/share/licenses/common-licenses/."
+    echo
+    echo "Paket Version Quellpaket Quellversion"
 } > "$notice"
+mkdir -p "$lic/common-licenses"
+cp /usr/share/common-licenses/* "$lic/common-licenses/" 2>/dev/null || true
 pkgs=""
 while IFS= read -r f; do
     base=$(basename "$f")
-    pkg=$(dpkg -S "*/$base" 2>/dev/null | head -1 | cut -d: -f1)
+    # files that belong to no package (Qt from install-qt-action, our own) are skipped
+    pkg=$(dpkg-query -S "*/$base" 2>/dev/null | awk -F': ' 'NR == 1 && !/^diversion/ { print $1 }' | cut -d: -f1 | cut -d, -f1) || true
     [ -n "$pkg" ] && pkgs="$pkgs $pkg"
-done < <(find AppDir/usr/lib AppDir/usr/bin -type f \( -name '*.so*' -o -name gst-plugin-scanner \))
+done < <(find AppDir/usr -type f \( -name '*.so*' -o -name gst-plugin-scanner \))
+: > "$WORK/quellpakete.txt"
 for pkg in $(echo "$pkgs" | tr ' ' '\n' | sort -u); do
     if [ -f "/usr/share/doc/$pkg/copyright" ]; then
         mkdir -p "$lic/$pkg"
         cp "/usr/share/doc/$pkg/copyright" "$lic/$pkg/"
     fi
-    echo "$pkg $(dpkg-query -W -f '${Version}' "$pkg" 2>/dev/null)" >> "$notice"
+    line=$(dpkg-query -W -f '${Package} ${Version} ${source:Package} ${source:Version}' "$pkg" 2>/dev/null) || continue
+    echo "$line" >> "$notice"
+    echo "$line" | awk '{ print $3 "=" $4 }' >> "$WORK/quellpakete.txt"
 done
+sort -u -o "$WORK/quellpakete.txt" "$WORK/quellpakete.txt"
+# Qt's own list of what it contains (Qt 6.8 ships SPDX SBOMs), and ICU, which comes with it
+qtprefix=$("$QMAKE" -query QT_INSTALL_PREFIX)
+[ -d "$qtprefix/sbom" ] && cp -r "$qtprefix/sbom" "$lic/qt-sbom"
+if ls AppDir/usr/lib/libicu* > /dev/null 2>&1 && ! ls -d "$lic"/libicu* > /dev/null 2>&1; then
+    icu=$(ls -d /usr/share/doc/libicu[0-9]* 2>/dev/null | head -1)
+    [ -n "$icu" ] && mkdir -p "$lic/icu" && cp "$icu/copyright" "$lic/icu/" \
+        && echo "ICU (mit Qt): Unicode-/ICU-Lizenz in usr/share/licenses/icu/copyright, Quellcode https://github.com/unicode-org/icu" >> "$notice"
+fi
+echo "$(wc -l < "$WORK/quellpakete.txt") Quellpakete"
 
 echo "== AppImage packen"
 rm -f "$OUTPUT"

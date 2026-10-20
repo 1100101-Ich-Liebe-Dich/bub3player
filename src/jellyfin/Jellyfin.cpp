@@ -15,6 +15,7 @@
 #include <QEventLoop>
 #include <QHash>
 #include <QJsonArray>
+#include <QHostAddress>
 #include <QJsonDocument>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -313,6 +314,27 @@ void Jellyfin::setPreferLocal(bool on)
 
 // ---------------------------------------------------------------- sign-in
 
+namespace {
+// Loopback, private IPv4 ranges, IPv6 link-local/unique-local, names without a
+// dot or ending in .local/.lan/.home: plain http there stays in the home network.
+bool inHomeNetwork(const QString &host)
+{
+    const QHostAddress a(host);
+    if (!a.isNull()) {
+        if (a.isLoopback() || a.isLinkLocal())
+            return true;
+        if (a.protocol() == QAbstractSocket::IPv4Protocol) {
+            const quint32 v = a.toIPv4Address();
+            return (v >> 24) == 10 || (v >> 20) == (172u << 4 | 1) || (v >> 16) == (192u << 8 | 168) || (v >> 22) == (100u << 2 | 1);
+        }
+        return (a.toIPv6Address()[0] & 0xfe) == 0xfc; // fc00::/7
+    }
+    const QString h = host.toLower();
+    return !h.contains(QLatin1Char('.')) || h.endsWith(QLatin1String(".local")) || h.endsWith(QLatin1String(".lan"))
+           || h.endsWith(QLatin1String(".home")) || h.endsWith(QLatin1String(".internal"));
+}
+} // namespace
+
 void Jellyfin::probe(const QString &rawUrl)
 {
     const QString cleaned = cleanUrl(rawUrl);
@@ -320,7 +342,8 @@ void Jellyfin::probe(const QString &rawUrl)
     if (cleaned.contains(QLatin1String("://"))) {
         candidates << cleaned;
     } else if (!cleaned.isEmpty()) {
-        candidates << QStringLiteral("http://") + cleaned << QStringLiteral("https://") + cleaned;
+        // encrypted first: the password must not go over plain http when https works
+        candidates << QStringLiteral("https://") + cleaned << QStringLiteral("http://") + cleaned;
         if (!cleaned.contains(QLatin1Char(':')))
             candidates << QStringLiteral("http://%1:8096").arg(cleaned);
     }
@@ -351,6 +374,9 @@ void Jellyfin::probe(const QString &rawUrl)
                 m_busy = false;
                 emit busyChanged();
                 const bool quick = st == 200 && d.trimmed() == "true";
+                if (url.startsWith(QLatin1String("http://")) && !inHomeNetwork(QUrl(url).host()))
+                    emit message(tr("Achtung: Dieser Server antwortet ohne Verschlüsselung (http). Passwort und Zugangsschlüssel "
+                                    "gehen dann lesbar durchs Netz – über das Internet besser https verwenden."));
                 emit probeResult(true, url, name, version, quick, {});
             });
         });

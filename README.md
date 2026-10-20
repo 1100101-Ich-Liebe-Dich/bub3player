@@ -341,13 +341,6 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
 - Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
   was GStreamer abspielt.
 
-### 🎤 Liedtexte
-
-- Aus den Tags der Datei oder aus einer `.lrc`-Datei daneben.
-- **Synchronisiert**: Die aktuelle Zeile läuft in der Großansicht mit, ein Klick auf eine Zeile
-  springt an die Stelle im Lied.
-- Auf Wunsch aus dem Netz von **LRCLIB** – nur wenn du es einschaltest.
-
 ### ☁️ Jellyfin
 
 - **Anmelden** mit Benutzer und Passwort oder per **Quick Connect**. Gespeichert wird nur der
@@ -634,6 +627,9 @@ Zum Ausprobieren ohne eigenen Jellyfin-Server:
 
 BuB3Player ist und bleibt ein **Linux-Player**. Ideen für die nächsten Versionen:
 
+- 🎤 **Liedtexte** – aus den Tags oder einer `.lrc` daneben, synchronisiert in der Großansicht
+  (Klick auf eine Zeile springt dorthin), auf Wunsch von **LRCLIB** *(in Arbeit)*
+- 📂 Titel direkt aus dem Dateimanager öffnen („Öffnen mit BuB3Player“)
 - 📡 Scrobbeln zu **ListenBrainz** und **Last.fm**
 - 🏷️ **Tag-Editor** für einzelne Titel und ganze Alben
 - 🪟 **Mini-Player** – klein, immer im Vordergrund
@@ -651,6 +647,8 @@ sondern wie in [SECURITY.md](SECURITY.md) beschrieben melden.
 
 ## 📜 Lizenz
 
+Copyright © 2026 BAUENUNDBOOTEN.de
+
 BuB3Player ist **freie Software** unter der [GNU General Public License, Version 3 oder später](LICENSE)
 (GPL-3.0-or-later): Du darfst ihn nutzen, untersuchen, verändern und weitergeben – auch
 verändert, solange der Quellcode unter derselben Lizenz offen bleibt. Es gibt keine Gewährleistung.
@@ -660,15 +658,16 @@ Was sonst noch dabei ist:
 | Teil | Lizenz | Text |
 |---|---|---|
 | Schriften Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, Barlow Condensed, VT323, Nunito, Righteous, IBM Plex Mono, DSEG7/DSEG14 | SIL Open Font License 1.1 | `assets/fonts/OFL-*.txt` |
-| Schrift Permanent Marker, Symbole (Pfade aus Material Icons) | Apache 2.0 | `assets/fonts/LICENSE-permanentmarker.txt`, `LICENSES/Apache-2.0.txt` |
+| Schrift Permanent Marker (© 2010 Font Diner, Inc.), Symbole (Pfade aus Material Icons, © Google LLC) | Apache 2.0 | `assets/fonts/LICENSE-permanentmarker.txt`, `LICENSES/Apache-2.0.txt`, `LICENSES/NOTICE.txt` |
 | Qt 6 (im AppImage) | LGPL 3 | `LICENSES/LGPL-3.0.txt` |
 
-**Im AppImage** stecken außerdem Bibliotheken aus Ubuntu 22.04 (GStreamer, TagLib, SQLite …).
-Ihre Lizenzen liegen im AppImage unter `usr/share/licenses/`, die Liste aller Pakete mit Version in
-`usr/share/licenses/bub3player/MITGELIEFERT.txt` (anschauen mit `./BuB3Player-x86_64.AppImage
---appimage-extract`). Den Quellcode dieser Pakete gibt es bei Ubuntu (`apt source PAKET` oder
-[packages.ubuntu.com](https://packages.ubuntu.com/)), den von Qt unter
-[download.qt.io](https://download.qt.io/official_releases/qt/).
+**Im AppImage** stecken außerdem Bibliotheken aus Ubuntu 22.04 (GStreamer, FFmpeg über
+gst-libav, TagLib, SQLite …) und Qt. Ihre Lizenzen liegen im AppImage unter `usr/share/licenses/`,
+die Liste aller Pakete mit Version und Quellpaket in `usr/share/licenses/bub3player/MITGELIEFERT.txt`
+(anschauen mit `./BuB3Player-x86_64.AppImage --appimage-extract`). **Den Quellcode** genau dieser
+Paketversionen hängt jedes Release als `BuB3Player-<Version>-quellen.tar` neben das AppImage; den
+von Qt gibt es unter [download.qt.io/archive/qt](https://download.qt.io/archive/qt/), den des
+Players selbst als „Source code“ beim Release.
 
 Alle Künstler, Alben und Cover in den Bildern sind erfunden.
 
