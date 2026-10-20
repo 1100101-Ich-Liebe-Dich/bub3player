@@ -22,7 +22,7 @@ jobs:
     # (2.35) or newer, i.e. Ubuntu 22.04, Debian 12, Fedora 36, Mint 21 and up.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Abhängigkeiten
         run: |
