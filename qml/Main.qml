@@ -37,8 +37,17 @@ ApplicationWindow {
 
     readonly property bool onScreen: visibility !== Window.Minimized && visibility !== Window.Hidden
 
-    // F11: full screen and back to how the window was (maximized or not).
+    // F11: full screen and back to how the window was (maximized or not) – also when
+    // the window manager put it into full screen.
     property int visibilityBeforeFullScreen: Window.Windowed
+    // Only settled states count: on the way into full screen the window passes "windowed".
+    onVisibilityChanged: settleTimer.restart()
+    Timer {
+        id: settleTimer
+        interval: 400
+        onTriggered: if (window.visibility === Window.Windowed || window.visibility === Window.Maximized)
+                         window.visibilityBeforeFullScreen = window.visibility
+    }
     function toggleFullScreen() {
         if (visibility === Window.FullScreen) {
             if (visibilityBeforeFullScreen === Window.Maximized)
@@ -46,7 +55,6 @@ ApplicationWindow {
             else
                 showNormal()
         } else {
-            visibilityBeforeFullScreen = visibility
             showFullScreen()
             toast.show(qsTr("Vollbild – zurück mit F11"))
         }

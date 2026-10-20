@@ -212,7 +212,7 @@ Item {
                     }
                     TButton { text: "[auto:" + (Queue.autoplay ? "an " : "aus") + "]"; on: Queue.autoplay; onClicked: Queue.autoplay = !Queue.autoplay }
                     TButton { text: "[liste]"; on: window.queueOpen; onClicked: window.queueOpen = !window.queueOpen }
-                    TButton { text: "[vollbild]"; onClicked: window.nowPlayingOpen = true }
+                    TButton { text: "[großansicht]"; onClicked: window.nowPlayingOpen = true }
                 }
             }
         }
