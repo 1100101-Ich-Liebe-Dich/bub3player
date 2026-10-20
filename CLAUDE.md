@@ -159,10 +159,17 @@ Typischer Ablauf vor einem PR:
 
 ## GitHub und CI
 
-- Repo: `1100101-Ich-Liebe-Dich/bub3player` (privat), Standard-Branch `main`.
+- Repo: `1100101-Ich-Liebe-Dich/bub3player`, Standard-Branch `main`. Neu angelegt am 2026-10-20
+  mit umgeschriebener Historie (E-Mail des Inhabers → GitHub-Ersatzadresse); das alte Repo heißt
+  `bub3player-alt` (privat, mit den PR-Seiten #1–#10). Versionen bis 1.2.0 haben dort Tags, hier
+  nicht – das CHANGELOG verlinkt sie über Commit-Kennungen (1.0.0 = 87c3290, 1.1.0 = 9d70c6e,
+  1.2.0 = ae6b144).
+- Die echte E-Mail des Inhabers darf nie in Commits landen: Commits der Sitzung laufen als
+  `Claude <noreply@anthropic.com>`, Merges des Inhabers über die Ersatzadresse.
 - `gh pr create` funktioniert in der Sitzung nicht; PRs über
   `gh api repos/1100101-Ich-Liebe-Dich/bub3player/pulls --method POST --input body.json`.
-  Tags, Releases und Repo-Einstellungen kann nur der Inhaber anlegen.
+  Tags, Releases und Repo-Einstellungen kann nur der Inhaber anlegen (auch per API gesperrt).
+- Dependabot öffnet monatlich PRs für die GitHub-Actions; mergen, wenn der Bau grün ist.
 - CI-Logs und Artefakte lassen sich aus der Sitzung nicht herunterladen (Blob-Speicher
   gesperrt). Deshalb schreibt `dist/appimage/ci-run.sh` bei Fehlern das Ende der Ausgabe als
   Annotation an den Lauf: `gh api repos/…/check-runs/<job-id>/annotations`.
