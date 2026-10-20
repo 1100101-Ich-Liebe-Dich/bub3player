@@ -312,7 +312,7 @@ HDialog {
                         anchors.verticalCenter: parent.verticalCenter
                         iconName: "folder"
                         tip: qsTr("Ordner wählen")
-                        onClicked: { folderPick.row = index; folderPick.open() }
+                        onClicked: ed.pickFolder(index)
                     }
                     HCombo {
                         visible: ruleRow.type === "key" || ruleRow.type === "playlist"
@@ -413,13 +413,20 @@ HDialog {
         }
     }
 
+    // The desktop's own folder dialog; Qt's one only where there is none.
+    function pickFolder(row) {
+        SystemDialogs.chooseFolder(folderPick.title, rules.get(row).value, function (path) {
+            if (path === null) { folderPick.row = row; folderPick.open() }
+            else if (path !== "") setFolder(row, path)
+        })
+    }
+    function setFolder(row, path) {
+        if (row >= 0 && row < rules.count) { rules.setProperty(row, "value", path); ed.changed() }
+    }
     FolderDialog {
         id: folderPick
         property int row: -1
         title: qsTr("Ordner wählen")
-        onAccepted: {
-            var p = decodeURIComponent(String(selectedFolder).replace(/^file:\/\//, ""))
-            if (row >= 0 && row < rules.count) { rules.setProperty(row, "value", p); ed.changed() }
-        }
+        onAccepted: ed.setFolder(row, decodeURIComponent(String(selectedFolder).replace(/^file:\/\//, "")))
     }
 }

@@ -3,6 +3,7 @@
 
 #include "core/Database.h"
 #include "core/FolderWatcher.h"
+#include "core/Paths.h"
 #include "core/Scanner.h"
 #include "library/FolderModel.h"
 #include "library/GroupModel.h"
@@ -309,10 +310,7 @@ void Library::scanFinished()
 
 void Library::addRoot(const QVariant &pathOrUrl)
 {
-    QString path = pathOrUrl.typeId() == QMetaType::QUrl ? pathOrUrl.toUrl().toLocalFile() : pathOrUrl.toString();
-    if (path.startsWith(QLatin1String("file://")))
-        path = QUrl(path).toLocalFile();
-    path = QDir::cleanPath(path);
+    const QString path = QDir::cleanPath(Paths::localPath(pathOrUrl));
     if (path.isEmpty() || !QFileInfo(path).isDir()) {
         emit message(tr("Ordner nicht gefunden: %1").arg(path));
         return;

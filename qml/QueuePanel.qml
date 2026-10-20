@@ -235,8 +235,19 @@ Rectangle {
                 id: mouse
                 anchors.fill: parent
                 hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 z: -1
-                onDoubleClicked: Player.playRow(index)
+                onDoubleClicked: (m) => { if (m.button === Qt.LeftButton) Player.playRow(index) }
+                onClicked: (m) => {
+                    if (m.button !== Qt.RightButton)
+                        return
+                    rowMenu.row = index
+                    rowMenu.trackId = model.trackId
+                    rowMenu.album = model.album || ""
+                    rowMenu.albumArtist = model.albumArtist || ""
+                    rowMenu.isCurrent = model.isCurrent
+                    rowMenu.popup()
+                }
             }
         }
     }
@@ -249,6 +260,39 @@ Rectangle {
         onRowClicked: (r, mods) => {}
         onRowDoubleClicked: (r) => Player.playRow(r)
         onMoveRequested: (from, to) => Queue.move(from, to > from ? to - 1 : to)
+    }
+
+    // Right click on a row. The row may move while the menu is open (next track,
+    // autoplay): actions check that it is still the same track.
+    HMenu {
+        id: rowMenu
+        property int row: -1
+        property var trackId: 0
+        property string album: ""
+        property string albumArtist: ""
+        property bool isCurrent: false
+        function sameRow() { return Queue.idAt(row) === trackId }
+        HMenuItem {
+            text: qsTr("Abspielen")
+            enabled: !rowMenu.isCurrent
+            onTriggered: if (rowMenu.sameRow()) Player.playRow(rowMenu.row)
+        }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
+        HMenuItem {
+            text: qsTr("Zum Album")
+            onTriggered: window.openAlbum(rowMenu.albumArtist, rowMenu.album, rowMenu.trackId)
+        }
+        HMenuItem {
+            text: qsTr("Zum Künstler")
+            enabled: rowMenu.albumArtist !== ""
+            onTriggered: window.openArtist(rowMenu.albumArtist, rowMenu.trackId)
+        }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
+        HMenuItem {
+            text: qsTr("Entfernen")
+            enabled: !rowMenu.isCurrent
+            onTriggered: if (rowMenu.sameRow()) Queue.removeAt(rowMenu.row)
+        }
     }
 
     EmptyState {

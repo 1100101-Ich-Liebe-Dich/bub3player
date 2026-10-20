@@ -20,6 +20,7 @@
 #include "ui/Memory.h"
 #include "player/Player.h"
 #include "recommend/Recommender.h"
+#include "ui/SystemDialogs.h"
 #include "ui/Theme.h"
 
 #include <QCommandLineParser>
@@ -258,6 +259,7 @@ int main(int argc, char *argv[])
     AudioOutput audio;
     Player player(&queue, &audio);
     Lyrics lyrics(&player);
+    SystemDialogs dialogs;
     Library library(&player, &queue);
     PlaylistStore playlists(&queue);
     QObject::connect(&playlists, &PlaylistStore::playlistsChanged, &library, &Library::reloadViews);
@@ -307,6 +309,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Playlists", &playlists);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Audio", &audio);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Lyrics", &lyrics);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "SystemDialogs", &dialogs);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");

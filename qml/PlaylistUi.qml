@@ -42,11 +42,31 @@ Item {
         deleteDlg.open()
     }
     function editRules(id) { editor.openFor(id, "") }
-    function importFile() { importDlg.open() }
+    // The desktop's own file dialog; Qt's one only where there is none.
+    function importFile() {
+        SystemDialogs.openFile(importDlg.title, Playlists.defaultFolder(),
+                               [{ name: qsTr("Playlists"), patterns: ["*.m3u", "*.m3u8"] }, { name: qsTr("Alle Dateien"), patterns: ["*"] }],
+                               function (path) {
+                                   if (path === null) importDlg.open()
+                                   else if (path !== "") importFrom(path)
+                               })
+    }
+    function importFrom(file) {
+        var id = Playlists.importFile(file)
+        if (id > 0) ui.openPlaylist(id)
+    }
     function exportFile(id) {
-        exportDlg.playlistId = id
-        exportDlg.selectedFile = exportDlg.currentFolder + "/" + encodeURIComponent(Playlists.suggestedExportName(id))
-        exportDlg.open()
+        SystemDialogs.saveFile(exportDlg.title, Playlists.defaultFolder(), Playlists.suggestedExportName(id),
+                               [{ name: qsTr("Playlist (m3u8)"), patterns: ["*.m3u8"] }, { name: qsTr("Playlist, alte Form (m3u)"), patterns: ["*.m3u"] }],
+                               function (path) {
+                                   if (path === null) {
+                                       exportDlg.playlistId = id
+                                       exportDlg.selectedFile = exportDlg.currentFolder + "/" + encodeURIComponent(Playlists.suggestedExportName(id))
+                                       exportDlg.open()
+                                   } else if (path !== "") {
+                                       Playlists.exportFile(id, path)
+                                   }
+                               })
     }
 
     HDialog {
@@ -86,7 +106,7 @@ Item {
             visible: createDlg.addFn === null
             text: qsTr("M3U importieren …")
             iconName: "upload"
-            onClicked: { createDlg.close(); importDlg.open() }
+            onClicked: { createDlg.close(); ui.importFile() }
         }
         onAccepted: {
             if (smart) {
@@ -139,10 +159,7 @@ Item {
         fileMode: FileDialog.OpenFile
         currentFolder: Playlists.defaultFolder()
         nameFilters: [qsTr("Playlists (*.m3u *.m3u8)"), qsTr("Alle Dateien (*)")]
-        onAccepted: {
-            var id = Playlists.importFile(selectedFile)
-            if (id > 0) ui.openPlaylist(id)
-        }
+        onAccepted: ui.importFrom(selectedFile)
     }
 
     FileDialog {

@@ -2,6 +2,7 @@
 #include "library/PlaylistStore.h"
 
 #include "core/Database.h"
+#include "core/Paths.h"
 #include "library/GroupModel.h"
 #include "library/Library.h"
 #include "library/QueryBuilder.h"
@@ -768,9 +769,9 @@ void PlaylistStore::relink()
 
 // ---------- M3U ----------
 
-qint64 PlaylistStore::importFile(const QUrl &url)
+qint64 PlaylistStore::importFile(const QVariant &pathOrUrl)
 {
-    const QString file = url.isLocalFile() ? url.toLocalFile() : url.toString();
+    const QString file = Paths::localPath(pathOrUrl);
     QFile f(file);
     if (!f.open(QIODevice::ReadOnly)) {
         emit message(tr("Datei kann nicht gelesen werden: %1").arg(file));
@@ -914,9 +915,9 @@ QUrl PlaylistStore::defaultFolder() const
     return QUrl::fromLocalFile(dir);
 }
 
-bool PlaylistStore::exportFile(qint64 id, const QUrl &url)
+bool PlaylistStore::exportFile(qint64 id, const QVariant &pathOrUrl)
 {
-    QString file = url.isLocalFile() ? url.toLocalFile() : url.toString();
+    QString file = Paths::localPath(pathOrUrl);
     if (file.isEmpty())
         return false;
     const QString suffix = QFileInfo(file).suffix().toLower();
