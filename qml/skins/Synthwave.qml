@@ -473,6 +473,8 @@ Item {
 
         readonly property real horizonY: height * (0.56 + skin.npMix * 0.06)
         readonly property real coverSize: Math.min(height * 0.36, 380)
+        property real lyricsMix: window.lyricsOn ? 1 : 0
+        Behavior on lyricsMix { NumberAnimation { duration: 380; easing.type: Easing.InOutCubic } }
         property real bob: 0
         NumberAnimation on bob {
             from: 0; to: Math.PI * 2; duration: 6000; loops: Animation.Infinite
@@ -541,15 +543,16 @@ Item {
         // Floating cover with reflection on the grid
         Item {
             id: monolith
-            width: nowPlaying.coverSize
-            height: width
+            // wider for the lyrics
+            width: nowPlaying.coverSize + (Math.min(nowPlaying.width - 260, nowPlaying.coverSize * 2.4) - nowPlaying.coverSize) * nowPlaying.lyricsMix
+            height: nowPlaying.coverSize
             anchors.horizontalCenter: parent.horizontalCenter
             y: nowPlaying.horizonY - height - 26 + Math.sin(nowPlaying.bob) * 6
             HudPanel {
                 anchors.fill: parent
                 anchors.margins: -8
                 chamfer: 16
-                fill: "transparent"
+                fill: Qt.rgba(0.04, 0.0, 0.09, 0.62 * nowPlaying.lyricsMix) // dark glass behind the lyrics
                 border: Theme.accent
                 bracket: Theme.accent2
                 glow: 16
@@ -558,21 +561,42 @@ Item {
             }
             CoverArt {
                 id: bigCover
-                anchors.fill: parent
+                anchors.centerIn: parent
+                width: nowPlaying.coverSize
+                height: width
                 radius: 0
                 requestSize: 1024
                 coverId: Player.currentId
                 label: Player.album || Player.title
+                opacity: 1 - nowPlaying.lyricsMix
+            }
+            Loader {
+                anchors.fill: parent
+                anchors.margins: 14
+                active: nowPlaying.lyricsMix > 0
+                opacity: nowPlaying.lyricsMix
+                sourceComponent: LyricsView {
+                    align: Text.AlignHCenter
+                    focusAt: 0.45
+                    fadeEdge: 0.3
+                    upper: true
+                    fontFamily: Theme.uiFont
+                    fontSize: Math.round(Math.max(18, Math.min(30, nowPlaying.coverSize / 12)))
+                    color: "#ffffff"
+                    dimColor: Theme.alpha(Theme.accent2, 0.5)
+                    sourceColor: Theme.textDim
+                }
             }
         }
         ShaderEffect {
-            visible: skin.canShade
-            width: monolith.width
-            height: monolith.height * 0.55
+            visible: skin.canShade && opacity > 0
+            width: nowPlaying.coverSize
+            height: nowPlaying.coverSize * 0.55
             anchors.horizontalCenter: parent.horizontalCenter
             y: nowPlaying.horizonY + 4 - (Math.sin(nowPlaying.bob) * 6) * 0.3
             property variant source: ShaderEffectSource { sourceItem: bigCover; sourceRect: Qt.rect(0, bigCover.height * 0.45, bigCover.width, bigCover.height * 0.55); live: true }
             property real strength: 0.32
+            opacity: 1 - nowPlaying.lyricsMix
             fragmentShader: "qrc:/shaders/reflect.frag.qsb"
         }
 
@@ -637,6 +661,7 @@ Item {
                 NeonButton { anchors.verticalCenter: parent.verticalCenter; width: 70; height: 70; big: true; iconName: Player.playing ? "pause" : "play"; onClicked: Player.toggle() }
                 NeonButton { anchors.verticalCenter: parent.verticalCenter; iconName: "next"; onClicked: Player.next() }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; activeColor: Theme.accent2; onClicked: Queue.cycleRepeat() }
+                IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; activeColor: Theme.accent2; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
                 Item { width: 10; height: 1 }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter }
             }

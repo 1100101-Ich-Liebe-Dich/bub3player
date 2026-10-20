@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Tries out a built AppImage: help, audio analysis through the bundled
-# GStreamer, start with a screenshot. Usage: smoke-test.sh BuB3Player-x86_64.AppImage
+# GStreamer, start with a screenshot, all themes, sound settings, lyrics.
+# Usage: smoke-test.sh BuB3Player-x86_64.AppImage
 set -u
 img=$(readlink -f "$1")
 dir=$(mktemp -d)
@@ -33,6 +34,15 @@ mkdir -p musik && cp ton.wav musik/
 xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --add-folder "$dir/musik" \
     --ui-test "playall klang-tab eqonat=1500" --screenshot "$out/klang.png" --screenshot-delay 4500 >> start.txt 2>&1
 [ -s "$out/klang.png" ] || { echo "FEHLER: Klang-Seite startet nicht"; fail=1; }
+echo "== Liedtexte: lesen und in allen Großansichten"
+printf '[00:00.50]Erste Zeile\n[00:01.50]Zweite Zeile\n[00:02.50]Dritte Zeile\n' > musik/ton.lrc
+./squashfs-root/AppRun --lyrics musik/ton.wav | tee lyrics.txt
+grep -q "synchron, 3 Zeilen" lyrics.txt || { echo "FEHLER: Liedtext nicht gelesen"; fail=1; }
+for skin in klassik soft glas aurora vintage synthwave tower terminal; do
+    xvfb-run -a -s "-screen 0 1380x880x24" ./squashfs-root/AppRun --no-scan --skin $skin \
+        --ui-test "playall now-playing lyrics" --screenshot "$out/liedtext-$skin.png" --screenshot-delay 3500 >> start.txt 2>&1
+    [ -s "$out/liedtext-$skin.png" ] || { echo "FEHLER: Großansicht mit Liedtext in $skin"; fail=1; }
+done
 if grep -q "GStreamer-Element fehlt" start.txt; then
     grep "GStreamer-Element fehlt" start.txt | sort -u
     echo "::warning title=GStreamer::$(grep "GStreamer-Element fehlt" start.txt | sort -u | tr '\n' ' ')"

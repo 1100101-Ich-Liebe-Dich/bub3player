@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 1.2.1 LANGUAGES CXX)
+project(Halcyon VERSION 1.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,6 +36,7 @@ add_executable(halcyon
   src/player/PlayQueue.h       src/player/PlayQueue.cpp
   src/player/Player.h          src/player/Player.cpp
   src/player/AudioOutput.h     src/player/AudioOutput.cpp
+  src/player/Lyrics.h          src/player/Lyrics.cpp
   src/analysis/Fft.h
   src/analysis/AudioAnalyzer.h src/analysis/AudioAnalyzer.cpp
   src/analysis/AnalysisService.h src/analysis/AnalysisService.cpp
@@ -47,6 +48,7 @@ add_executable(halcyon
   src/ui/Memory.h              src/ui/Memory.cpp
   src/ui/Theme.h               src/ui/Theme.cpp
   src/core/Paths.h
+  src/core/Http.h              src/core/Http.cpp
 )
 
 # QML, themes and fonts are compiled into the binary.

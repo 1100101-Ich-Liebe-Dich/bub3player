@@ -212,6 +212,46 @@ Item {
                     peek: 0.14
                     inner: true
                 }
+                // the lyric insert, taken out of the sleeve and laid on top
+                Rectangle {
+                    id: lyricSheet
+                    property real mix: window.lyricsOn ? 1 : 0
+                    Behavior on mix { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
+                    visible: mix > 0
+                    opacity: mix
+                    x: bigSleeve.side * 0.1
+                    y: (bigSleeve.height - bigSleeve.side) / 2 + (1 - mix) * 50
+                    width: bigSleeve.side * 0.96
+                    height: bigSleeve.side
+                    rotation: 1.6
+                    radius: 2
+                    color: "#F1E8D2"
+                    border.color: Qt.rgba(0, 0, 0, 0.22)
+                    Rectangle { anchors.fill: parent; anchors.topMargin: 6; anchors.leftMargin: 4; anchors.rightMargin: -6; anchors.bottomMargin: -7; z: -1; radius: 2; color: Qt.rgba(0, 0, 0, 0.45) }
+                    Text {
+                        id: sheetHead
+                        x: 22; y: 16
+                        text: qsTr("LIEDTEXT")
+                        font.family: "Barlow Condensed"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2
+                        color: "#7a2f14"
+                    }
+                    Loader {
+                        anchors.fill: parent
+                        anchors.topMargin: 38
+                        anchors.leftMargin: 22
+                        anchors.rightMargin: 22
+                        anchors.bottomMargin: 14
+                        active: lyricSheet.visible
+                        sourceComponent: LyricsView {
+                            fontFamily: "Barlow"
+                            fontSize: Math.round(Math.max(17, Math.min(26, bigSleeve.side / 19)))
+                            fontWeight: Font.DemiBold
+                            color: "#2a1c10"
+                            dimColor: Qt.rgba(0.35, 0.25, 0.15, 0.45)
+                            sourceColor: "#6b5d48"
+                        }
+                    }
+                }
                 // liner notes: the back of the sleeve, on cream paper
                 Rectangle {
                     id: notes
@@ -426,14 +466,16 @@ Item {
                     VtToggle { label: "MUTING"; engrave: skin.engrave; on: Player.muted; lamp: true; lampColor: "#ff4a2a"; onClicked: Player.muted = !Player.muted }
                     Item { Layout.fillWidth: true }
                     Row {
-                        spacing: 4
+                        // as wide as before the TEXT key: the receiver keeps its layout
+                        spacing: 3
                         Layout.alignment: Qt.AlignBottom
-                        VtKey { width: 50; iconName: "prev"; label: ""; onClicked: Player.previous() }
-                        VtKey { width: 64; iconName: Player.playing ? "pause" : "play"; label: "PLAY"; latched: Player.playing; onClicked: Player.toggle() }
-                        VtKey { width: 50; iconName: "next"; label: ""; onClicked: Player.next() }
-                        Item { width: 8; height: 1 }
-                        VtKey { width: 58; label: "COVER"; latched: skin.showCover; onClicked: Theme.setOption("cover", !skin.showCover) }
-                        VtKey { width: 58; label: "PHONO"; latched: window.nowPlayingOpen; enabled: Player.currentId > 0 || window.nowPlayingOpen; onClicked: window.nowPlayingOpen = !window.nowPlayingOpen }
+                        VtKey { width: 42; iconName: "prev"; label: ""; onClicked: Player.previous() }
+                        VtKey { width: 56; iconName: Player.playing ? "pause" : "play"; label: "PLAY"; latched: Player.playing; onClicked: Player.toggle() }
+                        VtKey { width: 42; iconName: "next"; label: ""; onClicked: Player.next() }
+                        Item { width: 4; height: 1 }
+                        VtKey { width: 48; label: "COVER"; latched: skin.showCover; onClicked: Theme.setOption("cover", !skin.showCover) }
+                        VtKey { width: 48; label: "PHONO"; latched: window.nowPlayingOpen; enabled: Player.currentId > 0 || window.nowPlayingOpen; onClicked: window.nowPlayingOpen = !window.nowPlayingOpen }
+                        VtKey { width: 48; label: "TEXT"; latched: Lyrics.shown; opacity: window.lyricsMissing ? 0.6 : 1; enabled: Player.currentId > 0; onClicked: window.toggleLyrics() }
                     }
                 }
             }

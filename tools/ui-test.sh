@@ -29,6 +29,7 @@
 # album, theme-tab, mix-tab, klang-tab, jellyfin-tab, about-tab, jf-login=URL, jf-quick,
 # cycle, cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay,
 # search[=wort], mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS,
+# lyrics, lyrics-off (lyrics in the big view on/off),
 # fullscreen (needs a window manager to take effect, e.g. openbox on the Xvfb).
 #
 # Audio tests: HALCYON_TEST_SINK="filesink location=/tmp/x.raw" replaces the
@@ -86,7 +87,7 @@ snap)
     DISPLAY=$DISP import -window root "$DIR/shots/$1.png" && echo "Bild: $DIR/shots/$1.png"
     ;;
 stop)
-    pkill -f "[b]uild/halcyon" ; pkill -f "[X]vfb $DISP"; sleep 0.5
+    pkill -f "^$BIN" ; pkill -f "[X]vfb $DISP"; sleep 0.5 # "^": never the shell that runs this
     quiet "$DIR/run.log" 2>/dev/null
     ;;
 mem)

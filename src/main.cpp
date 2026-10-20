@@ -14,6 +14,7 @@
 #include "library/QueryBuilder.h"
 #include "library/TrackListModel.h"
 #include "player/AudioOutput.h"
+#include "player/Lyrics.h"
 #include "player/Mpris.h"
 #include "player/PlayQueue.h"
 #include "ui/Memory.h"
@@ -106,6 +107,34 @@ int runHeadlessAnalyze(int argc, char **argv)
     return 0;
 }
 
+// halcyon --lyrics FILE [FILE...]
+// The lyrics a file brings along (.lrc next to it, tags), as the big view uses them.
+int runHeadlessLyrics(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--lyrics") == 0)
+            continue;
+        const QString path = QDir(QString::fromLocal8Bit(argv[i])).absolutePath();
+        const LyricsText t = Lyrics::forFile(path);
+        if (t.isEmpty()) {
+            std::printf("%s\n  kein Liedtext\n", qPrintable(path));
+            continue;
+        }
+        const char *from = t.source == QLatin1String("lrc") ? ".lrc-Datei" : "Tags";
+        std::printf("%s\n  %s, %s, %d %s\n", qPrintable(path), from, t.synced() ? "synchron" : "nicht synchron",
+                    int(t.lines.size()), t.lines.size() == 1 ? "Zeile" : "Zeilen");
+        for (int l = 0; l < t.lines.size(); ++l) {
+            if (t.synced())
+                std::printf("  [%02lld:%02lld.%02lld] %s\n", (long long)(t.times[l] / 60000), (long long)(t.times[l] / 1000 % 60),
+                            (long long)(t.times[l] % 1000 / 10), qPrintable(QString(t.lines[l]).replace(QLatin1Char('\n'), QLatin1String(" / "))));
+            else
+                std::printf("  %s\n", qPrintable(t.lines[l]));
+        }
+    }
+    return 0;
+}
+
 // halcyon --recommend TRACK_ID [TRACK_ID...] [--db FILE] [--count N] [--mode 0|1|2]
 // What the recommendations would pick after these tracks (for tuning and bug reports).
 int runHeadlessRecommend(int argc, char **argv)
@@ -171,6 +200,8 @@ int main(int argc, char *argv[])
             return runHeadlessAnalyze(argc, argv);
         else if (qstrcmp(argv[i], "--recommend") == 0)
             return runHeadlessRecommend(argc, argv);
+        else if (qstrcmp(argv[i], "--lyrics") == 0)
+            return runHeadlessLyrics(argc, argv);
 
     gst_init(&argc, &argv);
 
@@ -201,6 +232,8 @@ int main(int argc, char *argv[])
     parser.addOption({QStringLiteral("ui-test"), QStringLiteral("Testaktion nach dem Start (now-playing, queue, settings, album, play)."),
                       QStringLiteral("action")});
     parser.addOption({QStringLiteral("scan"), QStringLiteral("Ordner ohne Oberfläche scannen und Zeiten ausgeben.")});
+    parser.addOption({QStringLiteral("analyze"), QStringLiteral("Dateien ohne Oberfläche analysieren (Tempo, Tonart, Lautheit …).")});
+    parser.addOption({QStringLiteral("lyrics"), QStringLiteral("Liedtext von Dateien zeigen (.lrc daneben, Tags).")});
     parser.process(app);
 
     if (parser.isSet(QStringLiteral("db")))
@@ -224,6 +257,7 @@ int main(int argc, char *argv[])
     PlayQueue queue;
     AudioOutput audio;
     Player player(&queue, &audio);
+    Lyrics lyrics(&player);
     Library library(&player, &queue);
     PlaylistStore playlists(&queue);
     QObject::connect(&playlists, &PlaylistStore::playlistsChanged, &library, &Library::reloadViews);
@@ -272,6 +306,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Recommend", &recommender);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Playlists", &playlists);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Audio", &audio);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Lyrics", &lyrics);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");

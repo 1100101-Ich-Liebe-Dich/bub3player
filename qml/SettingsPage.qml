@@ -280,6 +280,31 @@ Item {
                 }
 
                 Section {
+                    title: qsTr("Liedtexte")
+                    text: qsTr("Die Großansicht zeigt den Liedtext statt des Covers, synchron zur Musik, wenn er Zeitmarken hat (ein Klick auf eine Zeile springt dorthin). Gesucht wird in einer .lrc-Datei mit dem Namen des Titels daneben, in den Tags des Titels und beim Jellyfin-Server.")
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Liedtext in der Großansicht zeigen")
+                        checked: Lyrics.shown
+                        onToggled: Lyrics.shown = checked
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Fehlende Liedtexte aus dem Netz laden (LRCLIB)")
+                        checked: Lyrics.online
+                        onToggled: Lyrics.online = checked
+                    }
+                    Text {
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: qsTr("Fragt lrclib.net nach Liedtexten für Titel ohne eigenen synchronen Text – nur, wenn die Großansicht offen ist und Liedtexte zeigen soll. Dabei gehen Titel, Künstler, Album und Länge an den Dienst. Gefundenes bleibt auf diesem Rechner gespeichert, neben die Musik wird nichts geschrieben.")
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+                }
+
+                Section {
                     title: qsTr("Eigene Ansichten")
                     text: qsTr("Ansichten sind gespeicherte Filter, z. B. »Hi-Res Jazz der 70er«. Lege sie in views.json an; ein Beispiel liegt daneben (views.example.json).")
                     Text {
@@ -320,6 +345,7 @@ Item {
                                 [qsTr("Strg + F"), qsTr("Suchen")],
                                 [qsTr("Strg + J"), qsTr("Warteschlange")],
                                 [qsTr("Strg + L"), qsTr("Großansicht")],
+                                [qsTr("Strg + Umschalt + L"), qsTr("Liedtext oder Cover in der Großansicht")],
                                 [qsTr("F11"), qsTr("Vollbild an und aus")],
                                 [qsTr("Strg + T"), qsTr("Theme wechseln")],
                                 [qsTr("Strg + E"), qsTr("Klang: Ausgabe und Equalizer")],

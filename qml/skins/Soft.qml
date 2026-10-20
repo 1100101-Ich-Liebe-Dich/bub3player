@@ -190,6 +190,8 @@ Item {
         MouseArea { anchors.fill: parent }
 
         readonly property real dial: Math.min(height * 0.66, width * 0.42)
+        property real lyricsMix: window.lyricsOn ? 1 : 0
+        Behavior on lyricsMix { NumberAnimation { duration: 320; easing.type: Easing.InOutCubic } }
 
         // clouds drifting by; music only lets them billow and drift a little faster
         property real calm: Player.playing ? Math.min(1, Player.energy * 1.4) : 0
@@ -280,6 +282,26 @@ Item {
                 requestSize: 1024
                 coverId: Player.currentId
                 label: Player.album || Player.title
+                opacity: 1 - nowPlaying.lyricsMix
+                visible: opacity > 0
+            }
+            // the lyrics on the raised plate, in place of the cover
+            Loader {
+                anchors.centerIn: parent
+                width: dialBox.width * 0.52
+                height: dialBox.width * 0.56
+                active: nowPlaying.lyricsMix > 0
+                opacity: nowPlaying.lyricsMix
+                sourceComponent: LyricsView {
+                    align: Text.AlignHCenter
+                    focusAt: 0.5
+                    fadeEdge: 0.42
+                    fontFamily: Theme.displayFont
+                    fontSize: Math.round(Math.max(17, Math.min(26, nowPlaying.dial / 24)))
+                    fontWeight: Font.ExtraBold
+                    color: Theme.text
+                    dimColor: Theme.alpha(Theme.text, 0.34)
+                }
             }
             // knob on the ring
             Item {
@@ -412,6 +434,7 @@ Item {
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 84; iconName: Player.playing ? "pause" : "play"; primary: true; onClicked: Player.toggle() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 58; iconName: "next"; onClicked: Player.next() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
             }
             Row {
                 spacing: 14
@@ -445,10 +468,16 @@ Item {
         property bool primary: false
         property bool active: false
         property real size: 48
+        property string tip: ""
         width: size
         height: size
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
+        Accessible.name: tip
+        Loader {
+            active: sbtn.tip !== "" && sbtn.hovered
+            sourceComponent: Tip { visible: true; text: sbtn.tip }
+        }
         background: NeuBox {
             radius: sbtn.width / 2
             mode: sbtn.pressed || sbtn.active ? "inset" : (sbtn.primary || sbtn.hovered ? "convex" : "raised")
