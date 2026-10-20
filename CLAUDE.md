@@ -128,6 +128,9 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
 - Datei- und Ordnerwahl immer über `SystemDialogs.chooseFolder/openFile/saveFile(…, function (path))`
   (Wunsch des Inhabers: der gewohnte Dialog des Desktops). `path === null` heißt „kein Dialog des
   Desktops da“ → dann Qts `FolderDialog`/`FileDialog` als Rückfall öffnen; `""` = abgebrochen.
+  Beim Speichern kommt als zweiter Wert `confirmed`: false, wenn eine Endung ergänzt wurde und die
+  Datei schon existiert (selbst nachfragen). Unter Wayland ist der Dialog nicht modal – Antworten
+  dürfen nur wirken, wenn der Zusammenhang noch stimmt (siehe `SmartEditor.session`).
 
 ## Tests
 

@@ -12,7 +12,9 @@
 //  1. the XDG desktop portal (GNOME, KDE, Xfce … – the file manager's dialog),
 //  2. otherwise kdialog or zenity, if installed,
 //  3. otherwise none: the callback gets null and the caller opens Qt's dialog.
-// The callback gets the chosen path, "" when cancelled.
+// The callback gets the chosen path, "" when cancelled; saving also gets
+// `confirmed`: false when an extension was added to a name that exists already
+// (the dialog asked about the name without it).
 //
 // filters: [{ name: "Playlists", patterns: ["*.m3u", "*.m3u8"] }, …]
 class SystemDialogs : public QObject, protected QDBusContext
@@ -39,11 +41,15 @@ private:
         QString title, folder, name;
         QVariantList filters;
         QJSValue done;
+        qint64 asked = 0;     // when the portal was asked (ms since epoch)
+        int chosenFilter = -1; // saving: the filter picked in the portal's dialog
     };
+    bool busy();
     void viaPortal(const Request &r);
     void viaTool(const Request &r, int toolIndex);
     void finish(Request r, const QVariant &result); // QString path, or null: no dialog here
 
     QHash<QString, Request> m_waiting; // portal request object path -> request
     int m_counter = 0;
+    qint64 m_busySince = 0;            // a dialog is coming or open
 };

@@ -170,6 +170,7 @@ HDialog {
     }
 
     function openFor(id, name) {
+        ++session
         playlistId = id
         rules.clear()
         previewText = ""
@@ -414,10 +415,15 @@ HDialog {
     }
 
     // The desktop's own folder dialog; Qt's one only where there is none.
+    // The editor may have been closed or opened for another playlist meanwhile
+    // (the dialog is not modal on Wayland): the answer only counts for the same rule.
+    property int session: 0
+    onClosed: ++session
     function pickFolder(row) {
+        var s = session
         SystemDialogs.chooseFolder(folderPick.title, rules.get(row).value, function (path) {
             if (path === null) { folderPick.row = row; folderPick.open() }
-            else if (path !== "") setFolder(row, path)
+            else if (path !== "" && s === session && row < rules.count && typeOf(rules.get(row).field) === "folder") setFolder(row, path)
         })
     }
     function setFolder(row, path) {

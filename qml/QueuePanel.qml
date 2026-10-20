@@ -237,7 +237,7 @@ Rectangle {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 z: -1
-                onDoubleClicked: (m) => { if (m.button === Qt.LeftButton) Player.playRow(index) }
+                onDoubleClicked: Player.playRow(index)
                 onClicked: (m) => {
                     if (m.button !== Qt.RightButton)
                         return
@@ -245,7 +245,6 @@ Rectangle {
                     rowMenu.trackId = model.trackId
                     rowMenu.album = model.album || ""
                     rowMenu.albumArtist = model.albumArtist || ""
-                    rowMenu.isCurrent = model.isCurrent
                     rowMenu.popup()
                 }
             }
@@ -270,12 +269,12 @@ Rectangle {
         property var trackId: 0
         property string album: ""
         property string albumArtist: ""
-        property bool isCurrent: false
-        function sameRow() { return Queue.idAt(row) === trackId }
+        // the same track, and not the one playing (that can change while the menu is open)
+        function usable() { return Queue.idAt(row) === trackId && row !== Queue.currentRow }
         HMenuItem {
             text: qsTr("Abspielen")
-            enabled: !rowMenu.isCurrent
-            onTriggered: if (rowMenu.sameRow()) Player.playRow(rowMenu.row)
+            enabled: rowMenu.row !== Queue.currentRow
+            onTriggered: if (rowMenu.usable()) Player.playRow(rowMenu.row)
         }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
         HMenuItem {
@@ -290,8 +289,8 @@ Rectangle {
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
         HMenuItem {
             text: qsTr("Entfernen")
-            enabled: !rowMenu.isCurrent
-            onTriggered: if (rowMenu.sameRow()) Queue.removeAt(rowMenu.row)
+            enabled: rowMenu.row !== Queue.currentRow
+            onTriggered: if (rowMenu.usable()) Queue.removeAt(rowMenu.row)
         }
     }
 

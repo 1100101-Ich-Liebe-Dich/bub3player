@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A stand-in for the file chooser of the XDG desktop portal, for testing the
-desktop's own dialogs without a desktop (needs `pip install dbus-next`):
+desktop's own dialogs without a desktop (needs dbus-next: `pip install dbus-next`
+or the package python3-dbus-next):
 
     dbus-run-session -- sh -c 'tools/mock-portal.py --answer /tmp/musik & build/halcyon'
 
 Every OpenFile/SaveFile call is printed (parent window, title, options) and
 answered after a moment with the given path, or as cancelled (--cancel).
---version sets the reported interface version (folders need 3).
+--version sets the reported interface version (folders need 3), --fail answers
+at once with 2 (a backend that cannot show a dialog), --filter N reports the
+N-th filter as the chosen one when saving.
 """
 import argparse, asyncio, json, urllib.parse
 from dbus_next.aio import MessageBus
@@ -60,11 +63,20 @@ class FileChooser(ServiceInterface):
         bus.export(path, req)
 
         async def later():
+            if args.fail:
+                await asyncio.sleep(0.05)
+                req.Response(2, {})
+                return
             await asyncio.sleep(0.4)
             if args.cancel:
                 req.Response(1, {})
             else:
-                req.Response(0, {"uris": Variant("as", ["file://" + urllib.parse.quote(args.answer)])})
+                res = {"uris": Variant("as", ["file://" + urllib.parse.quote(args.answer)])}
+                filters = plain(options.get("filters", []))
+                if kind == "SaveFile" and 0 <= args.filter < len(filters):
+                    name, rules = filters[args.filter]
+                    res["current_filter"] = Variant("(sa(us))", [name, [list(r) for r in rules]])
+                req.Response(0, res)
             await asyncio.sleep(0.2)
             bus.unexport(path)
 
@@ -106,5 +118,7 @@ if __name__ == "__main__":
     ap.add_argument("--answer", default="/tmp")
     ap.add_argument("--cancel", action="store_true")
     ap.add_argument("--version", type=int, default=4)
+    ap.add_argument("--fail", action="store_true")
+    ap.add_argument("--filter", type=int, default=-1)
     args = ap.parse_args()
     asyncio.run(main())

@@ -12,6 +12,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusVariant>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -82,16 +83,30 @@ QString startFolder(const QVariant &pathOrUrl)
     return QFileInfo(music).isDir() ? music : QDir::homePath();
 }
 
-// "x11:<id>" lets the portal put its dialog over our window (nothing to say on Wayland
-// without exporting the surface first; the dialog still opens).
-QString parentWindow()
+// Our window's X11 id, so the dialog sits on top of it (0 on Wayland: that would need
+// the surface exported first; the dialog still opens, just not tied to the window).
+WId x11Window()
 {
+    if (QGuiApplication::platformName() != QLatin1String("xcb"))
+        return 0;
     QWindow *w = QGuiApplication::focusWindow();
-    if (!w && !QGuiApplication::topLevelWindows().isEmpty())
-        w = QGuiApplication::topLevelWindows().first();
-    if (w && QGuiApplication::platformName() == QLatin1String("xcb"))
-        return QStringLiteral("x11:") + QString::number(w->winId(), 16);
-    return {};
+    if (!w)
+        for (QWindow *t : QGuiApplication::topLevelWindows())
+            if (t->isVisible()) {
+                w = t;
+                break;
+            }
+    return w ? w->winId() : 0;
+}
+
+// The extensions of a filter ("*.m3u8" -> "m3u8"); none for "*".
+QStringList extensions(const QVariant &filter)
+{
+    QStringList out;
+    for (const QString &p : filter.toMap().value(QStringLiteral("patterns")).toStringList())
+        if (p.startsWith(QLatin1String("*.")) && p.size() > 2)
+            out << p.mid(2).toLower();
+    return out;
 }
 
 QList<PortalFilter> portalFilters(const QVariantList &filters)
@@ -108,16 +123,17 @@ QList<PortalFilter> portalFilters(const QVariantList &filters)
     return out;
 }
 
-// The external helpers: only programs of the system, so nothing the AppImage
-// brings along (Qt, GStreamer) may leak into their environment.
+// The external helpers are programs of the system: what the AppImage sets for itself
+// (GStreamer, GIO modules, Qt plugin and QML paths) must not reach them. The
+// listener's own settings (input method, scaling, Qt theme) stay.
 QProcessEnvironment toolEnvironment()
 {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     if (env.contains(QStringLiteral("APPDIR"))) {
         for (const QString &key : env.keys()) {
-            if (key.startsWith(QLatin1String("GST_")) || key.startsWith(QLatin1String("QT_")) || key.startsWith(QLatin1String("QML"))
-                || key == QLatin1String("LD_LIBRARY_PATH") || key == QLatin1String("GIO_MODULE_DIR")
-                || key == QLatin1String("GDK_PIXBUF_MODULE_FILE"))
+            if (key.startsWith(QLatin1String("GST_")) || key == QLatin1String("GIO_MODULE_DIR") || key == QLatin1String("QT_PLUGIN_PATH")
+                || key == QLatin1String("QML_IMPORT_PATH") || key == QLatin1String("QML2_IMPORT_PATH")
+                || key == QLatin1String("LD_LIBRARY_PATH"))
                 env.remove(key);
         }
     }
@@ -148,20 +164,34 @@ SystemDialogs::SystemDialogs(QObject *parent)
     qDBusRegisterMetaType<QList<PortalFilter>>();
 }
 
+bool SystemDialogs::busy()
+{
+    // A second click while a dialog is still coming (or open, on Wayland it is not modal)
+    // opens no second one. Two minutes at most: a portal that crashed must not block us.
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_busySince > 0 && now - m_busySince < 120000)
+        return true;
+    m_busySince = now;
+    return false;
+}
+
 void SystemDialogs::chooseFolder(const QString &title, const QVariant &folder, const QJSValue &done)
 {
-    viaPortal({Folder, title, startFolder(folder), {}, {}, done});
+    if (!busy())
+        viaPortal({Folder, title, startFolder(folder), {}, {}, done});
 }
 
 void SystemDialogs::openFile(const QString &title, const QVariant &folder, const QVariantList &filters, const QJSValue &done)
 {
-    viaPortal({Open, title, startFolder(folder), {}, filters, done});
+    if (!busy())
+        viaPortal({Open, title, startFolder(folder), {}, filters, done});
 }
 
 void SystemDialogs::saveFile(const QString &title, const QVariant &folder, const QString &name, const QVariantList &filters,
                              const QJSValue &done)
 {
-    viaPortal({Save, title, startFolder(folder), name, filters, done});
+    if (!busy())
+        viaPortal({Save, title, startFolder(folder), name, filters, done});
 }
 
 void SystemDialogs::viaPortal(const Request &r)
@@ -206,7 +236,9 @@ void SystemDialogs::viaPortal(const Request &r)
             options.insert(QStringLiteral("filters"), QVariant::fromValue(portalFilters(r.filters)));
         QDBusMessage call = QDBusMessage::createMethodCall(PortalService, PortalPath, FileChooser,
                                                            r.kind == Save ? QStringLiteral("SaveFile") : QStringLiteral("OpenFile"));
-        call << parentWindow() << r.title << options;
+        const WId win = x11Window();
+        call << (win ? QStringLiteral("x11:") + QString::number(win, 16) : QString()) << r.title << options;
+        m_waiting[path].asked = QDateTime::currentMSecsSinceEpoch();
         auto *open = new QDBusPendingCallWatcher(bus.asyncCall(call, 10000), this);
         connect(open, &QDBusPendingCallWatcher::finished, this, [this, path, bus](QDBusPendingCallWatcher *w) mutable {
             w->deleteLater();
@@ -222,6 +254,8 @@ void SystemDialogs::viaPortal(const Request &r)
             // very old portals choose the path themselves
             const QString actual = handle.value().path();
             if (actual != path && m_waiting.contains(path)) {
+                bus.disconnect(PortalService, path, QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Response"), this,
+                               SLOT(portalResponse(uint, QVariantMap)));
                 m_waiting.insert(actual, m_waiting.take(path));
                 bus.connect(PortalService, actual, QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Response"), this,
                             SLOT(portalResponse(uint, QVariantMap)));
@@ -237,10 +271,29 @@ void SystemDialogs::portalResponse(uint response, const QVariantMap &results)
                                              QStringLiteral("Response"), this, SLOT(portalResponse(uint, QVariantMap)));
     if (!m_waiting.contains(path))
         return;
-    const Request r = m_waiting.take(path);
+    Request r = m_waiting.take(path);
+    // 2 = "ended in some other way": closing the window, but also a backend that cannot
+    // show anything (wrong desktop). An answer within a moment means no dialog was there.
+    if (response == 2 && QDateTime::currentMSecsSinceEpoch() - r.asked < 700) {
+        qCWarning(lcDialogs) << "the file chooser portal showed no dialog, trying kdialog/zenity";
+        viaTool(r, 0);
+        return;
+    }
     const QStringList uris = results.value(QStringLiteral("uris")).toStringList();
-    // 0 chosen, 1 cancelled, 2 something else went wrong (counts as cancelled: a dialog was there)
-    finish(r, response == 0 && !uris.isEmpty() ? QUrl(uris.first()).toLocalFile() : QString());
+    if (response != 0 || uris.isEmpty()) {
+        finish(r, QString());
+        return;
+    }
+    const QUrl url(uris.first());
+    if (!url.isLocalFile())
+        qCWarning(lcDialogs) << "not a local file, ignored:" << url.toString();
+    if (r.kind == Save) { // the filter chosen in the dialog decides the extension
+        const PortalFilter current = qdbus_cast<PortalFilter>(results.value(QStringLiteral("current_filter")));
+        for (int i = 0; i < r.filters.size(); ++i)
+            if (r.filters.at(i).toMap().value(QStringLiteral("name")).toString() == current.name)
+                r.chosenFilter = i;
+    }
+    finish(r, url.isLocalFile() ? url.toLocalFile() : QString());
 }
 
 void SystemDialogs::viaTool(const Request &r, int toolIndex)
@@ -251,9 +304,8 @@ void SystemDialogs::viaTool(const Request &r, int toolIndex)
         return;
     }
     const QString tool = tools.at(toolIndex);
-    QString winId;
-    if (QWindow *w = QGuiApplication::focusWindow(); w && QGuiApplication::platformName() == QLatin1String("xcb"))
-        winId = QString::number(w->winId());
+    const WId win = x11Window();
+    const QString winId = win ? QString::number(win) : QString();
 
     QStringList args;
     const QString start = r.kind == Save ? r.folder + QLatin1Char('/') + r.name : r.folder + QLatin1Char('/');
@@ -297,25 +349,47 @@ void SystemDialogs::viaTool(const Request &r, int toolIndex)
         p->deleteLater();
         viaTool(r, toolIndex + 1);
     });
-    connect(p, &QProcess::finished, this, [this, p, r, toolIndex](int code, QProcess::ExitStatus status) {
+    const qint64 started = QDateTime::currentMSecsSinceEpoch();
+    connect(p, &QProcess::finished, this, [this, p, r, toolIndex, started](int code, QProcess::ExitStatus status) {
         p->deleteLater();
-        const QString out = QString::fromLocal8Bit(p->readAllStandardOutput()).trimmed();
+        QString out = QString::fromLocal8Bit(p->readAllStandardOutput());
+        if (out.endsWith(QLatin1Char('\n'))) // only the line end: names may start or end with blanks
+            out.chop(1);
+        // 1 is "cancelled", but also zenity without a display, right away
+        const bool quick = QDateTime::currentMSecsSinceEpoch() - started < 500;
         if (status == QProcess::NormalExit && code == 0 && !out.isEmpty())
             finish(r, out);
-        else if (status == QProcess::NormalExit && code == 1)
-            finish(r, QString()); // cancelled
+        else if (status == QProcess::NormalExit && code == 1 && !quick)
+            finish(r, QString());
         else
-            viaTool(r, toolIndex + 1); // broken (e.g. no display for it): the next one
+            viaTool(r, toolIndex + 1); // broken: the next one
     });
     p->start(tool, args);
 }
 
 void SystemDialogs::finish(Request r, const QVariant &result)
 {
+    m_busySince = 0;
     if (!r.done.isCallable())
         return;
-    const QJSValue arg = result.isNull() ? QJSValue(QJSValue::NullValue) : QJSValue(result.toString());
-    const QJSValue ret = r.done.call({arg});
+    QString path = result.toString();
+    // Saving: the dialogs of GNOME and zenity add no extension. Add the one of the chosen
+    // filter; the dialog then asked about another name, so the caller has to ask again
+    // before overwriting ("confirmed" = false).
+    bool confirmed = true;
+    if (r.kind == Save && !path.isEmpty() && !r.filters.isEmpty()) {
+        QStringList all;
+        for (const QVariant &f : std::as_const(r.filters))
+            all << extensions(f);
+        const QString suffix = QFileInfo(path).suffix().toLower();
+        const QStringList chosen = extensions(r.filters.value(std::max(0, r.chosenFilter)));
+        if (!all.contains(suffix) && !chosen.isEmpty()) {
+            path += QLatin1Char('.') + chosen.first();
+            confirmed = !QFileInfo::exists(path);
+        }
+    }
+    const QJSValue arg = result.isNull() ? QJSValue(QJSValue::NullValue) : QJSValue(path);
+    const QJSValue ret = r.done.call({arg, QJSValue(confirmed)});
     if (ret.isError())
         qCWarning(lcDialogs) << "callback failed:" << ret.toString();
 }
