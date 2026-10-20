@@ -118,7 +118,11 @@ Item {
                             primary: Library.roots.length === 0
                             text: qsTr("Ordner hinzufügen")
                             iconName: "add"
-                            onClicked: folderDialog.open()
+                            // the desktop's own folder dialog; Qt's one only where there is none
+                            onClicked: SystemDialogs.chooseFolder(folderDialog.title, "", function (path) {
+                                if (path === null) folderDialog.open()
+                                else if (path !== "") Library.addRoot(path)
+                            })
                         }
                         PillButton {
                             readonly property bool fullScan: Library.scanner.running && !Library.scanner.background

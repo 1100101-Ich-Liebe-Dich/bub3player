@@ -66,8 +66,8 @@ public:
     Q_INVOKABLE void moveRows(qint64 id, TrackListModel *model, int row, int to);
     Q_INVOKABLE int removeMissing(qint64 id);
 
-    Q_INVOKABLE qint64 importFile(const QUrl &file);
-    Q_INVOKABLE bool exportFile(qint64 id, const QUrl &file);
+    Q_INVOKABLE qint64 importFile(const QVariant &pathOrUrl);
+    Q_INVOKABLE bool exportFile(qint64 id, const QVariant &pathOrUrl);
     Q_INVOKABLE QString suggestedExportName(qint64 id) const;
     Q_INVOKABLE QUrl defaultFolder() const; // where file dialogs start: ~/Musik
 

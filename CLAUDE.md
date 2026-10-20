@@ -79,7 +79,8 @@ src/analysis    AudioAnalyzer (ein Durchgang: Lautheit, Tempo, Tonart, Wellenfor
                 AnalysisService (Vorrang- und Hintergrund-Warteschlange)
 src/recommend   Recommender (Lernen aus dem Hörverlauf, Radio, Autoplay, „Für dich“)
 src/jellyfin    Anmeldung, Abgleich in dieselbe Datenbank, Streaming, Rückmeldung
-src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen)
+src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen), SystemDialogs (QML
+                „SystemDialogs“: Datei-/Ordnerwahl über XDG-Portal, sonst kdialog/zenity)
 qml/            gemeinsame Seiten und Bausteine (H*-Bausteine: HDialog, HCombo, HTextField,
                 HMenu …), PlaylistUi (alle Playlist-Dialoge), SmartEditor, LyricsView
                 (Liedtext für die Großansichten; die Themes wählen nur Schrift, Farben, Ausrichtung)
@@ -124,6 +125,12 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
   Nach Änderungen am Player den Pipeline-Graphen mit `main` vergleichen (siehe Tests).
 - QML: keine `QtCore`-Imports (auf Debian/Ubuntu nicht immer installiert); Dialoge über
   `HDialog`, Menüs über `HMenu`/`HMenuItem`, Farben/Schriften nur über `Theme`.
+- Datei- und Ordnerwahl immer über `SystemDialogs.chooseFolder/openFile/saveFile(…, function (path))`
+  (Wunsch des Inhabers: der gewohnte Dialog des Desktops). `path === null` heißt „kein Dialog des
+  Desktops da“ → dann Qts `FolderDialog`/`FileDialog` als Rückfall öffnen; `""` = abgebrochen.
+  Beim Speichern kommt als zweiter Wert `confirmed`: false, wenn eine Endung ergänzt wurde und die
+  Datei schon existiert (selbst nachfragen). Unter Wayland ist der Dialog nicht modal – Antworten
+  dürfen nur wirken, wenn der Zusammenhang noch stimmt (siehe `SmartEditor.session`).
 
 ## Tests
 
@@ -138,6 +145,7 @@ Werkzeuge in `tools/`:
 | `tools/ui-test.sh start/click/drag/key/snap/stop` | Klicktests mit `xdotool` am laufenden Fenster (1380 × 880) |
 | `tools/ui-test.sh mem NAME SEK [Optionen]` | Speicher: gesamt und eigene Daten, Spitze und Ende |
 | `tools/mock-jellyfin.py --audio ORDNER` | kleiner Jellyfin-Server (Benutzer/Passwort `demo`), auch mit Liedtexten |
+| `tools/mock-portal.py --answer PFAD` | Ersatz für den Dateidialog des XDG-Portals (`pip install dbus-next`), in `dbus-run-session` zusammen mit dem Player starten; zeigt die Aufrufe |
 | `tools/mock-lrclib.py` | Ersatz für LRCLIB; Player mit `HALCYON_LRCLIB_URL=http://127.0.0.1:8098` starten, `/mock/requests` zeigt die Anfragen |
 | `dist/appimage/build-appimage.sh` | AppImage lokal bauen |
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
@@ -233,6 +241,8 @@ Typischer Ablauf vor einem PR:
 - **1.2.1**: Vollbild mit F11; Lizenz und alles für das öffentliche Repository.
 - **1.3.0**: Liedtexte in der Großansicht (.lrc, Tags, Jellyfin, auf Wunsch LRCLIB), synchron mit
   Sprung per Klick, in allen acht Themes.
+- **1.3.1**: Rechtsklick in der Warteschlange (Abspielen, Zum Album, Zum Künstler, Entfernen),
+  Datei- und Ordnerwahl über den Dialog des Desktops.
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.

@@ -170,6 +170,15 @@ ApplicationWindow {
                    { filters: [{ field: "albumArtist", op: "eq", value: albumArtist }, { field: "album", op: "eq", value: album }], sort: "album" },
                    coverId, true)
     }
+    // The albums of an album artist, with their picture (as from the artist grid).
+    function openArtist(albumArtist, coverId) {
+        nowPlayingOpen = false
+        stack.push(groupsPage, {
+            view: { id: "", name: albumArtist || qsTr("Unbekannter Künstler"), layout: "grid", heroCover: coverId || 0, heroArtist: albumArtist,
+                    spec: { filters: [{ field: "albumArtist", op: "eq", value: albumArtist }], groupBy: "album", groupSort: "year" } },
+            subtitle: qsTr("Künstler")
+        })
+    }
     function openCurrentAlbum() {
         if (Player.currentId > 0) {
             nowPlayingOpen = false
@@ -443,6 +452,8 @@ ApplicationWindow {
             if (po) openLater.start(), openLater.idx = Number(po[1])
             if (a.indexOf("pledit") >= 0) editLater.start()
             if (a.indexOf("plnew") >= 0) playlistUi.newPlaylist()
+            if (a.indexOf("plimport") >= 0) playlistUi.importFile()
+            if (a.indexOf("plexport") >= 0 && Playlists.playlists.length > 0) playlistUi.exportFile(Playlists.playlists[0].id)
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
             if (a.indexOf("search") >= 0) { // "search" or "search=wort"
                 var sq = a.match(/search=(\S+)/)

@@ -42,11 +42,40 @@ Item {
         deleteDlg.open()
     }
     function editRules(id) { editor.openFor(id, "") }
-    function importFile() { importDlg.open() }
+    // The desktop's own file dialog; Qt's one only where there is none.
+    property string lastFolder: "" // this session: the next dialog opens where the last one was
+    function remember(file) { lastFolder = file.substring(0, file.lastIndexOf("/")) }
+    function importFile() {
+        SystemDialogs.openFile(importDlg.title, lastFolder || Playlists.defaultFolder(),
+                               [{ name: qsTr("Playlists"), patterns: ["*.m3u", "*.m3u8"] }, { name: qsTr("Alle Dateien"), patterns: ["*"] }],
+                               function (path) {
+                                   if (path === null) importDlg.open()
+                                   else if (path !== "") { remember(path); importFrom(path) }
+                               })
+    }
+    function importFrom(file) {
+        var id = Playlists.importFile(file)
+        if (id > 0) ui.openPlaylist(id)
+    }
     function exportFile(id) {
-        exportDlg.playlistId = id
-        exportDlg.selectedFile = exportDlg.currentFolder + "/" + encodeURIComponent(Playlists.suggestedExportName(id))
-        exportDlg.open()
+        SystemDialogs.saveFile(exportDlg.title, lastFolder || Playlists.defaultFolder(), Playlists.suggestedExportName(id),
+                               [{ name: qsTr("Playlist (m3u8)"), patterns: ["*.m3u8"] }, { name: qsTr("Playlist, alte Form (m3u)"), patterns: ["*.m3u"] }],
+                               function (path, confirmed) {
+                                   if (path === null) {
+                                       exportDlg.playlistId = id
+                                       exportDlg.selectedFile = exportDlg.currentFolder + "/" + encodeURIComponent(Playlists.suggestedExportName(id))
+                                       exportDlg.open()
+                                   } else if (path !== "") {
+                                       remember(path)
+                                       if (confirmed) {
+                                           Playlists.exportFile(id, path)
+                                       } else { // the dialog asked about the name without the extension
+                                           overwriteDlg.playlistId = id
+                                           overwriteDlg.file = path
+                                           overwriteDlg.open()
+                                       }
+                                   }
+                               })
     }
 
     HDialog {
@@ -86,7 +115,7 @@ Item {
             visible: createDlg.addFn === null
             text: qsTr("M3U importieren …")
             iconName: "upload"
-            onClicked: { createDlg.close(); importDlg.open() }
+            onClicked: { createDlg.close(); ui.importFile() }
         }
         onAccepted: {
             if (smart) {
@@ -133,16 +162,23 @@ Item {
         onSaved: (id, created) => { if (created) ui.openPlaylist(id) }
     }
 
+    HDialog {
+        id: overwriteDlg
+        property var playlistId: 0
+        property string file: ""
+        title: qsTr("Datei ersetzen?")
+        text: qsTr("»%1« gibt es schon. Soll sie ersetzt werden?").arg(file.substring(file.lastIndexOf("/") + 1))
+        acceptText: qsTr("Ersetzen")
+        onAccepted: Playlists.exportFile(playlistId, file)
+    }
+
     FileDialog {
         id: importDlg
         title: qsTr("Playlist importieren")
         fileMode: FileDialog.OpenFile
         currentFolder: Playlists.defaultFolder()
         nameFilters: [qsTr("Playlists (*.m3u *.m3u8)"), qsTr("Alle Dateien (*)")]
-        onAccepted: {
-            var id = Playlists.importFile(selectedFile)
-            if (id > 0) ui.openPlaylist(id)
-        }
+        onAccepted: ui.importFrom(selectedFile)
     }
 
     FileDialog {

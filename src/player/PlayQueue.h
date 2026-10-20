@@ -24,7 +24,7 @@ class PlayQueue : public QAbstractListModel
     Q_PROPERTY(QString radio READ radio NOTIFY modeChanged)
 
 public:
-    enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole, IsAutoRole };
+    enum Roles { IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, DurationRole, IsCurrentRole, IsPastRole, IsAutoRole, AlbumArtistRole };
 
     explicit PlayQueue(QObject *parent = nullptr);
 

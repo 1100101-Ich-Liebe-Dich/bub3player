@@ -53,7 +53,8 @@ int PlayQueue::rowCount(const QModelIndex &parent) const
 QHash<int, QByteArray> PlayQueue::roleNames() const
 {
     return {{IdRole, "trackId"}, {TitleRole, "title"}, {ArtistRole, "artist"}, {AlbumRole, "album"},
-            {DurationRole, "duration"}, {IsCurrentRole, "isCurrent"}, {IsPastRole, "isPast"}, {IsAutoRole, "isAuto"}};
+            {DurationRole, "duration"}, {IsCurrentRole, "isCurrent"}, {IsPastRole, "isPast"}, {IsAutoRole, "isAuto"},
+            {AlbumArtistRole, "albumArtist"}};
 }
 
 QVariant PlayQueue::data(const QModelIndex &index, int role) const
@@ -73,6 +74,7 @@ QVariant PlayQueue::data(const QModelIndex &index, int role) const
     case TitleRole: return r.title;
     case ArtistRole: return r.artist;
     case AlbumRole: return r.album;
+    case AlbumArtistRole: return r.aa;
     case DurationRole: return r.durationText();
     }
     return {};

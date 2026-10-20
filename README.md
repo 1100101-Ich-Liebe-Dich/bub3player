@@ -402,7 +402,9 @@ Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschal
 | `Strg + Q` | Beenden |
 
 Doppelklick spielt ab, Rechtsklick bietet „Als Nächstes spielen“, „Zur Warteschlange“, „Mehr wie
-dieser Titel“ und mehr. Die Sitzung bleibt erhalten: Warteschlange, Titel und Position.
+dieser Titel“ und mehr; in der Warteschlange „Zum Album“, „Zum Künstler“ und „Entfernen“. Ordner
+und Dateien wählst du im gewohnten Dateidialog deines Desktops. Die Sitzung bleibt erhalten:
+Warteschlange, Titel und Position.
 **MPRIS** ist dabei – Medientasten, Desktop-Widgets, KDE Connect und `playerctl` funktionieren.
 
 <br>
@@ -621,7 +623,7 @@ src/player    GStreamer-Player (zwei Decks, Überblenden), Warteschlange, MPRIS,
 src/analysis  Audioanalyse (Tempo, Tonart, Lautheit, Übergänge, Wellenform), Hintergrund-Warteschlange
 src/recommend Empfehlungen: Lernen aus dem Hörverlauf, Auswahl, Autoplay, Radio, „Für dich“
 src/jellyfin  Anmeldung, Abgleich, Streaming-Adressen, Rückmeldung an den Server
-src/ui        Theme-System
+src/ui        Theme-System, Dateidialoge des Desktops (XDG-Portal, kdialog, zenity)
 qml/          gemeinsame Seiten und Bausteine
 qml/skins/    die acht Themes
 skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
@@ -629,7 +631,7 @@ themes/       Farbschemata für Klassik
 shaders/      Aurora-Licht, Milchglas, Neumorphism, Synthwave-Szene, Vinyl, CD, Bildröhre …
 tools/        Testwerkzeuge: Vorführ- und Riesen-Bibliothek erzeugen, Klick- und
               Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API),
-              mock-lrclib.py (Ersatz für LRCLIB)
+              mock-lrclib.py (Ersatz für LRCLIB), mock-portal.py (Ersatz für den Dateidialog)
 dist/         Desktop-Eintrag, AppStream, Symbol, AppImage-Skripte
 ```
 

@@ -1,3 +1,20 @@
+## 1.3.1 - 2026-10-20
+
+Warteschlange mit Rechtsklick, Ordner und Dateien über den Dialog des Desktops.
+
+### Hinzugefügt
+- Rechtsklick auf einen Titel in der Warteschlange: „Abspielen“, „Zum Album“, „Zum Künstler“
+  (seine Alben mit Künstlerbild) und „Entfernen“. In allen Themes.
+- Testwerkzeug `tools/mock-portal.py`: ein Ersatz für den Dateidialog zum Ausprobieren ohne Desktop.
+
+### Geändert
+- Musikordner hinzufügen, Ordner in Smart-Playlist-Regeln wählen und Playlists importieren oder
+  exportieren öffnen jetzt den Dateidialog des Desktops (GNOME, KDE, Xfce … über das
+  XDG-Desktop-Portal), sonst `kdialog` oder `zenity`. Qts eigener Dialog kommt nur noch, wenn es
+  nichts davon gibt. Beim Export ergänzt der Player die Endung des gewählten Typs (`.m3u8` oder
+  `.m3u`) und fragt, bevor er eine vorhandene Datei ersetzt; der nächste Dialog öffnet dort, wo der
+  letzte war.
+
 ## 1.3.0 - 2026-10-20
 
 Liedtexte in der Großansicht.
