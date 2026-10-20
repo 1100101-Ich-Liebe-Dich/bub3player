@@ -127,7 +127,7 @@ int runHeadlessLyrics(int argc, char **argv)
         for (int l = 0; l < t.lines.size(); ++l) {
             if (t.synced())
                 std::printf("  [%02lld:%02lld.%02lld] %s\n", (long long)(t.times[l] / 60000), (long long)(t.times[l] / 1000 % 60),
-                            (long long)(t.times[l] % 1000 / 10), qPrintable(t.lines[l]));
+                            (long long)(t.times[l] % 1000 / 10), qPrintable(QString(t.lines[l]).replace(QLatin1Char('\n'), QLatin1String(" / "))));
             else
                 std::printf("  %s\n", qPrintable(t.lines[l]));
         }

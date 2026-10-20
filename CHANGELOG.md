@@ -10,10 +10,13 @@ Liedtexte in der Großansicht.
   Liedtexte ohne Zeitmarken lassen sich durchblättern.
 - Gesucht wird in einer `.lrc`-Datei mit dem Namen des Titels daneben, in den Tags (ID3v2 SYLT
   und USLT, LYRICS, UNSYNCEDLYRICS, MP4 ©lyr …) und bei Jellyfin-Titeln auf dem Server.
+  `.lrc`-Dateien dürfen UTF-8, UTF-16 oder Latin-1 sein; Original und Übersetzung mit derselben
+  Zeitmarke leuchten zusammen.
 - Auf Wunsch holt der Player fehlende Liedtexte von **LRCLIB** (lrclib.net): Einstellungen →
   Allgemein → Liedtexte, ab Werk aus. Gefragt wird nur bei offener Großansicht, die Antworten
   (auch „nichts gefunden“) bleiben auf dem Rechner. Neben die Musik wird nichts geschrieben.
-- Schalter „Liedtext“ in jeder Großansicht und `Strg + Umschalt + L`: Liedtext oder Cover.
+- Schalter „Liedtext“ in jeder Großansicht und `Strg + Umschalt + L`: Liedtext oder Cover (im
+  Terminal-Theme auch in der Tastenleiste).
 - `halcyon --lyrics DATEI` zeigt den Liedtext einer Datei ohne Oberfläche.
 - Testwerkzeug `tools/mock-lrclib.py`; `tools/mock-jellyfin.py` liefert auch Liedtexte.
 

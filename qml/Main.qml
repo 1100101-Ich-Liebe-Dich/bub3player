@@ -38,9 +38,9 @@ ApplicationWindow {
 
     readonly property bool onScreen: visibility !== Window.Minimized && visibility !== Window.Hidden
 
-    // Lyrics are looked for while a big view is open; the skins show them in place
-    // of the cover (Hi-Fi Turm: above the tower) when there are any.
-    Binding { target: Lyrics; property: "active"; value: window.nowPlayingOpen && Player.currentId > 0 }
+    // Lyrics are looked for while a big view is open (and the window not minimized);
+    // the skins show them in place of the cover (Hi-Fi Turm: above the tower).
+    Binding { target: Lyrics; property: "active"; value: window.nowPlayingOpen && Player.currentId > 0 && window.onScreen }
     readonly property bool lyricsOn: Lyrics.shown && Lyrics.available
     readonly property bool lyricsMissing: Lyrics.status === 3 // the lyrics buttons go pale
     readonly property string lyricsTip: (Lyrics.status === 1 ? qsTr("Liedtext wird gesucht …")

@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 
 namespace {
 
@@ -64,6 +65,10 @@ void tidy(QStringList &lines, QVector<qint64> *times)
 
 QString decode(const QByteArray &bytes)
 {
+    if (const auto bom = QStringConverter::encodingForData(bytes)) { // UTF-16/32 with a byte order mark
+        QStringDecoder dec(*bom);
+        return dec.decode(bytes);
+    }
     QStringDecoder utf8(QStringDecoder::Utf8);
     QString s = utf8.decode(bytes);
     if (utf8.hasError())
@@ -125,7 +130,7 @@ LyricsText fromJellyfin(qint64 sourceId, const QString &itemId)
     for (const QJsonValue &v : rows) {
         const QJsonObject o = v.toObject();
         t.lines << o.value(QStringLiteral("Text")).toString().trimmed();
-        if (o.contains(QStringLiteral("Start")))
+        if (o.value(QStringLiteral("Start")).isDouble())
             t.times << qint64(o.value(QStringLiteral("Start")).toDouble() / 10000.0); // 100 ns ticks
         else
             timed = false;
@@ -255,9 +260,12 @@ LyricsText fromLrclib(const TrackInfo &info)
 }
 
 // Everything up to the level asked for; the best find wins (synchronised before plain).
-LyricsText find(const TrackInfo &info, bool network)
+// A search that is no longer wanted (another track by now) ends before the network.
+LyricsText find(const TrackInfo &info, bool network, const std::function<bool()> &stale = [] { return false; })
 {
     LyricsText best;
+    if (stale())
+        return best;
     if (info.sourceId != 1 && !info.remoteId.isEmpty()) {
         best = fromJellyfin(info.sourceId, info.remoteId);
     } else if (!info.path.isEmpty()) {
@@ -268,7 +276,7 @@ LyricsText find(const TrackInfo &info, bool network)
                 best = tags;
         }
     }
-    if (network && !best.synced()) {
+    if (network && !best.synced() && !stale()) {
         LyricsText net = fromLrclib(info);
         if (net.synced() || best.isEmpty())
             best = std::move(net);
@@ -286,7 +294,8 @@ LyricsText LyricsText::parse(const QString &raw)
     // only the LRC header tags: "[Chorus: Anna]" in plain lyrics is text
     static const QRegularExpression meta(QStringLiteral(R"(^\[(ar|al|ti|au|by|offset|re|ve|length|la|id|tool|#)\s*:(.*)\]$)"),
                                          QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression wordStamp(QStringLiteral(R"(<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>)"));
+    // word stamps of enhanced LRC ("<01:02.50>"), and stamps inside a line ("Hi [00:01.50]there")
+    static const QRegularExpression wordStamp(QStringLiteral(R"(<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>|\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])"));
 
     QString text = raw;
     if (text.startsWith(QChar(0xFEFF)))
@@ -338,12 +347,22 @@ LyricsText LyricsText::parse(const QString &raw)
     }
 
     LyricsText out;
-    if (stampedRows >= 2) {
-        // "+" means earlier (LRC convention)
-        std::stable_sort(timed.begin(), timed.end(), [](const Timed &a, const Timed &b) { return a.t < b.t; });
+    std::stable_sort(timed.begin(), timed.end(), [](const Timed &a, const Timed &b) { return a.t < b.t; });
+    // only time stamps that move on make a song synchronised (not "[00:00.00]" on every line)
+    if (stampedRows >= 2 && timed.first().t != timed.last().t) {
         for (const Timed &t : timed) {
+            // two lines at the same time (original and translation) are sung as one
+            if (!out.times.isEmpty() && out.times.last() == std::max<qint64>(0, t.t - offset)) {
+                if (t.s.isEmpty())
+                    continue;
+                if (out.lines.last().isEmpty())
+                    out.lines.last() = t.s;
+                else
+                    out.lines.last() += QLatin1Char('\n') + t.s;
+                continue;
+            }
             out.lines << t.s;
-            out.times << std::max<qint64>(0, t.t - offset);
+            out.times << std::max<qint64>(0, t.t - offset); // "+" means earlier (LRC convention)
         }
         tidy(out.lines, &out.times);
     } else {
@@ -362,6 +381,7 @@ Lyrics::Lyrics(Player *player, QObject *parent)
     QSettings s;
     m_shown = s.value(QStringLiteral("lyrics/shown"), true).toBool();
     m_online = s.value(QStringLiteral("lyrics/online"), false).toBool();
+    m_pool.setMaxThreadCount(2); // network waits must not hold up the lists in the global pool
     m_clearTimer.setSingleShot(true);
     m_clearTimer.setInterval(400);
     connect(&m_clearTimer, &QTimer::timeout, this, [this] { clear(m_running != Nothing ? Searching : None); });
@@ -370,6 +390,12 @@ Lyrics::Lyrics(Player *player, QObject *parent)
         if (m_active)
             updateCurrent();
     });
+}
+
+Lyrics::~Lyrics()
+{
+    m_liveGen = ~quint64(0); // running searches skip the network
+    m_pool.clear();
 }
 
 void Lyrics::setActive(bool on)
@@ -416,7 +442,7 @@ void Lyrics::onTrackChanged()
         return;
     }
     // looked for again when a big view opens
-    ++m_gen;
+    m_liveGen = ++m_gen;
     m_trackId = 0;
     m_level = m_running = Nothing;
     m_clearTimer.stop();
@@ -429,7 +455,7 @@ void Lyrics::search()
         return;
     const qint64 id = m_player->currentId();
     if (id != m_trackId) {
-        ++m_gen;
+        m_liveGen = ++m_gen;
         m_trackId = id;
         m_level = m_running = Nothing;
         if (id <= 0) {
@@ -461,8 +487,9 @@ void Lyrics::search()
         info.path = TrackCache::instance().pathOf(id);
     const quint64 gen = m_gen;
     QPointer<Lyrics> self(this);
-    (void)QtConcurrent::run([self, id, gen, want, info] {
-        const LyricsText text = find(info, want == Network);
+    std::atomic<quint64> *live = &m_liveGen;
+    (void)QtConcurrent::run(&m_pool, [self, id, gen, want, info, live] {
+        const LyricsText text = find(info, want == Network, [live, gen] { return live->load() != gen; });
         QMetaObject::invokeMethod(qApp, [self, id, gen, want, text] {
             if (self)
                 self->apply(id, gen, want, text);
@@ -472,16 +499,27 @@ void Lyrics::search()
 
 void Lyrics::apply(qint64 id, quint64 gen, int level, const LyricsText &text)
 {
-    if (gen != m_gen || id != m_trackId)
+    if (gen != m_gen || id != m_trackId || level < m_level)
+        return; // an old track, or a wider search has answered already
+    // a narrower search while a wider one runs: its find is shown meanwhile, "none" is not final
+    const bool last = level >= m_running;
+    if (!last && text.isEmpty())
         return;
+    if (last)
+        m_running = Nothing;
     m_clearTimer.stop();
-    m_running = Nothing;
     // synchronised lyrics of our own: nothing better to fetch
     m_level = text.synced() ? Network : std::max(m_level, level);
-    m_text = text;
-    m_status = text.isEmpty() ? None : Found;
-    emit changed();
-    updateCurrent(true);
+    const int status = text.isEmpty() ? None : Found;
+    const bool same = text.lines == m_text.lines && text.times == m_text.times && text.source == m_text.source
+                      && m_textId == id;
+    if (!same || status != m_status) {
+        m_text = text;
+        m_textId = id;
+        m_status = status;
+        emit changed();
+        updateCurrent(true);
+    }
     search(); // the wish may have grown meanwhile (lyrics or LRCLIB switched on)
 }
 
@@ -489,6 +527,7 @@ void Lyrics::clear(int status)
 {
     const bool had = !m_text.isEmpty() || m_current != -1;
     m_text = LyricsText();
+    m_textId = 0;
     m_current = -1;
     if (had || m_status != status) {
         m_status = status;
@@ -500,7 +539,7 @@ void Lyrics::clear(int status)
 void Lyrics::updateCurrent(bool force)
 {
     int idx = -1;
-    if (m_text.synced() && m_player->currentId() == m_trackId) {
+    if (m_text.synced() && m_player->currentId() == m_textId) { // not the old lines against the new track's time
         const qint64 pos = m_player->position() + LeadMs;
         idx = int(std::upper_bound(m_text.times.begin(), m_text.times.end(), pos) - m_text.times.begin()) - 1;
     }

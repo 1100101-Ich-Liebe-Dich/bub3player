@@ -3,8 +3,11 @@
 
 #include <QObject>
 #include <QStringList>
+#include <QThreadPool>
 #include <QTimer>
 #include <QVector>
+
+#include <atomic>
 
 class Player;
 
@@ -51,6 +54,7 @@ public:
     enum Status { Idle, Searching, Found, None };
 
     explicit Lyrics(Player *player, QObject *parent = nullptr);
+    ~Lyrics() override;
 
     bool active() const { return m_active; }
     void setActive(bool on);
@@ -92,9 +96,12 @@ private:
     int m_status = Idle;
     LyricsText m_text;
     int m_current = -1;
-    qint64 m_trackId = 0;   // track the lyrics are for (or being searched for)
+    qint64 m_trackId = 0;   // track being searched for (or found)
+    qint64 m_textId = 0;    // track m_text belongs to (the old lines stay a moment on a change)
     int m_level = Nothing;  // reached for m_trackId
     int m_running = Nothing; // a search up to this level is under way
     quint64 m_gen = 0;
     QTimer m_clearTimer;    // old lyrics stay a moment on a track change: no flash of the cover
+    std::atomic<quint64> m_liveGen{0}; // read by searches in worker threads: stop when stale
+    QThreadPool m_pool;     // after m_liveGen: waits for running searches when destroyed
 };

@@ -25,7 +25,6 @@ Flickable {
     readonly property bool synced: Lyrics.synced
     readonly property int current: Lyrics.current
     property bool following: true
-    property bool steering: false  // contentY is being moved by us, not by the listener
 
     clip: true
     contentWidth: width
@@ -44,14 +43,12 @@ Flickable {
             return
         var to = item.y + item.height / 2 - height * focusAt
         to = Math.max(-topMargin, Math.min(to, contentHeight - height + bottomMargin))
-        steering = true
         if (animated) {
             scrollAnim.to = to
             scrollAnim.restart()
         } else {
             scrollAnim.stop()
             contentY = to
-            steering = false
         }
     }
     function restart() {
@@ -60,10 +57,8 @@ Flickable {
         if (synced) {
             follow(false)
         } else {
-            steering = true
             scrollAnim.stop()
             contentY = -topMargin
-            steering = false
         }
     }
 
@@ -73,7 +68,6 @@ Flickable {
         property: "contentY"
         duration: 480
         easing.type: Easing.OutCubic
-        onStopped: lv.steering = false
     }
     Timer {
         id: resume
@@ -84,9 +78,9 @@ Flickable {
     onCurrentChanged: follow(true)
     onHeightChanged: Qt.callLater(follow, false)
     onWidthChanged: Qt.callLater(follow, false)
-    onMovementStarted: { scrollAnim.stop(); steering = false; following = false; resume.restart() }
+    // dragging, flicking and the wheel (only the listener's scrolling starts a "movement")
+    onMovementStarted: { scrollAnim.stop(); following = false; resume.restart() }
     onMovementEnded: resume.restart()
-    onContentYChanged: if (!steering && synced) { following = false; resume.restart() } // the wheel
     Connections {
         target: Lyrics
         function onChanged() { Qt.callLater(lv.restart) }

@@ -589,7 +589,7 @@ Item {
             }
         }
         ShaderEffect {
-            visible: skin.canShade
+            visible: skin.canShade && opacity > 0
             width: nowPlaying.coverSize
             height: nowPlaying.coverSize * 0.55
             anchors.horizontalCenter: parent.horizontalCenter
