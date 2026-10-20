@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/Qt-6%20%2F%20QML-41CD52?style=for-the-badge&logo=qt&logoColor=white" alt="Qt 6">
   <img src="https://img.shields.io/badge/GStreamer-1.x-e14b6c?style=for-the-badge" alt="GStreamer">
   <img src="https://img.shields.io/badge/Jellyfin-bereit-7b4fd6?style=for-the-badge&logo=jellyfin&logoColor=white" alt="Jellyfin">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Lizenz-GPL--3.0--or--later-c9372c?style=for-the-badge" alt="Lizenz: GPL-3.0-or-later"></a>
 </p>
 
 <h3 align="center">Eine Million Titel. Acht Welten. Ein Player, der zuhört.</h3>
@@ -643,14 +644,32 @@ BuB3Player ist und bleibt ein **Linux-Player**. Ideen für die nächsten Version
 - 🎨 Noch mehr Themes
 
 Wünsche und Fehler gerne als [Issue](https://github.com/1100101-Ich-Liebe-Dich/bub3player/issues/new/choose).
+Wer mitbauen möchte: [CONTRIBUTING.md](CONTRIBUTING.md). Sicherheitslücken bitte nicht öffentlich,
+sondern wie in [SECURITY.md](SECURITY.md) beschrieben melden.
 
 <br>
 
-## 📜 Lizenzen
+## 📜 Lizenz
 
-Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, Barlow
-Condensed, VT323, Nunito, Righteous, IBM Plex Mono, DSEG7/DSEG14 – SIL Open Font License;
-Permanent Marker – Apache 2.0 (`assets/fonts/`). Icons: Pfade aus Material Icons (Apache 2.0).
+BuB3Player ist **freie Software** unter der [GNU General Public License, Version 3 oder später](LICENSE)
+(GPL-3.0-or-later): Du darfst ihn nutzen, untersuchen, verändern und weitergeben – auch
+verändert, solange der Quellcode unter derselben Lizenz offen bleibt. Es gibt keine Gewährleistung.
+
+Was sonst noch dabei ist:
+
+| Teil | Lizenz | Text |
+|---|---|---|
+| Schriften Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, Barlow Condensed, VT323, Nunito, Righteous, IBM Plex Mono, DSEG7/DSEG14 | SIL Open Font License 1.1 | `assets/fonts/OFL-*.txt` |
+| Schrift Permanent Marker, Symbole (Pfade aus Material Icons) | Apache 2.0 | `assets/fonts/LICENSE-permanentmarker.txt`, `LICENSES/Apache-2.0.txt` |
+| Qt 6 (im AppImage) | LGPL 3 | `LICENSES/LGPL-3.0.txt` |
+
+**Im AppImage** stecken außerdem Bibliotheken aus Ubuntu 22.04 (GStreamer, TagLib, SQLite …).
+Ihre Lizenzen liegen im AppImage unter `usr/share/licenses/`, die Liste aller Pakete mit Version in
+`usr/share/licenses/bub3player/MITGELIEFERT.txt` (anschauen mit `./BuB3Player-x86_64.AppImage
+--appimage-extract`). Den Quellcode dieser Pakete gibt es bei Ubuntu (`apt source PAKET` oder
+[packages.ubuntu.com](https://packages.ubuntu.com/)), den von Qt unter
+[download.qt.io](https://download.qt.io/official_releases/qt/).
+
 Alle Künstler, Alben und Cover in den Bildern sind erfunden.
 
 <br>

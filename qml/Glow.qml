@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 
 // Cheap glow: renders `target` into a tiny texture and stretches it behind

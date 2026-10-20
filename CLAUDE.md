@@ -51,6 +51,15 @@ TagLib 1.11, SQLite 3.35. Die Version steht in `CMakeLists.txt` (`project(Halcyo
 und wird als `HALCYON_VERSION` überall verwendet; dazu `dist/*.metainfo.xml` und `CHANGELOG.md`
 pflegen.
 
+**Änderungsprotokoll:** `CHANGELOG.md` nach Keep a Changelog: neue Einträge unter
+„Unveröffentlicht“ in „Hinzugefügt“, „Geändert“, „Behoben“, „Entfernt“, „Sicherheit“; bei einer
+neuen Version wird daraus `## [X.Y.Z] – Datum` und unten der Vergleichslink ergänzt.
+
+**Lizenz:** GPL-3.0-or-later (`LICENSE`). Jede neue Quelldatei (C++, QML, Skripte, CMake) beginnt
+mit `SPDX-License-Identifier: GPL-3.0-or-later` (Shader und JSON nicht). Fremde Teile: Schriften
+mit ihren Lizenztexten in `assets/fonts/`, Apache/LGPL-Texte in `LICENSES/`; das AppImage legt
+die copyright-Dateien aller mitgelieferten Ubuntu-Pakete nach `usr/share/licenses/`.
+
 ## Aufbau
 
 ```
@@ -206,5 +215,7 @@ Typischer Ablauf vor einem PR:
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.
-- Offene Punkte für den Inhaber: Lizenz wählen (noch keine), Social Preview hochladen
-  (`docs/images/banner.png`), Repo-Beschreibung/Topics setzen.
+- **Öffentlich:** Lizenz GPL-3.0-or-later, CONTRIBUTING.md, SECURITY.md, PR-Vorlage, Dependabot
+  für die Actions. Offen für den Inhaber (nur in der GitHub-Oberfläche): Social Preview hochladen
+  (`docs/images/banner.png`), Beschreibung/Topics/Website setzen, „Private vulnerability
+  reporting“ einschalten, Regeln für `main` (nur über PR, Bau muss grün sein).

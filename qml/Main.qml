@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Window
@@ -397,6 +398,7 @@ ApplicationWindow {
             if (a.indexOf("klang-tab") >= 0) window.openSettings(3)
             if (a.indexOf("fullscreen") >= 0) window.toggleFullScreen()
             if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(4)
+            if (a.indexOf("about-tab") >= 0) window.openSettings(5)
             var sk = a.match(/seek=(\d+)/)
             if (sk) seekTimer.to = Number(sk[1]), seekTimer.start()
             var jl = a.match(/jf-login=([^ ]+)/)

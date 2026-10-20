@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Tries out a built AppImage: help, audio analysis through the bundled
 # GStreamer, start with a screenshot. Usage: smoke-test.sh BuB3Player-x86_64.AppImage
 set -u

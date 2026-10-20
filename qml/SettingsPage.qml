@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Dialogs
@@ -450,7 +451,10 @@ Item {
                     onLinkActivated: (l) => Qt.openUrlExternally(l)
                     text: qsTr("Version %1, Projekt „Halcyon“.").arg(Qt.application.version)
                           + "<br>" + qsTr("Musikplayer für große lokale Bibliotheken. Wiedergabe mit GStreamer, Tags mit TagLib, Bibliothek in SQLite, Oberfläche mit Qt.")
-                          + "<br><br>" + qsTr("Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, VT323 (SIL Open Font License). Symbole: Material Icons (Apache 2.0).")
+                          + "<br><br>" + qsTr("Freie Software unter der GNU General Public License, Version 3 oder später. Du darfst das Programm nutzen, weitergeben und verändern; es gibt keine Gewährleistung.")
+                          + " " + qsTr("Quellcode: %1").arg("<a href=\"https://github.com/1100101-Ich-Liebe-Dich/bub3player\">github.com/1100101-Ich-Liebe-Dich/bub3player</a>")
+                          + "<br><br>" + qsTr("Schriften: Manrope, Bricolage Grotesque, Unbounded, Orbitron, Chakra Petch, Barlow, Barlow Condensed, VT323, Nunito, Righteous, IBM Plex Mono, DSEG7 und DSEG14 (SIL Open Font License 1.1); Permanent Marker (Apache 2.0). Symbole: Material Icons (Apache 2.0).")
+                          + "<br>" + qsTr("Verwendet Qt (LGPL 3), GStreamer (LGPL 2.1), TagLib (LGPL 2.1 oder MPL 1.1) und SQLite (gemeinfrei).")
                 }
             }
         }

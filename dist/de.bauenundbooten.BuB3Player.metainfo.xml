@@ -2,6 +2,7 @@
 <component type="desktop-application">
   <id>de.bauenundbooten.BuB3Player</id>
   <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
   <name>BuB3Player</name>
   <summary xml:lang="de">Musikplayer für riesige Bibliotheken und Jellyfin</summary>
   <summary>Music player for huge libraries and Jellyfin</summary>
@@ -28,6 +29,42 @@
   <url type="homepage">https://www.bauenundbooten.de</url>
   <url type="vcs-browser">https://github.com/1100101-Ich-Liebe-Dich/bub3player</url>
   <url type="bugtracker">https://github.com/1100101-Ich-Liebe-Dich/bub3player/issues</url>
+  <url type="contribute">https://github.com/1100101-Ich-Liebe-Dich/bub3player/blob/main/CONTRIBUTING.md</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption xml:lang="de">Klassik: Alben als Cover-Raster</caption>
+      <caption>Classic theme: albums as a cover grid</caption>
+      <image>https://raw.githubusercontent.com/1100101-Ich-Liebe-Dich/bub3player/main/docs/images/klassik-bibliothek.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="de">Aurora: Großansicht</caption>
+      <caption>Aurora theme: now playing</caption>
+      <image>https://raw.githubusercontent.com/1100101-Ich-Liebe-Dich/bub3player/main/docs/images/aurora-grossansicht.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="de">Hi-Fi Turm: Bibliothek</caption>
+      <caption>Hi-fi tower theme: library</caption>
+      <image>https://raw.githubusercontent.com/1100101-Ich-Liebe-Dich/bub3player/main/docs/images/tower-bibliothek.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption xml:lang="de">Equalizer und Ausgabegerät</caption>
+      <caption>Equalizer and output device</caption>
+      <image>https://raw.githubusercontent.com/1100101-Ich-Liebe-Dich/bub3player/main/docs/images/klang.jpg</image>
+    </screenshot>
+  </screenshots>
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>player</keyword>
+    <keyword>audio</keyword>
+    <keyword>jellyfin</keyword>
+    <keyword>Musik</keyword>
+    <keyword>flac</keyword>
+    <keyword>gapless</keyword>
+  </keywords>
+  <branding>
+    <color type="primary" scheme_preference="light">#f0a35e</color>
+    <color type="primary" scheme_preference="dark">#1a1f2b</color>
+  </branding>
   <provides>
     <binary>halcyon</binary>
   </provides>

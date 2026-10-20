@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds BuB3Player-x86_64.AppImage: the player with Qt, GStreamer (only the
 # plugins it needs) and all libraries, runnable on any recent x86-64 Linux.
 #
@@ -86,6 +87,36 @@ linuxdeploy --appdir AppDir --desktop-file "$desktop" --icon-file "$icon" \
 # plugins look for their libraries one level up
 for f in "$dest"/*.so "$gio"/*.so; do [ -f "$f" ] && patchelf --set-rpath '$ORIGIN/..:$ORIGIN/../..:$ORIGIN' "$f"; done
 patchelf --set-rpath '$ORIGIN/../..' "$helpers/gst-plugin-scanner"
+
+echo "== Lizenzen der mitgelieferten Bibliotheken"
+# The player's own texts come with "cmake --install". Here: for every bundled
+# library its package's copyright file, and a list of where the sources are.
+lic=AppDir/usr/share/licenses
+notice="$lic/bub3player/MITGELIEFERT.txt"
+{
+    echo "BuB3Player $VERSION – mitgelieferte Bibliotheken"
+    echo
+    echo "Das AppImage enthält Bibliotheken aus Ubuntu $(. /etc/os-release && echo "$VERSION_ID") und Qt $("$QMAKE" -query QT_VERSION)."
+    echo "Ubuntu-Pakete: Quellcode mit \"apt source PAKET\" oder unter https://packages.ubuntu.com/source/$(. /etc/os-release && echo "$VERSION_CODENAME")/PAKET,"
+    echo "Lizenzen jeweils in usr/share/licenses/PAKET/copyright."
+    echo "Qt: LGPL-3.0 (LGPL-3.0.txt), Quellcode unter https://download.qt.io/official_releases/qt/."
+    echo "Die Bibliotheken sind dynamisch gebunden und lassen sich nach --appimage-extract austauschen."
+    echo
+    echo "Paket Version"
+} > "$notice"
+pkgs=""
+while IFS= read -r f; do
+    base=$(basename "$f")
+    pkg=$(dpkg -S "*/$base" 2>/dev/null | head -1 | cut -d: -f1)
+    [ -n "$pkg" ] && pkgs="$pkgs $pkg"
+done < <(find AppDir/usr/lib AppDir/usr/bin -type f \( -name '*.so*' -o -name gst-plugin-scanner \))
+for pkg in $(echo "$pkgs" | tr ' ' '\n' | sort -u); do
+    if [ -f "/usr/share/doc/$pkg/copyright" ]; then
+        mkdir -p "$lic/$pkg"
+        cp "/usr/share/doc/$pkg/copyright" "$lic/$pkg/"
+    fi
+    echo "$pkg $(dpkg-query -W -f '${Version}' "$pkg" 2>/dev/null)" >> "$notice"
+done
 
 echo "== AppImage packen"
 rm -f "$OUTPUT"

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds a huge test library from a few real audio files: N tracks in
 "Artist NNNN/Album NN/NN - Track N.ext" (1000 tracks per artist, 10 per
 album), as hard links, so a million tracks cost almost no disk space.

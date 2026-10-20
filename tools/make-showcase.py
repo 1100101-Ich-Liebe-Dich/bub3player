@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the demo library used for the screenshots on GitHub: 16 albums by
 invented artists, 4 tracks each, with generated cover art and synthesized
 music (drums, chords, bass) in the album's tempo, so the audio analysis,

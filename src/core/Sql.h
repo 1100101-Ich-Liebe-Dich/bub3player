@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 // Minimal RAII wrapper around the SQLite C API.
 // Each thread owns its own connection; statements never cross threads.

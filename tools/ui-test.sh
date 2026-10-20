@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run the player headless (Xvfb) with its own profile, for screenshots, click
 # tests and memory measurements. Every profile has its own config, database
 # and cache below $HALCYON_TEST_DIR (default /tmp/halcyon-test/<profil>).
@@ -25,7 +26,7 @@
 #
 # The --ui-test actions are listed in qml/Main.qml (uiTestTimer): playall, play,
 # row=N, radio=ID, seek=MS, pauseat=/playat=/nextat=MS, queue, now-playing,
-# album, theme-tab, mix-tab, klang-tab, jellyfin-tab, jf-login=URL, jf-quick,
+# album, theme-tab, mix-tab, klang-tab, jellyfin-tab, about-tab, jf-login=URL, jf-quick,
 # cycle, cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay,
 # search[=wort], mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS,
 # fullscreen (needs a window manager to take effect, e.g. openbox on the Xvfb).
