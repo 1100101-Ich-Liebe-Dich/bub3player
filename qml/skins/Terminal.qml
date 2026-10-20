@@ -75,7 +75,7 @@ Item {
         height: 22
         spacing: 14
         Repeater {
-            model: [["Leer", "Play/Pause"], ["^F", "Suche"], ["^J", "Liste"], ["^L", "Vollbild"], ["^T", "Themes"], ["^←/→", "Titel"], ["Esc", "zurück"]]
+            model: [["Leer", "Play/Pause"], ["^F", "Suche"], ["^J", "Liste"], ["^L", "Großansicht"], ["F11", "Vollbild"], ["^T", "Themes"], ["^←/→", "Titel"], ["Esc", "zurück"]]
             Row {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
@@ -212,7 +212,7 @@ Item {
                     }
                     TButton { text: "[auto:" + (Queue.autoplay ? "an " : "aus") + "]"; on: Queue.autoplay; onClicked: Queue.autoplay = !Queue.autoplay }
                     TButton { text: "[liste]"; on: window.queueOpen; onClicked: window.queueOpen = !window.queueOpen }
-                    TButton { text: "[vollbild]"; onClicked: window.nowPlayingOpen = true }
+                    TButton { text: "[großansicht]"; onClicked: window.nowPlayingOpen = true }
                 }
             }
         }

@@ -27,7 +27,8 @@
 # row=N, radio=ID, seek=MS, pauseat=/playat=/nextat=MS, queue, now-playing,
 # album, theme-tab, mix-tab, klang-tab, jellyfin-tab, jf-login=URL, jf-quick,
 # cycle, cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay,
-# search, mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS.
+# search[=wort], mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS,
+# fullscreen (needs a window manager to take effect, e.g. openbox on the Xvfb).
 #
 # Audio tests: HALCYON_TEST_SINK="filesink location=/tmp/x.raw" replaces the
 # output device (any GStreamer sink description), GST_DEBUG_DUMP_DOT_DIR=DIR

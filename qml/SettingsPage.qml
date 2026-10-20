@@ -319,6 +319,7 @@ Item {
                                 [qsTr("Strg + F"), qsTr("Suchen")],
                                 [qsTr("Strg + J"), qsTr("Warteschlange")],
                                 [qsTr("Strg + L"), qsTr("Großansicht")],
+                                [qsTr("F11"), qsTr("Vollbild an und aus")],
                                 [qsTr("Strg + T"), qsTr("Theme wechseln")],
                                 [qsTr("Strg + E"), qsTr("Klang: Ausgabe und Equalizer")],
                                 [qsTr("Alt + ←"), qsTr("Zurück")],
