@@ -396,6 +396,8 @@ Item {
         MouseArea { anchors.fill: parent; hoverEnabled: false } // keep clicks away from the library
 
         readonly property real disc: Math.min(height * 0.56, width * 0.36)
+        property real lyricsMix: window.lyricsOn ? 1 : 0
+        Behavior on lyricsMix { NumberAnimation { duration: 320; easing.type: Easing.InOutCubic } }
 
         IconButton {
             x: 24; y: 22
@@ -470,6 +472,8 @@ Item {
                 requestSize: 1024
                 coverId: Player.currentId
                 label: Player.album || Player.title
+                opacity: 1 - nowPlaying.lyricsMix
+                visible: opacity > 0
                 RotationAnimator on rotation {
                     from: 0; to: 360
                     duration: 24000
@@ -484,6 +488,32 @@ Item {
                 color: Theme.alpha(skin.lights[3], 0.85)
                 border.color: Theme.alpha("#ffffff", 0.35)
                 border.width: 2
+                opacity: 1 - nowPlaying.lyricsMix
+            }
+            // the lyrics in place of the record, on dark glass
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: Theme.alpha(Theme.dark ? "#000000" : "#ffffff", 0.32)
+                opacity: nowPlaying.lyricsMix
+                visible: opacity > 0
+            }
+            Loader {
+                anchors.centerIn: parent
+                width: parent.width * 0.72
+                height: parent.height * 0.76
+                active: nowPlaying.lyricsMix > 0
+                opacity: nowPlaying.lyricsMix
+                sourceComponent: LyricsView {
+                    align: Text.AlignHCenter
+                    focusAt: 0.5
+                    fadeEdge: 0.42
+                    fontFamily: Theme.displayFont
+                    fontSize: Math.round(Math.max(18, Math.min(28, nowPlaying.disc / 18)))
+                    fontWeight: Font.ExtraBold
+                    color: Theme.text
+                    dimColor: Theme.alpha(Theme.text, 0.36)
+                }
             }
             Rectangle {
                 anchors.centerIn: parent
@@ -599,6 +629,7 @@ Item {
                         PlayOrb { width: 78; height: 78 }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; width: 48; height: 48; iconName: "next"; iconSize: 28; iconColor: Theme.text; onClicked: Player.next() }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                        IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
                     }
                 }
                 Row {

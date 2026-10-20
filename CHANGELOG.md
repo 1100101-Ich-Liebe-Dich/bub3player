@@ -1,3 +1,31 @@
+## 1.3.0 - 2026-10-20
+
+Liedtexte in der Großansicht.
+
+### Hinzugefügt
+- **Liedtexte** in der Großansicht, in allen acht Themes anstelle des Covers – im Hi-Fi Turm als
+  Textanzeige an der Wand über der Anlage, bei Vintage als Textblatt aus der Plattenhülle, im
+  Terminal mit `>` vor der gesungenen Zeile. Liedtexte mit Zeitmarken laufen mit der Musik mit,
+  ein Klick auf eine Zeile springt dorthin; wer von Hand blättert, hat ein paar Sekunden Ruhe.
+  Liedtexte ohne Zeitmarken lassen sich durchblättern.
+- Gesucht wird in einer `.lrc`-Datei mit dem Namen des Titels daneben, in den Tags (ID3v2 SYLT
+  und USLT, LYRICS, UNSYNCEDLYRICS, MP4 ©lyr …) und bei Jellyfin-Titeln auf dem Server.
+- Auf Wunsch holt der Player fehlende Liedtexte von **LRCLIB** (lrclib.net): Einstellungen →
+  Allgemein → Liedtexte, ab Werk aus. Gefragt wird nur bei offener Großansicht, die Antworten
+  (auch „nichts gefunden“) bleiben auf dem Rechner. Neben die Musik wird nichts geschrieben.
+- Schalter „Liedtext“ in jeder Großansicht und `Strg + Umschalt + L`: Liedtext oder Cover.
+- `halcyon --lyrics DATEI` zeigt den Liedtext einer Datei ohne Oberfläche.
+- Testwerkzeug `tools/mock-lrclib.py`; `tools/mock-jellyfin.py` liefert auch Liedtexte.
+
+### Geändert
+- Vintage: Die Tasten am Receiver sind etwas schmaler, damit „TEXT“ daneben passt. Hi-Fi Turm:
+  neue Taste „TEXT“ in der Tastenreihe des Verstärkers.
+- `halcyon --help` nennt auch `--analyze` und `--lyrics`.
+- README: Liedtexte stehen jetzt bei den Funktionen statt im Ausblick.
+
+### Behoben
+- README: Die Zeile „Formate“ im Abschnitt Klang stand doppelt da.
+
 ## 1.2.1 - 2026-10-20
 
 Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Release, Hinweise.

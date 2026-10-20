@@ -240,6 +240,25 @@ Item {
                 height: parent.height - 34
                 width: Math.min(parent.width * 0.5, Math.round(height * 1.1))
                 big: true
+                visible: !window.lyricsOn
+            }
+            // the lyrics in place of the picture, the line being sung marked
+            Loader {
+                x: bigArt.x + 8
+                y: bigArt.y
+                width: bigArt.width - 8
+                height: bigArt.height
+                active: window.lyricsOn
+                sourceComponent: LyricsView {
+                    fontFamily: "VT323"
+                    fontSize: Math.round(Math.max(24, Math.min(36, np.width / 40)))
+                    fontWeight: Font.Normal
+                    marker: "> "
+                    lineGap: 4
+                    color: Theme.accent
+                    dimColor: Theme.textDim
+                    sourceColor: Theme.textFaint
+                }
             }
             Column {
                 anchors.left: bigArt.right
@@ -290,6 +309,7 @@ Item {
                     TButton { text: "[>|]"; onClicked: Player.next() }
                     TButton { text: "[zufall]"; on: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
                     TButton { text: "[wdh]"; on: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                    TButton { text: "[text]"; on: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; onClicked: window.toggleLyrics() }
                     TButton { text: "[esc]"; onClicked: window.nowPlayingOpen = false }
                 }
                 Text {

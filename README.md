@@ -338,8 +338,31 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
 
 > **Ohne Equalizer und mit „Systemstandard“** läuft die Wiedergabe genau wie in Version 1.0 –
 > kein zusätzliches Element in der Kette, der Ton geht unverändert an den Soundserver.
-- Formate: FLAC, MP3, Ogg Vorbis, Opus, WAV, AIFF, AAC/ALAC, WavPack, Musepack, WMA, APE – alles,
-  was GStreamer abspielt.
+
+### 🎤 Liedtexte
+
+Die Großansicht zeigt den Liedtext statt des Covers. Umschalten mit dem Liedtext-Knopf neben den
+Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschalt + L`.
+
+- **Synchron**: Hat der Liedtext Zeitmarken, läuft er mit der Musik mit, die gesungene Zeile
+  leuchtet. Ein Klick auf eine Zeile springt dorthin. Wer von Hand blättert, hat ein paar Sekunden
+  Ruhe, dann geht es an der richtigen Stelle weiter.
+- **Woher**: eine `.lrc`-Datei mit dem Namen des Titels daneben (`01 Titel.flac` →
+  `01 Titel.lrc`), die Tags des Titels (ID3v2 SYLT und USLT, LYRICS, UNSYNCEDLYRICS, MP4 ©lyr …)
+  oder der Jellyfin-Server.
+- **Aus dem Netz, nur wenn du willst**: Unter Einstellungen → Allgemein → Liedtexte holt der Player
+  fehlende Liedtexte von [LRCLIB](https://lrclib.net). Dabei gehen Titel, Künstler, Album und Länge
+  an den Dienst, und zwar nur, solange die Großansicht offen ist. Gefundenes bleibt auf deinem
+  Rechner; neben die Musik wird nichts geschrieben. Ab Werk ist das aus.
+- **In jedem Theme anders**: im Hi-Fi Turm als Textanzeige an der Wand über der Anlage, bei Vintage
+  als Textblatt aus der Plattenhülle, im Terminal mit `>` vor der gesungenen Zeile.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/liedtext-aurora.jpg" alt="Liedtext in der Großansicht, Theme Aurora"></td>
+<td width="50%"><img src="docs/images/liedtext-tower.jpg" alt="Liedtext als Textanzeige über dem Hi-Fi Turm"></td>
+</tr>
+</table>
 
 ### ☁️ Jellyfin
 
@@ -369,6 +392,7 @@ Alles unter **Einstellungen → Klang** (`Strg + E`):
 | `Strg + F` | Suchen |
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
+| `Strg + Umschalt + L` | Liedtext oder Cover in der Großansicht |
 | `F11` | Vollbild an und aus |
 | `Strg + T` | Theme wechseln |
 | `Strg + E` | Klang: Ausgabe und Equalizer |
@@ -577,6 +601,7 @@ halcyon --skin vintage                # mit einem bestimmten Theme starten
 halcyon --view albums                 # mit einer bestimmten Ansicht starten
 halcyon --scan ~/Musik --db test.db   # Scan ohne Oberfläche, mit Zeitmessung
 halcyon --analyze titel.flac          # Tempo, Tonart, Lautheit … eines Titels ausgeben
+halcyon --lyrics titel.flac           # Liedtext eines Titels ausgeben (.lrc daneben, Tags)
 halcyon --recommend 4711              # zeigen, was nach Titel 4711 käme
 ```
 
@@ -592,7 +617,7 @@ Alles weitere: `halcyon --help`
 ```
 src/core      Datenbank (SQLite, WAL, FTS5), Scanner, TagReader, Cover- und Icon-Provider
 src/library   Abfragen (QueryBuilder), Listen-, Gruppen- und Ordnermodelle, Ansichten
-src/player    GStreamer-Player (zwei Decks, Überblenden), Warteschlange, MPRIS
+src/player    GStreamer-Player (zwei Decks, Überblenden), Warteschlange, MPRIS, Liedtexte
 src/analysis  Audioanalyse (Tempo, Tonart, Lautheit, Übergänge, Wellenform), Hintergrund-Warteschlange
 src/recommend Empfehlungen: Lernen aus dem Hörverlauf, Auswahl, Autoplay, Radio, „Für dich“
 src/jellyfin  Anmeldung, Abgleich, Streaming-Adressen, Rückmeldung an den Server
@@ -603,12 +628,14 @@ skins/        Theme-Beschreibungen, Einstellungs-Schemata, Vorschaubilder
 themes/       Farbschemata für Klassik
 shaders/      Aurora-Licht, Milchglas, Neumorphism, Synthwave-Szene, Vinyl, CD, Bildröhre …
 tools/        Testwerkzeuge: Vorführ- und Riesen-Bibliothek erzeugen, Klick- und
-              Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API)
+              Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API),
+              mock-lrclib.py (Ersatz für LRCLIB)
 dist/         Desktop-Eintrag, AppStream, Symbol, AppImage-Skripte
 ```
 
 Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
-`~/.config/halcyon/` (Einstellungen, eigene Ansichten), `~/.cache/halcyon/` (Cover, Wellenformen).
+`~/.config/halcyon/` (Einstellungen, eigene Ansichten), `~/.cache/halcyon/` (Cover, Wellenformen,
+Liedtexte von LRCLIB).
 
 **Grundsätze:** Alles, was dauert, läuft außerhalb des UI-Threads. Jede optionale
 GStreamer-Komponente wird vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.
@@ -627,8 +654,6 @@ Zum Ausprobieren ohne eigenen Jellyfin-Server:
 
 BuB3Player ist und bleibt ein **Linux-Player**. Ideen für die nächsten Versionen:
 
-- 🎤 **Liedtexte** – aus den Tags oder einer `.lrc` daneben, synchronisiert in der Großansicht
-  (Klick auf eine Zeile springt dorthin), auf Wunsch von **LRCLIB** *(in Arbeit)*
 - 📂 Titel direkt aus dem Dateimanager öffnen („Öffnen mit BuB3Player“)
 - 📡 Scrobbeln zu **ListenBrainz** und **Last.fm**
 - 🏷️ **Tag-Editor** für einzelne Titel und ganze Alben

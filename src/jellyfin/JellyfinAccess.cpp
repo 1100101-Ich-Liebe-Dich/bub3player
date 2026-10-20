@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "jellyfin/JellyfinAccess.h"
 
+#include "core/Http.h"
+
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QEventLoop>
 #include <QHash>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QReadWriteLock>
 #include <QSettings>
 #include <QSysInfo>
-#include <QTimer>
 #include <QUrlQuery>
 #include <QUuid>
 
@@ -155,26 +152,19 @@ QUrl artistSearchUrl(qint64 sourceId, const QString &artist)
     return u;
 }
 
+QUrl lyricsUrl(qint64 sourceId, const QString &itemId)
+{
+    Server s;
+    if (!get(sourceId, s) || itemId.isEmpty())
+        return {};
+    QUrl u(s.url);
+    u.setPath(u.path() + QStringLiteral("/Audio/%1/Lyrics").arg(itemId));
+    return u;
+}
+
 QByteArray httpGet(const QUrl &url, const QString &token, int timeoutMs, int *status)
 {
-    QNetworkAccessManager nam;
-    QNetworkRequest req(url);
-    req.setRawHeader("Authorization", authHeader(token));
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    QNetworkReply *reply = nam.get(req);
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    QObject::connect(&timer, &QTimer::timeout, reply, &QNetworkReply::abort);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timer.start(timeoutMs);
-    loop.exec();
-    const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if (status)
-        *status = code;
-    QByteArray data = code >= 200 && code < 300 ? reply->readAll() : QByteArray();
-    reply->deleteLater();
-    return data;
+    return Http::get(url, {{"Authorization", authHeader(token)}}, timeoutMs, status);
 }
 
 QString isoTime(qint64 secs)

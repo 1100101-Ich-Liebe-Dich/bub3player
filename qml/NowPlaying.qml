@@ -33,6 +33,8 @@ Rectangle {
 
     readonly property real coverSize: Math.min(np.height - 280, np.width * 0.40, 640)
     readonly property bool wide: np.width > 980
+    property real lyricsMix: window.lyricsOn ? 1 : 0
+    Behavior on lyricsMix { NumberAnimation { duration: 320; easing.type: Easing.InOutCubic } }
 
     Item {
         id: stage
@@ -52,6 +54,22 @@ Rectangle {
             requestSize: 1024
             coverId: Player.currentId
             label: Player.album || Player.title
+            opacity: 1 - np.lyricsMix
+            visible: opacity > 0
+        }
+        // the lyrics take the place of the cover
+        Loader {
+            x: bigCover.x
+            width: np.coverSize
+            height: parent.height
+            active: np.lyricsMix > 0
+            opacity: np.lyricsMix
+            sourceComponent: LyricsView {
+                fontFamily: Theme.displayFont
+                fontSize: Math.round(Math.max(22, Math.min(34, np.coverSize / 17)))
+                color: Theme.text
+                dimColor: Theme.alpha(Theme.text, 0.32)
+            }
         }
 
         Column {
@@ -180,6 +198,13 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0
                     onClicked: Queue.cycleRepeat()
+                }
+                IconButton {
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconName: "lyrics"; iconSize: 20; active: Lyrics.shown
+                    opacity: window.lyricsMissing ? 0.5 : 1
+                    tip: window.lyricsTip
+                    onClicked: window.toggleLyrics()
                 }
                 Item { width: 12; height: 1 }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter }

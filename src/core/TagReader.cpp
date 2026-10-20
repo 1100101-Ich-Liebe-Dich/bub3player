@@ -22,6 +22,7 @@
 #include <taglib/mp4tag.h>
 #include <taglib/mpegfile.h>
 #include <taglib/opusfile.h>
+#include <taglib/synchronizedlyricsframe.h>
 #include <taglib/tpropertymap.h>
 #include <taglib/vorbisfile.h>
 #include <taglib/wavfile.h>
@@ -229,6 +230,84 @@ TrackTags read(const QString &path)
         t.codec = QStringLiteral("AIFF");
     t.ok = true;
     return t;
+}
+
+namespace {
+
+// ID3v2 SYLT with millisecond time stamps, written out as LRC.
+QString syltAsLrc(TagLib::ID3v2::Tag *tag)
+{
+    if (!tag)
+        return {};
+    for (TagLib::ID3v2::Frame *frame : tag->frameListMap()["SYLT"]) {
+        auto *f = dynamic_cast<TagLib::ID3v2::SynchronizedLyricsFrame *>(frame);
+        if (!f || f->timestampFormat() != TagLib::ID3v2::SynchronizedLyricsFrame::AbsoluteMilliseconds)
+            continue;
+        if (f->type() != TagLib::ID3v2::SynchronizedLyricsFrame::Lyrics
+            && f->type() != TagLib::ID3v2::SynchronizedLyricsFrame::Other)
+            continue;
+        QString out;
+        for (const auto &line : f->synchedText()) {
+            const uint ms = line.time;
+            QString text = ts(line.text);
+            text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+            out += QStringLiteral("[%1:%2.%3]%4\n")
+                       .arg(ms / 60000, 2, 10, QLatin1Char('0'))
+                       .arg(ms / 1000 % 60, 2, 10, QLatin1Char('0'))
+                       .arg(ms % 1000 / 10, 2, 10, QLatin1Char('0'))
+                       .arg(text);
+        }
+        if (!out.isEmpty())
+            return out;
+    }
+    return {};
+}
+
+} // namespace
+
+QStringList embeddedLyrics(const QString &path)
+{
+    QStringList out;
+    const QByteArray fname = QFile::encodeName(path);
+    TagLib::FileStream stream(fname.constData(), true); // read-only, see read()
+    if (!stream.isOpen())
+        return out;
+    try {
+        TagLib::FileRef ref(&stream, false);
+        if (ref.isNull() || !ref.file())
+            return out;
+        TagLib::File *file = ref.file();
+        TagLib::ID3v2::Tag *id3 = nullptr;
+        if (auto *f = dynamic_cast<TagLib::MPEG::File *>(file))
+            id3 = f->ID3v2Tag();
+        else if (auto *f = dynamic_cast<TagLib::RIFF::WAV::File *>(file))
+            id3 = f->ID3v2Tag();
+        else if (auto *f = dynamic_cast<TagLib::RIFF::AIFF::File *>(file))
+            id3 = f->tag();
+        const QString sylt = syltAsLrc(id3);
+        if (!sylt.isEmpty())
+            out << sylt;
+        // "SYNCEDLYRICS" first, then "LYRICS" / "LYRICS:<description>", then "UNSYNCEDLYRICS"
+        const TagLib::PropertyMap props = file->properties();
+        QStringList synced, plain, unsynced;
+        for (const auto &kv : props) {
+            const QString key = ts(kv.first).toUpper();
+            // ffmpeg writes "lyrics" as TXXX:USLT
+            if (!key.contains(QLatin1String("LYRICS")) && key != QLatin1String("USLT"))
+                continue;
+            QStringList &to = key.startsWith(QLatin1String("SYNCEDLYRICS")) ? synced
+                              : key.startsWith(QLatin1String("UNSYNCEDLYRICS")) ? unsynced
+                                                                               : plain;
+            for (const auto &v : kv.second) {
+                const QString text = QString::fromStdString(v.to8Bit(true));
+                if (!text.trimmed().isEmpty())
+                    to << text;
+            }
+        }
+        out << synced << plain << unsynced;
+    } catch (...) {
+    }
+    return out;
 }
 
 QByteArray embeddedCover(const QString &path)

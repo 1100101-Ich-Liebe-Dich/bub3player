@@ -26,8 +26,8 @@ und **Jellyfin**. Signatur überall: „Projekt präsentiert von www.BAUENUNDBOO
 - **Alle acht Themes** bekommen jede Funktion: Klassik, Soft, Glas, Aurora, Vintage, Synthwave,
   Hi-Fi Turm (`tower`), Terminal. Neue Seiten/Dialoge in mehreren Themes ansehen.
 - **Arbeitsablauf**: Jeder größere Brocken auf einem eigenen Branch, dann ein **Pull Request**
-  (der Inhaber liest den Code im PR, testet, merged selbst). Kleine Korrekturen dürfen nach
-  Absprache auch direkt auf `main`. `main` muss immer veröffentlichbar sein.
+  (der Inhaber liest den Code im PR, testet, merged selbst). Auch kleine Korrekturen gehen über
+  einen PR (`main` ist geschützt). `main` muss immer veröffentlichbar sein.
 - **Releases** veröffentlicht der Inhaber selbst in der GitHub-Oberfläche (Tag `vX.Y.Z`).
   Der Workflow hängt das AppImage dann automatisch an.
 - Der Inhaber schätzt große, durchdachte Brocken mit gründlichem Testen und einem
@@ -43,6 +43,7 @@ cmake --build build
 ./build/halcyon --help               # Optionen (--db, --add-folder, --skin, --view, --no-scan …)
 ./build/halcyon --scan DIR --db x.db # Scan ohne Oberfläche, mit Zeiten
 ./build/halcyon --analyze DATEI…     # Tempo, Tonart, Lautheit … eines Titels
+./build/halcyon --lyrics DATEI…      # Liedtext eines Titels (.lrc daneben, Tags), wie die Großansicht ihn findet
 ./build/halcyon --recommend ID --db x.db   # was die Empfehlungen nach Titel ID wählen würden
 ```
 
@@ -64,19 +65,22 @@ die copyright-Dateien aller mitgelieferten Ubuntu-Pakete nach `usr/share/license
 
 ```
 src/core        Database (Schema + Migration, WAL, FTS5), Scanner (Zwei-Phasen-Scan, Modi
-                Full/Subset/Folders), FolderWatcher (inotify), TagReader, Cover-/Icon-Provider
+                Full/Subset/Folders), FolderWatcher (inotify), TagReader, Cover-/Icon-Provider,
+                Http (blockierendes GET für Worker-Threads)
 src/library     Library (QML-API, Wurzelordner, Überwachung), QueryBuilder (Ansicht → SQL),
                 TrackListModel (nur IDs, seitenweise Zeilen, Auswahl als Bitset), GroupModel,
                 FolderModel, ViewRegistry (eingebaute + eigene Ansichten), PlaylistStore
 src/player      Player (zwei GStreamer-Decks, Überblenden/Automix, Filterkette je Deck),
-                AudioOutput (QML „Audio“: Ausgabegerät, Bit-Perfect, Equalizer), PlayQueue, MPRIS
+                AudioOutput (QML „Audio“: Ausgabegerät, Bit-Perfect, Equalizer), PlayQueue, MPRIS,
+                Lyrics (QML „Lyrics“: .lrc, Tags, Jellyfin, LRCLIB; LRC-Parser)
 src/analysis    AudioAnalyzer (ein Durchgang: Lautheit, Tempo, Tonart, Wellenform …),
                 AnalysisService (Vorrang- und Hintergrund-Warteschlange)
 src/recommend   Recommender (Lernen aus dem Hörverlauf, Radio, Autoplay, „Für dich“)
 src/jellyfin    Anmeldung, Abgleich in dieselbe Datenbank, Streaming, Rückmeldung
 src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen)
 qml/            gemeinsame Seiten und Bausteine (H*-Bausteine: HDialog, HCombo, HTextField,
-                HMenu …), PlaylistUi (alle Playlist-Dialoge), SmartEditor
+                HMenu …), PlaylistUi (alle Playlist-Dialoge), SmartEditor, LyricsView
+                (Liedtext für die Großansichten; die Themes wählen nur Schrift, Farben, Ausrichtung)
 qml/skins/      die acht Themes; jedes hostet dieselben Seiten
 skins/, themes/ Theme-Beschreibungen mit Einstellungs-Schema, Farbschemata
 shaders/        alle Effekte (qsb, zur Bauzeit übersetzt)
@@ -86,7 +90,8 @@ tools/          Test- und Hilfswerkzeuge (siehe unten)
 
 Daten: `~/.local/share/halcyon/library.db` (SQLite, Schema-Version in `PRAGMA user_version`,
 derzeit 4), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
-`~/.cache/halcyon/` (Cover, Wellenformen). Desktop-ID: `de.bauenundbooten.BuB3Player`.
+`~/.cache/halcyon/` (Cover, Wellenformen, `lyrics/` mit Antworten von LRCLIB).
+Desktop-ID: `de.bauenundbooten.BuB3Player`.
 
 ### Grundsätze im Code
 
@@ -106,6 +111,10 @@ derzeit 4), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
 - Scanner: Ordner mit Gerät (`folders.dev`); verschwundene Einhängepunkte und leere
   Einhängepunkte mit bekannter Musik gelten als „nicht da“ und werden nie gelöscht.
 - Jede optionale GStreamer-Komponente vorher prüfen; fehlt sie, fällt nur die Funktion weg.
+- Liedtexte: gesucht nur, solange eine Großansicht offen ist (`Lyrics.active`); ins Netz (LRCLIB)
+  nur, wenn eingeschaltet und Liedtexte gezeigt werden sollen. Nie etwas neben die Musik schreiben.
+  Jede Großansicht zeigt `LyricsView` statt des Covers, wenn `window.lyricsOn`; Schalter ruft
+  `window.toggleLyrics()`, Hinweis `window.lyricsTip`, blass bei `window.lyricsMissing`.
 - **Der Standard-Ausgabeweg ist heilig** (Wunsch des Inhabers: „die Ausgabe geht perfekt“):
   Mit „Systemstandard“ und ausgeschaltetem Equalizer setzt der Player kein `audio-sink` und kein
   zusätzliches Element. Alles Neue kommt nur in die Kette, wenn es gewählt ist; Änderungen an der
@@ -126,7 +135,8 @@ Werkzeuge in `tools/`:
 | `tools/ui-test.sh shot NAME SEK [Optionen]` | Start, Screenshot, Ende; jedes `PROFIL` hat eigene Daten unter `/tmp/halcyon-test/` |
 | `tools/ui-test.sh start/click/drag/key/snap/stop` | Klicktests mit `xdotool` am laufenden Fenster (1380 × 880) |
 | `tools/ui-test.sh mem NAME SEK [Optionen]` | Speicher: gesamt und eigene Daten, Spitze und Ende |
-| `tools/mock-jellyfin.py --audio ORDNER` | kleiner Jellyfin-Server (Benutzer/Passwort `demo`) |
+| `tools/mock-jellyfin.py --audio ORDNER` | kleiner Jellyfin-Server (Benutzer/Passwort `demo`), auch mit Liedtexten |
+| `tools/mock-lrclib.py` | Ersatz für LRCLIB; Player mit `HALCYON_LRCLIB_URL=http://127.0.0.1:8098` starten, `/mock/requests` zeigt die Anfragen |
 | `dist/appimage/build-appimage.sh` | AppImage lokal bauen |
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
 
@@ -148,6 +158,10 @@ Ton prüfen ohne Soundkarte:
 - Soundkarten für Bit-Perfect ohne Hardware: `HALCYON_TEST_ASOUND=DIR` mit Dateien `cards` und
   `pcm` im Format von `/proc/asound`.
 - Suche testen: `--ui-test "search=wort"`.
+- Liedtexte: `.lrc`-Dateien neben die Vorführ-Bibliothek legen (Kopie mit `cp -al`), dann
+  `--ui-test "playall now-playing lyrics seek=30000"` (`lyrics-off` schaltet sie aus). Echte
+  USLT-/SYLT-Tags mit `mutagen` schreiben: `ffmpeg -metadata lyrics=…` legt bei MP3 nur ein
+  `TXXX:USLT` an (wird auch gelesen).
 
 Typischer Ablauf vor einem PR:
 1. `cmake --build build` ohne Warnungen.
@@ -190,8 +204,9 @@ Typischer Ablauf vor einem PR:
 - Bus-Nachrichten von GStreamer (Spektrum, Pegel) immer freigeben – ein Leck dort kostete
   einmal 10 MB pro Minute.
 - `QString::arg` kennt kein `%%`.
-- Der Jellyfin-Test-Server: `pkill -f "[m]ock-jellyfin.py"` (mit Klammern, sonst trifft es die
-  eigene Shell). Genauso `pkill -f "[b]uild/halcyon"`.
+- Der Jellyfin-Test-Server: `pkill -f "^python3 tools/[m]ock-jellyfin"`. Ohne `^python3` trifft
+  das Muster auch die eigene Shell, sobald derselbe Befehl den Namen noch einmal enthält (z. B.
+  beim Neustart des Servers in derselben Zeile). Den Player beenden: `pkill -x halcyon`.
 - playbin mit `NATIVE_AUDIO` und festem `audio-sink` nimmt nur Decoder, deren Ausgabe die Senke
   direkt annimmt (die `audio-filter`-Kette zählt nicht) → „No decoder available“. Deshalb stecken
   bei Bit-Perfect `audioconvert` (ohne Dither) und `audioresample` mit der ALSA-Senke in einem Bin
@@ -210,19 +225,16 @@ Typischer Ablauf vor einem PR:
 
 - **1.0.0**: veröffentlicht nach Test des Inhabers (Playlists, Smart-Playlists, Ordnerüberwachung,
   AppImage sind drin).
-- **1.1.0**: Equalizer, Ausgabegerät, Bit-Perfect über ALSA (Reiter „Klang“). Das Repo bleibt
-  privat, bis der Inhaber alles getestet hat.
+- **1.1.0**: Equalizer, Ausgabegerät, Bit-Perfect über ALSA (Reiter „Klang“).
 - **1.2.0**: Künstlerbilder (Ordner/Jellyfin), Suche mit Künstler- und Albenreihe, A–Z-Leiste
   repariert, Bit-Perfect nur mit Bestätigung (Lautstärke runter).
-- **1.2.1**: Vollbild mit F11.
-- **Als Nächstes** (in der README schon als vorhanden beschrieben, vor dem öffentlich Schalten
-  des Repos fertig bauen!):
-  - **Liedtexte**: aus Tags und `.lrc` neben der Datei, synchronisiert in der Großansicht
-    (Klick auf Zeile springt), optional aus dem Netz über LRCLIB (nur wenn eingeschaltet).
+- **1.2.1**: Vollbild mit F11; Lizenz und alles für das öffentliche Repository.
+- **1.3.0**: Liedtexte in der Großansicht (.lrc, Tags, Jellyfin, auf Wunsch LRCLIB), synchron mit
+  Sprung per Klick, in allen acht Themes.
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.
-- **Öffentlich:** Lizenz GPL-3.0-or-later, CONTRIBUTING.md, SECURITY.md, PR-Vorlage, Dependabot
-  für die Actions. Offen für den Inhaber (nur in der GitHub-Oberfläche): Social Preview hochladen
-  (`docs/images/banner.png`), Beschreibung/Topics/Website setzen, „Private vulnerability
-  reporting“ einschalten, Regeln für `main` (nur über PR, Bau muss grün sein).
+- **Öffentlich** seit 2026-10-20 (mit 1.2.1): Lizenz GPL-3.0-or-later, CONTRIBUTING.md,
+  SECURITY.md, PR-Vorlage, Dependabot für die Actions; Social Preview, Beschreibung, „Private
+  vulnerability reporting“ und die Regel für `main` (nur über PR, Bau muss grün sein) hat der
+  Inhaber gesetzt. Direkt auf `main` schieben geht deshalb nicht mehr.

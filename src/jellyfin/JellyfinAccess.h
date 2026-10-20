@@ -35,8 +35,9 @@ QByteArray authHeader(const QString &token = {});
 QByteArray streamUrl(qint64 sourceId, const QString &itemId);
 QUrl imageUrl(qint64 sourceId, const QString &itemId, const QString &tag, int size);
 QUrl artistSearchUrl(qint64 sourceId, const QString &artist); // /Artists?searchTerm=… (Id, ImageTags)
+QUrl lyricsUrl(qint64 sourceId, const QString &itemId);       // /Audio/<id>/Lyrics (Jellyfin 10.9+)
 
-// Blocking GET for worker threads (covers). status: HTTP status, 0 = no connection.
+// Blocking GET for worker threads (covers, lyrics), with the token. status: HTTP status, 0 = no connection.
 QByteArray httpGet(const QUrl &url, const QString &token, int timeoutMs, int *status);
 
 // Server time format used by the API (ISO 8601, UTC).

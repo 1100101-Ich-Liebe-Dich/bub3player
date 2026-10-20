@@ -38,6 +38,25 @@ ApplicationWindow {
 
     readonly property bool onScreen: visibility !== Window.Minimized && visibility !== Window.Hidden
 
+    // Lyrics are looked for while a big view is open; the skins show them in place
+    // of the cover (Hi-Fi Turm: above the tower) when there are any.
+    Binding { target: Lyrics; property: "active"; value: window.nowPlayingOpen && Player.currentId > 0 }
+    readonly property bool lyricsOn: Lyrics.shown && Lyrics.available
+    readonly property bool lyricsMissing: Lyrics.status === 3 // the lyrics buttons go pale
+    readonly property string lyricsTip: (Lyrics.status === 1 ? qsTr("Liedtext wird gesucht …")
+                                         : Lyrics.shown ? (Lyrics.available ? qsTr("Cover statt Liedtext zeigen") : qsTr("Kein Liedtext gefunden"))
+                                         : qsTr("Liedtext zeigen")) + qsTr("  (Strg + Umschalt + L)")
+    function toggleLyrics() {
+        if (!nowPlayingOpen && Player.currentId > 0) {
+            nowPlayingOpen = true
+            Lyrics.shown = true
+        } else {
+            Lyrics.shown = !Lyrics.shown
+        }
+        if (Lyrics.shown && Lyrics.status === 3)
+            toast.show(qsTr("Für diesen Titel gibt es keinen Liedtext."))
+    }
+
     // F11: full screen and back to how the window was (maximized or not) – also when
     // the window manager put it into full screen.
     property int visibilityBeforeFullScreen: Window.Windowed
@@ -249,6 +268,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+F"; onActivated: { window.nowPlayingOpen = false; if (window.skin && window.skin.focusSearch) window.skin.focusSearch() } }
     Shortcut { sequence: "Ctrl+J"; onActivated: window.queueOpen = !window.queueOpen }
     Shortcut { sequence: "Ctrl+L"; onActivated: window.nowPlayingOpen = !window.nowPlayingOpen }
+    Shortcut { sequence: "Ctrl+Shift+L"; onActivated: window.toggleLyrics() }
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
     Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
     Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
@@ -397,6 +417,8 @@ ApplicationWindow {
             if (a.indexOf("mix-tab") >= 0) window.openSettings(2)
             if (a.indexOf("klang-tab") >= 0) window.openSettings(3)
             if (a.indexOf("fullscreen") >= 0) window.toggleFullScreen()
+            if (a.indexOf("lyrics-off") >= 0) Lyrics.shown = false
+            else if (a.indexOf("lyrics") >= 0) Lyrics.shown = true
             if (a.indexOf("jellyfin-tab") >= 0) window.openSettings(4)
             if (a.indexOf("about-tab") >= 0) window.openSettings(5)
             var sk = a.match(/seek=(\d+)/)

@@ -25,4 +25,9 @@ TrackTags read(const QString &path);
 // Raw bytes of the embedded front cover (JPEG/PNG), empty if none.
 QByteArray embeddedCover(const QString &path);
 
+// Lyrics stored in the file, best first: synchronised ones (ID3v2 SYLT, as LRC
+// text) before the plain fields (USLT, LYRICS, UNSYNCEDLYRICS, ©lyr …), which
+// may hold LRC text as well. Empty if there are none.
+QStringList embeddedLyrics(const QString &path);
+
 } // namespace TagReader

@@ -29,6 +29,7 @@
 # album, theme-tab, mix-tab, klang-tab, jellyfin-tab, about-tab, jf-login=URL, jf-quick,
 # cycle, cycleloop, pair, swap-<theme>, scroll, skip, blendloop, autoplay,
 # search[=wort], mkpl, plopen=N, pledit, plnew, plsel, eqonat=/eqoffat=/bassat=MS,
+# lyrics, lyrics-off (lyrics in the big view on/off),
 # fullscreen (needs a window manager to take effect, e.g. openbox on the Xvfb).
 #
 # Audio tests: HALCYON_TEST_SINK="filesink location=/tmp/x.raw" replaces the

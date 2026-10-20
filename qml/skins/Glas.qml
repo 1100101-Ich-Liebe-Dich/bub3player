@@ -511,6 +511,8 @@ Item {
         visible: opacity > 0.01
         z: 10
         MouseArea { anchors.fill: parent }
+        property real lyricsMix: window.lyricsOn ? 1 : 0
+        Behavior on lyricsMix { NumberAnimation { duration: 320; easing.type: Easing.InOutCubic } }
 
         GlassButton {
             x: skin.gap + 8; y: skin.gap + 8
@@ -547,9 +549,28 @@ Item {
                 requestSize: 1024
                 coverId: Player.currentId
                 label: Player.album || Player.title
+                opacity: 1 - nowPlaying.lyricsMix
+                visible: opacity > 0
+            }
+            // the lyrics take the place of the cover
+            Loader {
+                x: bigCover.x
+                y: 24
+                width: bigCard.coverSide
+                height: bigCard.height - 48
+                active: nowPlaying.lyricsMix > 0
+                opacity: nowPlaying.lyricsMix
+                sourceComponent: LyricsView {
+                    fontFamily: Theme.displayFont
+                    fontSize: Math.round(Math.max(22, Math.min(32, bigCard.coverSide / 17)))
+                    color: "white"
+                    dimColor: Qt.rgba(1, 1, 1, 0.4)
+                    sourceColor: Qt.rgba(1, 1, 1, 0.6)
+                }
             }
             Chip {
-                visible: Player.format !== ""
+                visible: Player.format !== "" && nowPlaying.lyricsMix < 1
+                opacity: 1 - nowPlaying.lyricsMix
                 anchors.left: bigCover.left
                 anchors.bottom: bigCover.bottom
                 anchors.margins: 16
@@ -622,7 +643,8 @@ Item {
                         GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 80; iconName: Player.playing ? "pause" : "play"; primary: true; onClicked: Player.toggle() }
                         GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 58; iconName: "next"; onClicked: Player.next() }
                     }
-                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; size: 46; quiet: true; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                    GlassButton { id: bigRepeat; anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; size: 46; quiet: true; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.right: bigRepeat.left; anchors.rightMargin: 8; size: 46; quiet: true; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
                 }
             }
         }
@@ -761,10 +783,16 @@ Item {
         property bool active: false
         property bool quiet: false
         property real size: 44
+        property string tip: ""
         width: size
         height: size
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
+        Accessible.name: tip
+        Loader {
+            active: gb.tip !== "" && gb.hovered
+            sourceComponent: Tip { visible: true; text: gb.tip }
+        }
         scale: pressed ? 0.94 : (hovered ? 1.05 : 1)
         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
         background: Rectangle {

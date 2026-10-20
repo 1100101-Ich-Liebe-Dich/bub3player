@@ -7,6 +7,8 @@ BuB3Player without a real server.
 
 Login: demo / demo (Quick Connect is approved automatically after 3 s).
 Serves real audio files (with HTTP Range, so seeking works) and cover images.
+Lyrics (/Audio/<id>/Lyrics): a third of the tracks have none, a third
+synchronised ones, a third plain ones.
 Extra endpoints for tests:
     POST /mock/change   add 5 new tracks, rename 1, remove 2 (incremental sync)
     GET  /mock/reports  playback reports the player sent (JSON lines)
@@ -226,6 +228,16 @@ class H(BaseHTTPRequestHandler):
             ext = os.path.splitext(f)[1].lower()
             ctype = {".flac": "audio/flac", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".m4a": "audio/mp4"}.get(ext, "application/octet-stream")
             return self.send_file(f, ctype)
+        m = re.fullmatch(r"/audio/([0-9a-f]+)/lyrics", p)
+        if m:  # a third without lyrics, a third synchronised, a third plain
+            t = items.get(m.group(1))
+            kind = int(m.group(1), 16) % 3 if t else 0
+            if kind == 0:
+                return self.empty(404)
+            words = ["Server", "Abend", "Lichter", "Wolken", "Funkturm", "Netz"]
+            lines = [f"{t['Name']} – {words[i % len(words)]} Zeile {i + 1}" if i % 5 != 4 else "" for i in range(40)]
+            rows = [{"Text": l, "Start": (2 + i * 3) * 10_000_000} if kind == 1 else {"Text": l} for i, l in enumerate(lines)]
+            return self.send_json({"Metadata": {"IsSynced": kind == 1}, "Lyrics": rows})
         if p == "/artists":  # artist items by name: their picture is /Items/<id>/Images/Primary
             term = q.get("searchterm", "").lower()
             names = sorted({t.get("AlbumArtist") or "" for t in items.values()} - {""})

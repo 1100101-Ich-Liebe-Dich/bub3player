@@ -269,13 +269,14 @@ Item {
             }
             Row {
                 x: 16; y: 232
-                spacing: 7
+                spacing: 6
                 TwButton { width: 50; label: "DISPLAY"; onClicked: Theme.setOption("mode", String((parseInt(Theme.opt.mode || "0") + 1) % 3)) }
                 TwButton { width: 50; label: "DIMMER"; showLed: true; led: Theme.opt.dimmer === true; ledColor: skin.ink2; onClicked: Theme.setOption("dimmer", !(Theme.opt.dimmer === true)) }
                 TwButton { width: 50; label: "DEMO"; showLed: true; led: skin.demo; ledColor: skin.ink2; onClicked: Theme.setOption("demo", !skin.demo) }
-                TwButton { width: 56; label: "PROGRAM"; showLed: true; led: window.queueOpen; ledColor: skin.ink; onClicked: window.queueOpen = !window.queueOpen }
-                TwButton { width: 56; label: "SHUFFLE"; showLed: true; led: Queue.shuffle; ledColor: skin.ink; onClicked: Queue.shuffle = !Queue.shuffle }
-                TwButton { width: 56; label: Queue.repeat === 2 ? "REPEAT 1" : "REPEAT"; showLed: true; led: Queue.repeat > 0; ledColor: skin.ink; onClicked: Queue.cycleRepeat() }
+                TwButton { width: 52; label: "PROGRAM"; showLed: true; led: window.queueOpen; ledColor: skin.ink; onClicked: window.queueOpen = !window.queueOpen }
+                TwButton { width: 52; label: "SHUFFLE"; showLed: true; led: Queue.shuffle; ledColor: skin.ink; onClicked: Queue.shuffle = !Queue.shuffle }
+                TwButton { width: 52; label: Queue.repeat === 2 ? "REPEAT 1" : "REPEAT"; showLed: true; led: Queue.repeat > 0; ledColor: skin.ink; onClicked: Queue.cycleRepeat() }
+                TwButton { width: 40; label: "TEXT"; showLed: true; led: Lyrics.shown && !window.lyricsMissing; ledColor: skin.ink; enabled: Player.currentId > 0; onClicked: window.toggleLyrics() }
             }
             // bottom strip of little things
             Item {
@@ -380,6 +381,52 @@ Item {
             Repeater { // feet
                 model: 2
                 Rectangle { y: 76; x: index === 0 ? 30 : 330; width: 60; height: 10; radius: 3; color: "#050506" }
+            }
+        }
+    }
+
+    // ---------- lyrics: a wide display on the wall above the tower ----------
+    Item {
+        id: lyricWall
+        property real mix: window.lyricsOn ? 1 : 0
+        Behavior on mix { NumberAnimation { duration: 420; easing.type: Easing.InOutCubic } }
+        opacity: skin.npMix * mix
+        visible: opacity > 0.01
+        width: Math.min(skin.width - 160, 1100)
+        height: Math.max(90, tower.y - 44)
+        x: (skin.width - width) / 2
+        y: 22
+        Rectangle { // the display: black glass in a dark frame
+            anchors.fill: parent
+            radius: 10
+            color: "#030405"
+            border.color: "#2b2f35"
+            border.width: 2
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 6
+                radius: 6
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Qt.rgba(skin.ink.r, skin.ink.g, skin.ink.b, 0.07) }
+                    GradientStop { position: 1; color: "#000000" }
+                }
+            }
+        }
+        Loader {
+            anchors.fill: parent
+            anchors.margins: 10
+            active: lyricWall.visible
+            sourceComponent: LyricsView {
+                align: Text.AlignHCenter
+                focusAt: 0.5
+                fadeEdge: 0.36
+                upper: true
+                fontFamily: "Barlow Condensed"
+                fontSize: Math.round(Math.max(22, Math.min(36, lyricWall.height / 4.4)))
+                lineGap: 4
+                color: skin.ink
+                dimColor: Qt.rgba(skin.ink.r, skin.ink.g, skin.ink.b, 0.3)
+                sourceColor: Qt.rgba(skin.ink.r, skin.ink.g, skin.ink.b, 0.5)
             }
         }
     }
