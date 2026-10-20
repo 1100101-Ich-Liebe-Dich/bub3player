@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """A small stand-in for a Jellyfin server (API 10.9/10.10 shapes), for testing
 BuB3Player without a real server.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.21)
 project(Halcyon VERSION 1.2.1 LANGUAGES CXX)
 
@@ -70,3 +71,6 @@ install(TARGETS halcyon RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES dist/de.bauenundbooten.BuB3Player.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES dist/icons/de.bauenundbooten.BuB3Player.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 install(FILES dist/de.bauenundbooten.BuB3Player.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+# GPL-3.0-or-later for the player; texts for the fonts, icons and Qt that come along
+file(GLOB LICENSE_FILES CONFIGURE_DEPENDS LICENSES/*.txt assets/fonts/*.txt)
+install(FILES LICENSE ${LICENSE_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/bub3player)

@@ -1,0 +1,8 @@
+Hinweise zu mitgelieferten Teilen unter der Apache License 2.0 (Text: Apache-2.0.txt)
+
+Permanent Marker (Schrift, assets/fonts/PermanentMarker-Regular.ttf)
+Copyright (c) 2010 Font Diner, Inc. – unverändert.
+
+Material Icons (Symbole, als Pfade in src/core/IconProvider.cpp)
+Copyright Google LLC – https://github.com/google/material-design-icons
+Übernommen als SVG-Pfade.

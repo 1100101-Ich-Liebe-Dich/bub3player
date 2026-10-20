@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "jellyfin/JellyfinSync.h"
 
 #include "core/Database.h"

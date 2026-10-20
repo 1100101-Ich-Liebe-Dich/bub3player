@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/Theme.h"
 
 #include "core/Paths.h"
