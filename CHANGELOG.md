@@ -10,7 +10,14 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 
 ## [Unveröffentlicht]
 
+## [1.2.1] - 2026-10-20
+
+Vollbild und alles für das öffentliche Repository: Lizenz, Quellcode zum Release, Hinweise.
+
 ### Hinzugefügt
+- **F11** schaltet das Vollbild an und aus; danach ist das Fenster wieder so groß wie vorher
+  (auch maximiert). Ein Hinweis zeigt, wie man zurückkommt. In allen Themes, im Terminal-Theme
+  auch in der Tastenleiste.
 - Lizenz: BuB3Player ist freie Software unter der **GNU General Public License v3.0 oder
   später** (`LICENSE`). Die Lizenztexte der Schriften, Symbole und mitgelieferten Bibliotheken
   liegen bei (`LICENSES/`, im AppImage unter `usr/share/licenses/`).
@@ -22,6 +29,7 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 - Dependabot hält die GitHub-Aktionen des Bau-Workflows aktuell.
 
 ### Geändert
+- Terminal-Theme: In der Tastenleiste heißt `^L` jetzt „Großansicht“ (wie in den Einstellungen).
 - Dieses Änderungsprotokoll ist nach Kategorien gegliedert.
 - „Über“ in den Einstellungen nennt alle Schriften und die Lizenz.
 - Bau-Workflow: `actions/upload-artifact` v6 (Node.js 24); nur noch das Release darf ins
@@ -36,16 +44,6 @@ vorher), **Behoben** (Fehler), **Entfernt** und **Sicherheit**.
 - Jellyfin: Ohne angegebenes Schema wird zuerst `https://` versucht, dann `http://`. Antwortet ein
   Server außerhalb des Heimnetzes nur über http, warnt der Player, dass Passwort und
   Zugangsschlüssel unverschlüsselt übertragen werden.
-
-## [1.2.1] - 2026-10-20
-
-### Hinzugefügt
-- **F11** schaltet das Vollbild an und aus; danach ist das Fenster wieder so groß wie vorher
-  (auch maximiert). Ein Hinweis zeigt, wie man zurückkommt. In allen Themes, im Terminal-Theme
-  auch in der Tastenleiste.
-
-### Geändert
-- Terminal-Theme: In der Tastenleiste heißt `^L` jetzt „Großansicht“ (wie in den Einstellungen).
 
 ## [1.2.0] - 2026-10-20
 
