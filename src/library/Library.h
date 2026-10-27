@@ -14,7 +14,6 @@
 #include <QVector>
 
 class FolderWatcher;
-class QFileInfo;
 class Scanner;
 class Player;
 class PlayQueue;
@@ -104,6 +103,7 @@ public:
     Q_INVOKABLE void addRootsAndOpen(const QStringList &folders, const QStringList &paths);
 
     void startupScan(bool scan = true); // scan = false: only start watching (--no-scan)
+    void finishWrites();                // quitting: wait for the hearts still being written
     // Something other than the scanner changed tracks (e.g. a Jellyfin sync).
     void notifyExternalChange();
 
@@ -135,9 +135,9 @@ private:
     void applyFavorites(QVector<qint64> ids, bool on);
     void updateCurrentFavorite();
     void open(const QStringList &paths, bool retried, bool quiet = false);
-    QString rootOf(const QString &path) const;         // the library folder holding it, or empty
-    QString libraryPath(const QFileInfo &file) const;  // empty: not in the library
-    void opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, bool retried);
+    QString rootOf(const QString &path) const; // the library folder holding it, or empty
+    void opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, const QStringList &missingFolders,
+                bool retried);
 
     static Library *s_instance;
     QSettings m_settings;

@@ -26,14 +26,6 @@
 #include <QFileInfo>
 #include <QLocale>
 
-namespace {
-// `path` is `dir` or below it ("/musik" is not below "/mus")
-bool isUnder(const QString &path, const QString &dir)
-{
-    return path == dir || path.startsWith(dir.endsWith(QLatin1Char('/')) ? dir : dir + QLatin1Char('/'));
-}
-} // namespace
-
 Library *Library::s_instance = nullptr;
 
 Library::Library(Player *player, PlayQueue *queue, QObject *parent)
@@ -555,6 +547,12 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
     });
 }
 
+void Library::finishWrites()
+{
+    m_favoriteWriter.waitForDone();
+    QCoreApplication::sendPostedEvents(qApp, QEvent::MetaCall); // their answers (remoteFavoritesChanged)
+}
+
 void Library::updateCurrentFavorite()
 {
     const bool fav = isFavorite(m_player->currentId());
@@ -621,32 +619,42 @@ void Library::playSpec(const QVariantMap &spec, bool shuffle)
 
 // ---------------------------------------------------------------- opening files
 
-QString Library::rootOf(const QString &path) const
+namespace {
+
+QString rootOf(const QString &path, const QStringList &roots)
 {
-    for (const QString &r : m_roots)
-        if (isUnder(path, r))
+    for (const QString &r : roots)
+        if (Paths::isUnder(path, r))
             return r;
     return {};
 }
 
-// The path as the library has it: as given, or through a link on either side
-// (the file manager shows the real place, the library a link to it, or the other way).
-QString Library::libraryPath(const QFileInfo &fi) const
+// The path as the library has it: as given, or through a link on either side (the
+// file manager shows the real place, the library a link to it, or the other way).
+// Touches the disk (a network share may hang): only off the UI thread.
+QString libraryPath(const QFileInfo &fi, const QStringList &roots)
 {
     const QString p = fi.absoluteFilePath();
-    if (!rootOf(p).isEmpty())
+    if (!rootOf(p, roots).isEmpty())
         return p;
     const QString real = fi.canonicalFilePath();
     if (real.isEmpty())
         return {};
-    if (!rootOf(real).isEmpty())
+    if (!rootOf(real, roots).isEmpty())
         return real;
-    for (const QString &r : m_roots) {
+    for (const QString &r : roots) {
         const QString realRoot = QFileInfo(r).canonicalFilePath();
-        if (!realRoot.isEmpty() && realRoot != r && isUnder(real, realRoot))
+        if (!realRoot.isEmpty() && realRoot != r && Paths::isUnder(real, realRoot))
             return r + real.mid(realRoot.size());
     }
     return {};
+}
+
+} // namespace
+
+QString Library::rootOf(const QString &path) const
+{
+    return ::rootOf(path, m_roots);
 }
 
 void Library::openPaths(const QStringList &pathsOrUrls, bool quiet)
@@ -656,106 +664,111 @@ void Library::openPaths(const QStringList &pathsOrUrls, bool quiet)
 
 void Library::open(const QStringList &input, bool retried, bool quiet)
 {
-    QStringList paths, outsideFolders;
-    QString refused;
-    bool outside = false;
-    for (const QString &raw : input) {
-        const QString local = Paths::localPath(raw);
-        if (local.isEmpty())
-            continue;
-        const QFileInfo fi(QDir::cleanPath(QFileInfo(local).absoluteFilePath()));
-        if (!fi.exists())
-            continue;
-        if (fi.isFile()) {
-            const QByteArray name = QFile::encodeName(fi.fileName());
-            if (!TagReader::isAudioFile(name.constData(), size_t(name.size())))
-                continue;
-        }
-        QString p = libraryPath(fi);
-        if (p.isEmpty()) {
-            p = fi.absoluteFilePath();
-            const QString folder = fi.isDir() ? p : fi.absolutePath();
-            // the whole home folder or system is no music folder
-            if (folder == QDir::rootPath() || folder == QDir::homePath()) {
-                refused = fi.fileName();
-                continue;
-            }
-            outside = true;
-            if (!outsideFolders.contains(folder))
-                outsideFolders << folder;
-        }
-        paths << p;
-    }
-    if (paths.isEmpty()) {
-        if (!refused.isEmpty())
-            emit message(tr("»%1« liegt nicht in der Bibliothek. Musikordner kommen unter Einstellungen → Allgemein dazu.").arg(refused));
-        else if (!quiet)
-            emit message(tr("Keine Musik zum Abspielen gefunden"));
-        return;
-    }
-    if (outside) {
-        emit outsideLibrary(outsideFolders, paths);
-        return;
-    }
-
-    // Folders can hold a whole library: look up off the UI thread.
-    QPointer<Library> self(this);
-    (void)QtConcurrent::run([self, paths, retried] {
+    // Everything that looks at the disk runs in the worker: a folder of the library
+    // may be on a network share that does not answer.
+    struct Result
+    {
+        QStringList paths, outsideFolders, refused, missing, missingFolders;
         QVector<qint64> ids;
-        QStringList missing;
-        try {
-            DbConnection db = Database::open(1024);
-            Stmt byPath(db, "SELECT t.id FROM tracks t JOIN folders f ON f.id = t.folder_id "
-                            "WHERE f.source_id = 1 AND f.path = ? AND t.filename = ?");
-            for (const QString &p : paths) {
-                const QFileInfo fi(p);
-                if (fi.isDir()) {
-                    const QueryBuilder::Built q = QueryBuilder::trackIds(QVariantMap{
-                        {QStringLiteral("filters"), QVariantList{QVariantMap{{QStringLiteral("field"), QStringLiteral("folder")},
-                                                                             {QStringLiteral("op"), QStringLiteral("under")},
-                                                                             {QStringLiteral("value"), p}}}},
-                        {QStringLiteral("sort"), QStringLiteral("path")}});
-                    if (!q.ok)
-                        continue;
-                    Stmt s(db, q.sql);
-                    for (int i = 0; i < q.binds.size(); ++i)
-                        s.bind(i + 1, q.binds[i]);
-                    const qsizetype before = ids.size();
-                    while (s.step())
-                        ids << s.i64(0);
-                    if (ids.size() == before)
-                        missing << p;
-                } else {
-                    byPath.bind(1, fi.absolutePath()).bind(2, fi.fileName());
-                    if (byPath.step())
-                        ids << byPath.i64(0);
-                    else
-                        missing << p;
-                    byPath.reset();
-                }
+        bool outside = false;
+    };
+    QPointer<Library> self(this);
+    (void)QtConcurrent::run([self, input, roots = m_roots, retried, quiet] {
+        Result r;
+        const QString home = QDir::home().canonicalPath();
+        for (const QString &raw : input) {
+            const QString local = Paths::localPath(raw);
+            if (local.isEmpty())
+                continue;
+            const QFileInfo fi(QDir::cleanPath(QFileInfo(local).absoluteFilePath()));
+            if (!fi.exists())
+                continue;
+            if (fi.isFile()) {
+                const QByteArray name = QFile::encodeName(fi.fileName());
+                if (!TagReader::isAudioFile(name.constData(), size_t(name.size())))
+                    continue;
             }
-        } catch (const std::exception &e) {
-            qWarning() << e.what();
+            QString p = libraryPath(fi, roots);
+            if (p.isEmpty()) {
+                p = fi.absoluteFilePath();
+                const QString folder = fi.isDir() ? p : fi.absolutePath();
+                // the whole system or home folder is no music folder
+                const QString realFolder = QFileInfo(folder).canonicalFilePath();
+                if (realFolder == QDir::rootPath() || realFolder == home) {
+                    r.refused << (fi.fileName().isEmpty() ? p : fi.fileName());
+                    continue;
+                }
+                r.outside = true;
+                if (!r.outsideFolders.contains(folder))
+                    r.outsideFolders << folder;
+            }
+            r.paths << p;
         }
-        QMetaObject::invokeMethod(qApp, [self, paths, ids = std::move(ids), missing, retried]() mutable {
-            if (self)
-                self->opened(paths, std::move(ids), missing, retried);
+        if (!r.outside && !r.paths.isEmpty()) {
+            try {
+                DbConnection db = Database::open(1024);
+                Stmt byPath(db, "SELECT t.id FROM tracks t JOIN folders f ON f.id = t.folder_id "
+                                "WHERE f.source_id = 1 AND f.path = ? AND t.filename = ?");
+                for (const QString &p : std::as_const(r.paths)) {
+                    const QFileInfo fi(p);
+                    const qsizetype before = r.ids.size();
+                    if (fi.isDir()) {
+                        const QueryBuilder::Built q = QueryBuilder::trackIds(QVariantMap{
+                            {QStringLiteral("filters"), QVariantList{QVariantMap{{QStringLiteral("field"), QStringLiteral("folder")},
+                                                                                 {QStringLiteral("op"), QStringLiteral("under")},
+                                                                                 {QStringLiteral("value"), p}}}},
+                            {QStringLiteral("sort"), QStringLiteral("path")}});
+                        if (!q.ok)
+                            continue;
+                        Stmt s(db, q.sql);
+                        for (int i = 0; i < q.binds.size(); ++i)
+                            s.bind(i + 1, q.binds[i]);
+                        while (s.step())
+                            r.ids << s.i64(0);
+                    } else {
+                        byPath.bind(1, fi.absolutePath()).bind(2, fi.fileName());
+                        if (byPath.step())
+                            r.ids << byPath.i64(0);
+                        byPath.reset();
+                    }
+                    if (r.ids.size() == before) {
+                        r.missing << p;
+                        // read it (and the parent, for a new subfolder), then try again
+                        const QString folder = fi.isDir() ? p : fi.absolutePath();
+                        r.missingFolders << folder;
+                        if (!roots.contains(folder))
+                            r.missingFolders << QFileInfo(folder).absolutePath();
+                    }
+                }
+            } catch (const std::exception &e) {
+                qWarning() << e.what();
+            }
+        }
+        QMetaObject::invokeMethod(qApp, [self, r = std::move(r), retried, quiet]() mutable {
+            if (!self)
+                return;
+            if (r.paths.isEmpty()) {
+                if (!r.refused.isEmpty())
+                    emit self->message(tr("»%1« liegt nicht in der Bibliothek. Musikordner kommen unter Einstellungen → Allgemein dazu.")
+                                           .arg(r.refused.first()));
+                else if (!quiet)
+                    emit self->message(tr("Keine Musik zum Abspielen gefunden"));
+            } else if (r.outside) {
+                emit self->outsideLibrary(r.outsideFolders, r.paths);
+            } else {
+                self->opened(r.paths, std::move(r.ids), r.missing, r.missingFolders, retried);
+            }
         }, Qt::QueuedConnection);
     });
 }
 
-void Library::opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, bool retried)
+void Library::opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, const QStringList &missingFolders,
+                     bool retried)
 {
     if (!missing.isEmpty() && !retried) {
-        // New in the library and not read yet: read these folders (and their parents,
-        // for new subfolders), then try once more (scanFinished).
-        for (const QString &m : missing) {
-            const QString folder = QFileInfo(m).isDir() ? m : QFileInfo(m).absolutePath();
-            m_dirtyFolders.insert(folder);
-            const QString parent = QFileInfo(folder).absolutePath();
-            if (!m_roots.contains(folder) && parent != folder)
-                m_dirtyFolders.insert(parent);
-        }
+        // New in the library and not read yet: read these folders, then try once more (scanFinished).
+        for (const QString &f : missingFolders)
+            m_dirtyFolders.insert(f);
         m_pendingOpen = paths;
         if (m_scanner->running())
             emit message(tr("Wird gespielt, sobald die Bibliothek eingelesen ist"));
@@ -780,17 +793,14 @@ void Library::opened(const QStringList &paths, QVector<qint64> ids, const QStrin
 
 void Library::addRootsAndOpen(const QStringList &folders, const QStringList &paths)
 {
-    QStringList wanted;
-    for (const QString &f : folders)
-        wanted << QDir::cleanPath(f);
-    // the widest first: a folder inside another one just added is part of it
-    std::sort(wanted.begin(), wanted.end(), [](const QString &a, const QString &b) { return a.size() < b.size(); });
+    // A folder holding a library folder is added as well; the scanner walks each place
+    // once. (Not merged: the inner one may be a drive that is away right now, and only
+    // a library folder is kept when it is missing.)
     bool added = false;
-    for (const QString &path : std::as_const(wanted)) {
-        if (path.isEmpty() || !QFileInfo(path).isDir() || !rootOf(path).isEmpty())
+    for (const QString &f : folders) {
+        const QString path = QDir::cleanPath(f);
+        if (path.isEmpty() || !rootOf(path).isEmpty() || !QFileInfo(path).isDir())
             continue;
-        // roots inside the new folder become part of it (their music stays: same paths)
-        m_roots.removeIf([&path](const QString &r) { return isUnder(r, path); });
         m_roots << path;
         added = true;
     }

@@ -349,16 +349,17 @@ int main(int argc, char *argv[])
     tray.setWindow(window);
     queue.restore();
     player.restoreSession();
-    // after the restored queue: opened files replace it
-    QObject::connect(&instance, &SingleInstance::openRequested, window, [window](const QStringList &paths) {
-        QMetaObject::invokeMethod(window, "openPaths", Q_ARG(QVariant, QVariant(paths)));
-    });
-    instance.setWindow(window);
 
     if (parser.isSet(QStringLiteral("add-folder")))
         library.addRoot(QDir(parser.value(QStringLiteral("add-folder"))).absolutePath());
     else
         QTimer::singleShot(800, &library, [&library, scan = !parser.isSet(QStringLiteral("no-scan"))] { library.startupScan(scan); });
+
+    // after the restored queue (opened files replace it) and the added folder
+    QObject::connect(&instance, &SingleInstance::openRequested, window, [window](const QStringList &paths) {
+        QMetaObject::invokeMethod(window, "openPaths", Q_ARG(QVariant, QVariant(paths)));
+    });
+    instance.setWindow(window);
 
     if (parser.isSet(QStringLiteral("screenshot")) && window) {
         const QString file = parser.value(QStringLiteral("screenshot"));
@@ -370,6 +371,7 @@ int main(int argc, char *argv[])
 
     QObject::connect(&app, &QGuiApplication::aboutToQuit, [&] {
         library.scanner()->cancel();
+        library.finishWrites(); // hearts clicked just before: into the database and to Jellyfin
         jellyfin.shutdown();
         queue.save();
         player.saveSession();

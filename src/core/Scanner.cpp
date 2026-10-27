@@ -2,6 +2,7 @@
 #include "core/Scanner.h"
 
 #include "core/Database.h"
+#include "core/Paths.h"
 #include "core/TagReader.h"
 
 #include <QDebug>
@@ -513,7 +514,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                                 const QString real = QFileInfo(QFile::decodeName(QByteArray(sub.data(), int(sub.size())))).canonicalFilePath();
                                 bool inside = false;
                                 for (const QString &r : std::as_const(roots))
-                                    inside = inside || real == r || real.startsWith(r + QLatin1Char('/'));
+                                    inside = inside || Paths::isUnder(real, r);
                                 if (inside)
                                     continue;
                             }
@@ -534,7 +535,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                 // that is gone is handled by its parent (which saw it go).
                 auto rootOf = [&](const QString &p) -> QString {
                     for (const QString &r : std::as_const(roots))
-                        if (p == r || p.startsWith(r + QLatin1Char('/')))
+                        if (Paths::isUnder(p, r))
                             return r;
                     return {};
                 };

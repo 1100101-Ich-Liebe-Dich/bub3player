@@ -61,7 +61,8 @@ bool SingleInstance::forward(const QStringList &paths)
     QDBusMessage get = QDBusMessage::createMethodCall(Service, ObjectPath, QStringLiteral("org.freedesktop.DBus.Properties"),
                                                       QStringLiteral("Get"));
     get << InfoInterface << QStringLiteral("Database");
-    const QDBusMessage reply = bus.call(get, QDBus::Block, 3000);
+    // a player that is still starting answers once it is up (old computers: seconds)
+    const QDBusMessage reply = bus.call(get, QDBus::Block, 60000);
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()
         || reply.arguments().first().value<QDBusVariant>().variant().toString() != Database::path())
         return false;
@@ -77,7 +78,7 @@ bool SingleInstance::forward(const QStringList &paths)
     if (!uris.isEmpty())
         call << uris;
     call << platformData();
-    return bus.call(call, QDBus::Block, 3000).type() == QDBusMessage::ReplyMessage;
+    return bus.call(call, QDBus::Block, 60000).type() == QDBusMessage::ReplyMessage;
 }
 
 SingleInstance::SingleInstance(const QStringList &files, QObject *parent) : QObject(parent), m_waiting(files)

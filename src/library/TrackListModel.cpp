@@ -27,9 +27,10 @@ TrackListModel::TrackListModel(QObject *parent) : QAbstractListModel(parent)
 
 bool TrackListModel::filtersOnRating() const
 {
-    for (const QVariant &f : m_spec.value(QStringLiteral("filters")).toList())
-        if (f.toMap().value(QStringLiteral("field")).toString() == QLatin1String("rating"))
-            return true;
+    for (const char *key : {"filters", "require"})
+        for (const QVariant &f : m_spec.value(QLatin1String(key)).toList())
+            if (f.toMap().value(QStringLiteral("field")).toString() == QLatin1String("rating"))
+                return true;
     return false;
 }
 

@@ -286,8 +286,10 @@ class H(BaseHTTPRequestHandler):
             self.empty(404)
 
     def favorite(self, p, on):
-        """POST/DELETE /Users/<user>/FavoriteItems/<item>: the heart, also in /mock/reports."""
-        m = re.fullmatch(r"/users/[0-9a-f]+/favoriteitems/([0-9a-f]+)", p)
+        """POST/DELETE /UserFavoriteItems/<item> (10.9+) or /Users/<user>/FavoriteItems/<item>: the
+        heart, also in /mock/reports. Like Jellyfin, it does not count as a change for the
+        incremental sync (only a full one brings it)."""
+        m = re.fullmatch(r"(?:/users/[0-9a-f]+)?/(?:user)?favoriteitems/([0-9a-f]+)", p)
         if not m:
             return False
         t = items.get(m.group(1))
@@ -296,7 +298,6 @@ class H(BaseHTTPRequestHandler):
             return True
         with lock:
             t["UserData"]["IsFavorite"] = on
-            t["_saved"] = time.time()  # shows up in the next incremental sync
             reports.append({"path": self.path, "favorite": on, "time": time.time()})
         self.send_json({"IsFavorite": on, "Key": t["Id"]})
         return True

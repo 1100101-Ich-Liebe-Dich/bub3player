@@ -119,9 +119,12 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
 - Jede optionale GStreamer-Komponente vorher prüfen; fehlt sie, fällt nur die Funktion weg.
 - Favoriten: das Herz ist `tracks.rating = 5` (`TrackRow::FavoriteRating`), nie in die Dateien.
   Setzen über `Library.setFavorite/setFavoriteRows/toggleCurrentFavorite` (Listen sofort, Datenbank
-  im Hintergrund); Jellyfin-Titel gehen über `remoteFavoritesChanged` an den Server, offen
-  Gebliebenes steht in `jellyfin/pendingFavorites` und wird nachgeschickt. Jedes Theme zeigt das
-  Herz in Leiste und Großansicht (`Library.currentFavorite`).
+  in einem eigenen Schreib-Thread, bis dahin liegt das Herz als Overlay im `TrackCache`);
+  Jellyfin-Titel gehen über `remoteFavoritesChanged` an den Server (höchstens 4 Anfragen, eine je
+  Titel). Offen Gebliebenes steht in `<datenbank>-jellyfin-favorites.txt` (eine Zeile je Herz)
+  und wird nachgeschickt; der Abgleich übernimmt `IsFavorite` vom Server, schreibt danach aber die
+  eigenen offenen Herzen zurück. Jedes Theme zeigt das Herz in Leiste und Großansicht
+  (`Library.currentFavorite`).
 - Infobereich und Benachrichtigungen direkt über D-Bus, ohne QtWidgets und ohne Qt.labs.platform
   (auf Debian/Ubuntu nicht immer installiert). Schließen in den Infobereich nur, wenn ein Infobereich
   das Symbol angenommen hat (`Tray.available`), sonst wäre das Fenster nicht mehr erreichbar.

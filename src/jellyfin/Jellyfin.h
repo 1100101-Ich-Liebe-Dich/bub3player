@@ -116,7 +116,7 @@ private:
     // Favourites (the heart) set in the player: told to the server; kept until it
     // answered (also over a restart), so a sync cannot take them back meanwhile.
     void setFavorites(const RemoteItems &items, bool on);
-    void queueFavorite(const QString &key);
+    void pauseFavorites(qint64 serverId);
     void sendFavorites();
     void flushFavorites(qint64 serverId);
     QHash<QString, bool> pendingFavorites(qint64 serverId) const; // item id -> heart
@@ -136,10 +136,11 @@ private:
     Library *m_library;
     // hearts for the servers, "server/item" (before m_nam: replies may still finish while it goes)
     QHash<QString, bool> m_pendingFavorites; // -> heart wanted
-    QStringList m_favoriteQueue;
-    QSet<QString> m_favoriteQueued;
+    QSet<QString> m_favoriteQueue;           // to send
     QSet<QString> m_favoritesInFlight;
-    bool m_favoritesPaused = false; // the server did not answer: wait for m_retryFavorites
+    QSet<qint64> m_favoritesPaused;          // servers that did not answer: m_retryFavorites
+    QHash<qint64, QHash<QString, bool>> m_confirmedDuringSync; // server -> item -> heart
+    bool m_favoritesStopped = false;         // shutting down
     QTimer m_saveFavorites;
     QTimer m_retryFavorites;
     QNetworkAccessManager m_nam;
