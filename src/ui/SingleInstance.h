@@ -25,7 +25,8 @@ class SingleInstance : public QObject
 public:
     // Another player with this database runs: it got `paths` (or comes to the
     // front without), this one should end. Paths may be relative or file URLs.
-    static bool forward(const QStringList &paths);
+    enum Forward { NotRunning, Forwarded, NoAnswer };
+    static Forward forward(const QStringList &paths);
 
     // `files`: from the command line, opened as soon as the window is there
     explicit SingleInstance(const QStringList &files, QObject *parent = nullptr);

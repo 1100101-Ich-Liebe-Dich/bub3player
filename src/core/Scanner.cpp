@@ -553,8 +553,10 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                     if (root.isEmpty() || !rootUsable(root))
                         continue; // not ours, or the whole drive is away: keep everything
                     // nearest folder that exists and that the database knows
-                    while (f != root && (!QFileInfo(f).isDir() || knownId(f) == 0))
-                        f = f.left(f.lastIndexOf(QLatin1Char('/')));
+                    while (f != root && (!QFileInfo(f).isDir() || knownId(f) == 0)) {
+                        const qsizetype cut = f.lastIndexOf(QLatin1Char('/'));
+                        f = cut > 0 ? f.left(cut) : root; // the root may be "/"
+                    }
                     todo.insert(f);
                     st.scanned << f;
                 }

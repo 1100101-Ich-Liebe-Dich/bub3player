@@ -51,27 +51,6 @@ qint64 serverOfKey(const QString &key)
     return QStringView(key).left(key.indexOf(QLatin1Char('/'))).toLongLong();
 }
 
-// Hearts not taken by a server yet, written into the database (a sync may have
-// written the server's old state over them). Returns the number of changed tracks.
-int applyPendingRatings(qint64 serverId, const QHash<QString, bool> &items)
-{
-    int changed = 0;
-    try {
-        DbConnection db = Database::open(1024);
-        Transaction tx(db);
-        Stmt u(db, "UPDATE tracks SET rating = ? WHERE source_id = ? AND remote_id = ? AND rating <> ?");
-        for (auto it = items.cbegin(); it != items.cend(); ++it) {
-            const int rating = it.value() ? TrackRow::FavoriteRating : 0;
-            u.bind(1, rating).bind(2, serverId).bind(3, it.key()).bind(4, rating);
-            u.exec();
-            changed += sqlite3_changes(db);
-        }
-        tx.commit();
-    } catch (const std::exception &e) {
-        qWarning() << "Jellyfin:" << e.what();
-    }
-    return changed;
-}
 constexpr int PageSize = 1000;
 constexpr int IdPageSize = 5000;
 const char *ItemFields = "Path,MediaSources,DateCreated,Genres";
@@ -668,11 +647,31 @@ void Jellyfin::checkOnline()
                       : QStringLiteral("online"); // older servers: no /Users/Me
             emit serversChanged();
             if (s->status == QLatin1String("online"))
-                flushFavorites(id);
+                refreshVersion(id); // then sends what is pending
             else if (!pendingFavorites(id).isEmpty())
                 pauseFavorites(id); // and try again later
         });
     }
+}
+
+// The server may have been updated since the login (the address for hearts depends on it).
+void Jellyfin::refreshVersion(qint64 serverId)
+{
+    const Server *srv = find(serverId);
+    if (!srv)
+        return;
+    onReply(get(srv->url, QStringLiteral("/System/Info/Public"), {}), [this, serverId](int status, const QByteArray &data) {
+        Server *s = find(serverId);
+        if (!s)
+            return;
+        const QString version = QJsonDocument::fromJson(data).object().value(QLatin1String("Version")).toString();
+        if (status == 200 && !version.isEmpty() && version != s->version) {
+            s->version = version;
+            s->config.insert(QStringLiteral("version"), version);
+            save(*s);
+        }
+        flushFavorites(serverId);
+    });
 }
 
 // ---------------------------------------------------------------- favourites
@@ -695,11 +694,8 @@ void Jellyfin::loadPendingFavorites()
         perServer[serverOfKey(key)].insert(key.mid(key.indexOf(QLatin1Char('/')) + 1), on);
     }
     // a sync that ran when the player was closed may have written over them
-    for (auto it = perServer.cbegin(); it != perServer.cend(); ++it) {
-        const qint64 id = it.key();
-        const QHash<QString, bool> items = it.value();
-        runInWorker([id, items] { applyPendingRatings(id, items); }, {});
-    }
+    for (auto it = perServer.cbegin(); it != perServer.cend(); ++it)
+        m_library->restoreRemoteHearts(it.key(), it.value());
 }
 
 void Jellyfin::savePendingFavorites()
@@ -782,7 +778,9 @@ void Jellyfin::sendFavorites()
             auto want = m_pendingFavorites.constFind(key);
             if (want != m_pendingFavorites.cend() && want.value() != on) {
                 m_favoriteQueue.insert(key); // clicked again meanwhile
-            } else if ((status >= 200 && status < 300) || status == 404) { // 404: gone on the server
+            } else if ((status >= 200 && status < 300)
+                       || (status >= 400 && status < 500 && status != 401 && status != 408 && status != 429)) {
+                // done, or the server will never take it (404: the title is gone there)
                 m_pendingFavorites.remove(key);
                 m_saveFavorites.start();
                 // a running sync may still write the state it fetched before
@@ -842,6 +840,7 @@ void Jellyfin::sync(qint64 serverId, bool full)
     s->job = job;
     s->syncing = true;
     s->progress = 0;
+    m_confirmedDuringSync.remove(serverId); // left from a sync that ended before they came
     s->syncText = tr("Abgleich startet …");
     emit serversChanged();
     flushFavorites(serverId); // hearts set while the server was away
@@ -1129,22 +1128,23 @@ void Jellyfin::finishSync(qint64 serverId, const QString &error)
     const bool ok = error.isEmpty() && !job->cancelled;
     auto writer = job->writer;
     auto dupChanged = std::make_shared<int>(0);
-    // Hearts set here stay as set here: the sync wrote the server's state from
-    // before (those still to be sent, and those the server took meanwhile).
-    QHash<QString, bool> mine = m_confirmedDuringSync.take(serverId);
-    mine.insert(pendingFavorites(serverId));
-    runInWorker([writer, ok, dupChanged, mine, serverId] {
+    runInWorker([writer, ok, dupChanged] {
         if (ok)
             writer->pruneFolders();
         *dupChanged = writer->markDuplicates();
-        if (!mine.isEmpty())
-            *dupChanged += applyPendingRatings(serverId, mine);
     }, [this, serverId, job, ok, error, dupChanged] {
         Server *s = find(serverId);
         if (!s)
             return;
         s->syncing = false;
         s->job.reset();
+        // Hearts set here stay as set here: the sync wrote the server's state from
+        // before (those still to be sent, and those the server took meanwhile). Through
+        // the library's writer, in order with new clicks.
+        QHash<QString, bool> mine = m_confirmedDuringSync.take(serverId);
+        mine.insert(pendingFavorites(serverId));
+        if (!mine.isEmpty())
+            m_library->restoreRemoteHearts(serverId, mine);
         s->progress = ok ? 1 : 0;
         if (ok) {
             s->lastSync = job->startedAt;

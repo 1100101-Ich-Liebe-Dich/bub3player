@@ -119,7 +119,7 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
 - Jede optionale GStreamer-Komponente vorher prüfen; fehlt sie, fällt nur die Funktion weg.
 - Favoriten: das Herz ist `tracks.rating = 5` (`TrackRow::FavoriteRating`), nie in die Dateien.
   Setzen über `Library.setFavorite/setFavoriteRows/toggleCurrentFavorite` (Listen sofort, Datenbank
-  in einem eigenen Schreib-Thread, bis dahin liegt das Herz als Overlay im `TrackCache`);
+  in einem eigenen Schreib-Thread, bis dahin gilt das Herz vorläufig im `TrackCache`);
   Jellyfin-Titel gehen über `remoteFavoritesChanged` an den Server (höchstens 4 Anfragen, eine je
   Titel). Offen Gebliebenes steht in `<datenbank>-jellyfin-favorites.txt` (eine Zeile je Herz)
   und wird nachgeschickt; der Abgleich übernimmt `IsFavorite` vom Server, schreibt danach aber die

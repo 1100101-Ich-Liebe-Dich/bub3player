@@ -52,20 +52,29 @@ void raiseWindow(QWindow *window, const QString &token)
     window->requestActivate();
 }
 
-bool SingleInstance::forward(const QStringList &paths)
+SingleInstance::Forward SingleInstance::forward(const QStringList &paths)
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected() || !bus.interface() || !bus.interface()->isServiceRegistered(Service))
-        return false;
+        return NotRunning;
+    // No answer at all: it hangs or is still busy starting. A second player on the
+    // same database must not start then (two scans would undo each other).
+    auto noAnswer = [](const QDBusMessage &m) {
+        return m.type() == QDBusMessage::ErrorMessage
+               && (m.errorName() == QLatin1String("org.freedesktop.DBus.Error.NoReply")
+                   || m.errorName() == QLatin1String("org.freedesktop.DBus.Error.Timeout"));
+    };
     // Only a player with the same database is "the" player.
     QDBusMessage get = QDBusMessage::createMethodCall(Service, ObjectPath, QStringLiteral("org.freedesktop.DBus.Properties"),
                                                       QStringLiteral("Get"));
     get << InfoInterface << QStringLiteral("Database");
     // a player that is still starting answers once it is up (old computers: seconds)
-    const QDBusMessage reply = bus.call(get, QDBus::Block, 60000);
+    const QDBusMessage reply = bus.call(get, QDBus::Block, 30000);
+    if (noAnswer(reply))
+        return NoAnswer;
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()
         || reply.arguments().first().value<QDBusVariant>().variant().toString() != Database::path())
-        return false;
+        return NotRunning;
 
     QStringList uris;
     for (const QString &p : paths) {
@@ -78,7 +87,8 @@ bool SingleInstance::forward(const QStringList &paths)
     if (!uris.isEmpty())
         call << uris;
     call << platformData();
-    return bus.call(call, QDBus::Block, 60000).type() == QDBusMessage::ReplyMessage;
+    const QDBusMessage answer = bus.call(call, QDBus::Block, 30000);
+    return answer.type() == QDBusMessage::ReplyMessage ? Forwarded : noAnswer(answer) ? NoAnswer : NotRunning;
 }
 
 SingleInstance::SingleInstance(const QStringList &files, QObject *parent) : QObject(parent), m_waiting(files)

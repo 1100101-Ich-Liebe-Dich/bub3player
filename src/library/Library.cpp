@@ -33,6 +33,7 @@ Library::Library(Player *player, PlayQueue *queue, QObject *parent)
 {
     s_instance = this;
     m_favoriteWriter.setMaxThreadCount(1);
+    m_openWorker.setMaxThreadCount(1);
     m_roots = m_settings.value(QStringLiteral("library/roots")).toStringList();
     connect(m_scanner, &Scanner::libraryChanged, this, [this] {
         TrackCache::instance().invalidate();
@@ -328,6 +329,10 @@ void Library::addRoot(const QVariant &pathOrUrl)
         emit message(tr("Ordner nicht gefunden: %1").arg(path));
         return;
     }
+    if (path == QDir::rootPath()) {
+        emit message(tr("Bitte einen Musikordner wählen, nicht das ganze System."));
+        return;
+    }
     if (const QString r = rootOf(path); !r.isEmpty()) {
         emit message(tr("Ist bereits Teil der Bibliothek: %1").arg(r));
         return;
@@ -500,7 +505,7 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
     emit favoritesChanged(ids, on);
     updateCurrentFavorite();
     QPointer<Library> self(this);
-    m_favoriteWriter.start([self, ids, rating, on, ticket] {
+    m_favoriteWriter.start([self, outbox = m_remoteOutbox, ids, rating, on, ticket] {
         RemoteItems remote;
         bool ok = false;
         try {
@@ -529,7 +534,12 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
         } catch (const std::exception &e) {
             qWarning() << "Favoriten nicht gespeichert:" << e.what();
         }
-        QMetaObject::invokeMethod(qApp, [self, remote = std::move(remote), on, ok, ticket] {
+        if (ok && !remote.isEmpty()) {
+            // picked up below, or by finishWrites when the player is closing
+            QMutexLocker lock(&outbox->mutex);
+            outbox->items.append({std::move(remote), on});
+        }
+        QMetaObject::invokeMethod(qApp, [self, ok, ticket] {
             if (!self)
                 return;
             TrackCache::instance().donePending(ticket);
@@ -541,16 +551,53 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
                 return;
             }
             emit self->favoritesSaved();
-            if (!remote.isEmpty())
-                emit self->remoteFavoritesChanged(remote, on);
+            self->deliverRemoteFavorites();
         }, Qt::QueuedConnection);
+    });
+}
+
+void Library::deliverRemoteFavorites()
+{
+    QVector<QPair<RemoteItems, bool>> items;
+    {
+        QMutexLocker lock(&m_remoteOutbox->mutex);
+        items.swap(m_remoteOutbox->items);
+    }
+    for (const auto &[remote, on] : std::as_const(items))
+        emit remoteFavoritesChanged(remote, on);
+}
+
+void Library::restoreRemoteHearts(qint64 sourceId, const QHash<QString, bool> &items)
+{
+    QPointer<Library> self(this);
+    m_favoriteWriter.start([self, sourceId, items] {
+        int changed = 0;
+        try {
+            DbConnection db = Database::open(1024);
+            Transaction tx(db);
+            Stmt u(db, "UPDATE tracks SET rating = ? WHERE source_id = ? AND remote_id = ? AND rating <> ?");
+            for (auto it = items.cbegin(); it != items.cend(); ++it) {
+                const int rating = it.value() ? TrackRow::FavoriteRating : 0;
+                u.bind(1, rating).bind(2, sourceId).bind(3, it.key()).bind(4, rating);
+                u.exec();
+                changed += sqlite3_changes(db);
+            }
+            tx.commit();
+        } catch (const std::exception &e) {
+            qWarning() << "Favoriten nicht gespeichert:" << e.what();
+        }
+        if (changed > 0)
+            QMetaObject::invokeMethod(qApp, [self] {
+                if (self)
+                    self->notifyExternalChange();
+            }, Qt::QueuedConnection);
     });
 }
 
 void Library::finishWrites()
 {
     m_favoriteWriter.waitForDone();
-    QCoreApplication::sendPostedEvents(qApp, QEvent::MetaCall); // their answers (remoteFavoritesChanged)
+    deliverRemoteFavorites(); // to Jellyfin, which saves what it could not send
 }
 
 void Library::updateCurrentFavorite()
@@ -668,12 +715,12 @@ void Library::open(const QStringList &input, bool retried, bool quiet)
     // may be on a network share that does not answer.
     struct Result
     {
-        QStringList paths, outsideFolders, refused, missing, missingFolders;
+        QStringList paths, inside, outsideFolders, refused, missing, missingFolders;
         QVector<qint64> ids;
         bool outside = false;
     };
     QPointer<Library> self(this);
-    (void)QtConcurrent::run([self, input, roots = m_roots, retried, quiet] {
+    m_openWorker.start([self, input, roots = m_roots, retried, quiet] {
         Result r;
         const QString home = QDir::home().canonicalPath();
         for (const QString &raw : input) {
@@ -701,15 +748,18 @@ void Library::open(const QStringList &input, bool retried, bool quiet)
                 r.outside = true;
                 if (!r.outsideFolders.contains(folder))
                     r.outsideFolders << folder;
+            } else {
+                r.inside << p;
             }
             r.paths << p;
         }
-        if (!r.outside && !r.paths.isEmpty()) {
+        // asked already (retried): what is still outside stays out
+        if (!r.outside || retried) {
             try {
                 DbConnection db = Database::open(1024);
                 Stmt byPath(db, "SELECT t.id FROM tracks t JOIN folders f ON f.id = t.folder_id "
                                 "WHERE f.source_id = 1 AND f.path = ? AND t.filename = ?");
-                for (const QString &p : std::as_const(r.paths)) {
+                for (const QString &p : std::as_const(r.inside)) {
                     const QFileInfo fi(p);
                     const qsizetype before = r.ids.size();
                     if (fi.isDir()) {
@@ -753,10 +803,10 @@ void Library::open(const QStringList &input, bool retried, bool quiet)
                                            .arg(r.refused.first()));
                 else if (!quiet)
                     emit self->message(tr("Keine Musik zum Abspielen gefunden"));
-            } else if (r.outside) {
+            } else if (r.outside && !retried) {
                 emit self->outsideLibrary(r.outsideFolders, r.paths);
             } else {
-                self->opened(r.paths, std::move(r.ids), r.missing, r.missingFolders, retried);
+                self->opened(r.inside, std::move(r.ids), r.missing, r.missingFolders, retried);
             }
         }, Qt::QueuedConnection);
     });
@@ -793,19 +843,31 @@ void Library::opened(const QStringList &paths, QVector<qint64> ids, const QStrin
 
 void Library::addRootsAndOpen(const QStringList &folders, const QStringList &paths)
 {
-    // A folder holding a library folder is added as well; the scanner walks each place
-    // once. (Not merged: the inner one may be a drive that is away right now, and only
-    // a library folder is kept when it is missing.)
-    bool added = false;
-    for (const QString &f : folders) {
-        const QString path = QDir::cleanPath(f);
+    // The widest first: a folder inside another one asked for here is part of it.
+    QStringList wanted;
+    for (const QString &f : folders)
+        wanted << QDir::cleanPath(f);
+    std::sort(wanted.begin(), wanted.end(), [](const QString &a, const QString &b) { return a.size() < b.size(); });
+    bool added = false, refused = false;
+    for (const QString &path : std::as_const(wanted)) {
         if (path.isEmpty() || !rootOf(path).isEmpty() || !QFileInfo(path).isDir())
             continue;
+        // Not around a library folder: nesting is not safe (that one may be a drive
+        // that is away, and only a library folder itself is kept when it is missing).
+        const bool holdsRoot = std::any_of(m_roots.cbegin(), m_roots.cend(), [&path](const QString &r) {
+            return Paths::isUnder(r, path);
+        });
+        if (holdsRoot) {
+            emit message(tr("»%1« enthält schon einen Musikordner der Bibliothek und kommt deshalb nicht dazu.").arg(path));
+            refused = true;
+            continue;
+        }
         m_roots << path;
         added = true;
     }
     if (!added) {
-        open(paths, true);
+        if (!refused)
+            open(paths, true); // already in the library meanwhile
         return;
     }
     m_settings.setValue(QStringLiteral("library/roots"), m_roots);

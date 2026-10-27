@@ -246,7 +246,13 @@ int main(int argc, char *argv[])
     // A second start (file manager, starter): the running player takes the files
     // or just comes to the front.
     const QStringList openFiles = parser.positionalArguments();
-    if (SingleInstance::forward(openFiles)) {
+    switch (SingleInstance::forward(openFiles)) {
+    case SingleInstance::NotRunning:
+        break;
+    case SingleInstance::NoAnswer:
+        std::fprintf(stderr, "BuB3Player läuft schon, antwortet aber gerade nicht. Bitte gleich noch einmal versuchen.\n");
+        return 1;
+    case SingleInstance::Forwarded:
         for (const char *opt : {"add-folder", "view", "skin", "theme", "skin-opt", "ui-test", "screenshot", "no-scan"})
             if (parser.isSet(QLatin1String(opt))) {
                 std::fprintf(stderr, "BuB3Player läuft schon; Optionen wirken nur beim ersten Start.\n");

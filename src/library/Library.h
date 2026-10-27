@@ -2,6 +2,8 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QHash>
+#include <QMutex>
 #include <QObject>
 #include <QPair>
 #include <QSet>
@@ -12,6 +14,8 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVector>
+
+#include <memory>
 
 class FolderWatcher;
 class Scanner;
@@ -103,6 +107,9 @@ public:
     Q_INVOKABLE void addRootsAndOpen(const QStringList &folders, const QStringList &paths);
 
     void startupScan(bool scan = true); // scan = false: only start watching (--no-scan)
+    // Jellyfin: hearts set here that a sync wrote over (or that wait for the server)
+    // back into the database, in order with new clicks.
+    void restoreRemoteHearts(qint64 sourceId, const QHash<QString, bool> &items);
     void finishWrites();                // quitting: wait for the hearts still being written
     // Something other than the scanner changed tracks (e.g. a Jellyfin sync).
     void notifyExternalChange();
@@ -133,6 +140,7 @@ private:
     void playIds(QVector<qint64> ids, int start, bool shuffle);
     QVector<qint64> idsForSpec(const QVariantMap &spec);
     void applyFavorites(QVector<qint64> ids, bool on);
+    void deliverRemoteFavorites();
     void updateCurrentFavorite();
     void open(const QStringList &paths, bool retried, bool quiet = false);
     QString rootOf(const QString &path) const; // the library folder holding it, or empty
@@ -146,6 +154,13 @@ private:
     PlayQueue *m_queue;
     bool m_currentFavorite = false;
     QThreadPool m_favoriteWriter; // one thread: hearts reach the database in click order
+    struct RemoteOutbox
+    {
+        QMutex mutex;
+        QVector<QPair<RemoteItems, bool>> items; // written, to be told to Jellyfin
+    };
+    std::shared_ptr<RemoteOutbox> m_remoteOutbox = std::make_shared<RemoteOutbox>();
+    QThreadPool m_openWorker;     // files from outside: one at a time, off the shared pool
     QStringList m_roots;
     QVariantList m_views;
     QString m_viewsError;

@@ -117,6 +117,7 @@ private:
     // answered (also over a restart), so a sync cannot take them back meanwhile.
     void setFavorites(const RemoteItems &items, bool on);
     void pauseFavorites(qint64 serverId);
+    void refreshVersion(qint64 serverId);
     void sendFavorites();
     void flushFavorites(qint64 serverId);
     QHash<QString, bool> pendingFavorites(qint64 serverId) const; // item id -> heart
