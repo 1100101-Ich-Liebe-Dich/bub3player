@@ -206,6 +206,12 @@ Rectangle {
                     tip: window.lyricsTip
                     onClicked: window.toggleLyrics()
                 }
+                HeartButton {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: 36
+                    on: Library.currentFavorite
+                    onClicked: Library.toggleCurrentFavorite()
+                }
                 Item { width: 12; height: 1 }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter }
             }

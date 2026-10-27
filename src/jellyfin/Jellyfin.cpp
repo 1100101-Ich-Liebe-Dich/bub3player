@@ -27,6 +27,7 @@
 using namespace JellyfinAccess;
 
 namespace {
+const QString PendingKey = QStringLiteral("jellyfin/pendingFavorites"); // "serverId/itemId" -> bool
 constexpr int PageSize = 1000;
 constexpr int IdPageSize = 5000;
 const char *ItemFields = "Path,MediaSources,DateCreated,Genres";
@@ -114,6 +115,7 @@ Jellyfin::Jellyfin(Player *player, Library *library, QObject *parent)
     m_progressTimer.setInterval(10000);
     connect(&m_progressTimer, &QTimer::timeout, this, &Jellyfin::reportProgress);
     connect(m_player, &Player::trackChanged, this, &Jellyfin::onTrackChanged);
+    connect(m_library, &Library::remoteFavoritesChanged, this, &Jellyfin::setFavorites);
     connect(m_player, &Player::stateChanged, this, &Jellyfin::onStateChanged);
     connect(m_player, &Player::positionChanged, this, [this] { m_lastPos = m_player->position(); });
     connect(m_player, &Player::seeked, this, [this] {
@@ -579,6 +581,14 @@ void Jellyfin::remove(qint64 serverId)
     // Sign out on the server (best effort).
     post(s->url, QStringLiteral("/Sessions/Logout"), s->token, {});
     JellyfinAccess::remove(serverId);
+    {
+        QSettings st; // its hearts that were still to be sent
+        QVariantMap pending = st.value(PendingKey).toMap();
+        const QString prefix = QString::number(serverId) + QLatin1Char('/');
+        for (auto it = pending.begin(); it != pending.end();)
+            it = it.key().startsWith(prefix) ? pending.erase(it) : std::next(it);
+        st.setValue(PendingKey, pending);
+    }
     for (int i = 0; i < m_servers.size(); ++i)
         if (m_servers[i].id == serverId)
             m_servers.removeAt(i);
@@ -603,8 +613,80 @@ void Jellyfin::checkOnline()
                       : status == 401 ? QStringLiteral("denied")
                       : QStringLiteral("online"); // older servers: no /Users/Me
             emit serversChanged();
+            if (s->status == QLatin1String("online"))
+                flushFavorites(id);
         });
     }
+}
+
+// ---------------------------------------------------------------- favourites
+
+void Jellyfin::setFavorites(const QVariantList &items, bool on)
+{
+    QSettings st;
+    QVariantMap pending = st.value(PendingKey).toMap();
+    for (const QVariant &v : items) {
+        const QVariantMap m = v.toMap();
+        const qint64 sid = m.value(QStringLiteral("source")).toLongLong();
+        const QString item = m.value(QStringLiteral("item")).toString();
+        if (!find(sid) || item.isEmpty())
+            continue;
+        pending.insert(QStringLiteral("%1/%2").arg(sid).arg(item), on);
+        sendFavorite(sid, item, on);
+    }
+    st.setValue(PendingKey, pending);
+}
+
+void Jellyfin::sendFavorite(qint64 serverId, const QString &itemId, bool on)
+{
+    Server *s = find(serverId);
+    if (!s || s->token.isEmpty() || s->userId.isEmpty())
+        return;
+    // /Users/{user}/FavoriteItems/{item}: Jellyfin 10.8 up to today (10.9+ also knows /UserFavoriteItems)
+    const QString key = QStringLiteral("%1/%2").arg(serverId).arg(itemId);
+    // the start sends pending ones from the sync and from the online check
+    auto sending = m_sendingFavorites.constFind(key);
+    if (sending != m_sendingFavorites.cend() && sending.value() == on)
+        return;
+    m_sendingFavorites.insert(key, on);
+    QNetworkRequest req(QUrl(s->url + QStringLiteral("/Users/%1/FavoriteItems/%2").arg(s->userId, itemId)));
+    req.setRawHeader("Authorization", authHeader(s->token));
+    req.setTransferTimeout(30000);
+    QNetworkReply *r = on ? m_nam.post(req, QByteArray()) : m_nam.deleteResource(req);
+    connect(r, &QNetworkReply::finished, this, [this, r, key, on] {
+        r->deleteLater();
+        if (m_sendingFavorites.value(key) == on) // also after a timeout
+            m_sendingFavorites.remove(key);
+    });
+    onReply(r, [key, on](int status, const QByteArray &) {
+        // done (or the item is gone on the server): no longer pending, unless changed again meanwhile
+        if ((status >= 200 && status < 300) || status == 404) {
+            QSettings st;
+            QVariantMap pending = st.value(PendingKey).toMap();
+            if (pending.contains(key) && pending.value(key).toBool() == on) {
+                pending.remove(key);
+                st.setValue(PendingKey, pending);
+            }
+        }
+    });
+}
+
+void Jellyfin::flushFavorites(qint64 serverId)
+{
+    const QHash<QString, bool> pending = pendingFavorites(serverId);
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        sendFavorite(serverId, it.key(), it.value());
+}
+
+QHash<QString, bool> Jellyfin::pendingFavorites(qint64 serverId) const
+{
+    QHash<QString, bool> out;
+    const QString prefix = QString::number(serverId) + QLatin1Char('/');
+    const QVariantMap pending = QSettings().value(PendingKey).toMap();
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        if (it.key().startsWith(prefix))
+            out.insert(it.key().mid(prefix.size()), it.value().toBool());
+    return out;
 }
 
 // ---------------------------------------------------------------- sync
@@ -636,6 +718,7 @@ void Jellyfin::sync(qint64 serverId, bool full)
     s->progress = 0;
     s->syncText = tr("Abgleich startet …");
     emit serversChanged();
+    flushFavorites(serverId); // hearts set while the server was away
 
     // Drop libraries that are no longer selected; keep the folder view's root
     // names ("Server · Library") in step with renames on the server.
@@ -920,10 +1003,26 @@ void Jellyfin::finishSync(qint64 serverId, const QString &error)
     const bool ok = error.isEmpty() && !job->cancelled;
     auto writer = job->writer;
     auto dupChanged = std::make_shared<int>(0);
-    runInWorker([writer, ok, dupChanged] {
+    // Hearts the server has not taken yet stay as set here (the sync brought the server's).
+    const QHash<QString, bool> pending = pendingFavorites(serverId);
+    runInWorker([writer, ok, dupChanged, pending, serverId] {
         if (ok)
             writer->pruneFolders();
         *dupChanged = writer->markDuplicates();
+        if (pending.isEmpty())
+            return;
+        try {
+            DbConnection db = Database::open(1024);
+            Stmt u(db, "UPDATE tracks SET rating = ? WHERE source_id = ? AND remote_id = ? AND rating <> ?");
+            for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+                const int rating = it.value() ? TrackRow::FavoriteRating : 0;
+                u.bind(1, rating).bind(2, serverId).bind(3, it.key()).bind(4, rating);
+                u.exec();
+                *dupChanged += sqlite3_changes(db);
+            }
+        } catch (const std::exception &e) {
+            qWarning() << "Jellyfin:" << e.what();
+        }
     }, [this, serverId, job, ok, error, dupChanged] {
         Server *s = find(serverId);
         if (!s)

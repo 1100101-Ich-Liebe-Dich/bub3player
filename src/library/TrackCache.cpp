@@ -7,7 +7,7 @@
 namespace {
 const char *Columns = "t.id, t.folder_id, t.added_at, t.mtime, t.last_played, t.title, t.artist, t.album, t.aa, "
                       "t.genre, t.codec, t.filename, t.year, t.track_no, t.disc_no, t.duration_ms, t.bitrate, "
-                      "t.sample_rate, t.bits, t.play_count, t.source_id, COALESCE(t.remote_id, '')";
+                      "t.sample_rate, t.bits, t.play_count, t.source_id, COALESCE(t.remote_id, ''), t.rating";
 
 TrackRow readRow(const Stmt &s)
 {
@@ -34,6 +34,7 @@ TrackRow readRow(const Stmt &s)
     r.playCount = s.i32(19);
     r.sourceId = s.i64(20);
     r.remoteId = s.str(21);
+    r.rating = s.i32(22);
     r.valid = true;
     return r;
 }
@@ -135,6 +136,15 @@ QString TrackCache::pathOf(qint64 id)
     } catch (const SqlError &) {
     }
     return {};
+}
+
+void TrackCache::setRating(const QVector<qint64> &ids, int rating)
+{
+    for (qint64 id : ids) {
+        auto it = m_rows.find(id);
+        if (it != m_rows.end())
+            it->rating = rating;
+    }
 }
 
 void TrackCache::invalidate()

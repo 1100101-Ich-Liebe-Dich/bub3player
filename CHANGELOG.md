@@ -1,3 +1,38 @@
+## 1.4.0 - 2026-10-27
+
+Favoriten, Symbol im Infobereich, Musik aus dem Dateimanager.
+
+### Hinzugefügt
+- **Favoriten**: ein Herz an jedem Titel in den Listen, in der Leiste und in der Großansicht aller
+  acht Themes (Vintage: als Leuchte im Radio-Display und auf dem Textblatt, Terminal: `[fav]`),
+  im Rechtsklick-Menü der Listen und der Warteschlange und mit `Strg + H`. Mit einer Auswahl
+  bekommen alle markierten Titel das Herz. Dazu die Ansicht „Favoriten“ und die Regel „Favorit“
+  im Smart-Playlist-Editor. Das Herz steht nur in der Datenbank des Players, an den Dateien ändert
+  sich nichts.
+- Jellyfin: Ein Herz für einen Server-Titel kommt auch auf dem Server an. Ist der Server gerade
+  nicht erreichbar, merkt sich der Player das und schickt es nach, sobald er wieder da ist.
+- **Symbol im Infobereich** (StatusNotifierItem: KDE, Xfce, LXQt, Cinnamon, GNOME mit der
+  Erweiterung „AppIndicator“): Klick holt das Fenster hervor oder versteckt es, die mittlere
+  Maustaste hält an, das Mausrad ändert die Lautstärke; im Menü der laufende Titel, Abspielen,
+  Weiter, Zurück, das Herz, Fenster zeigen und Beenden. Auf Wunsch spielt der Player beim
+  Schließen des Fensters im Infobereich weiter (nur, wenn es dort ein Symbol gibt).
+- **Benachrichtigung** mit Cover bei jedem neuen Titel, wenn das Fenster im Hintergrund ist; eine
+  neue ersetzt die alte. Symbol, Weiterspielen und Benachrichtigung lassen sich unter Einstellungen →
+  Allgemein einzeln abschalten.
+- **Musik aus dem Dateimanager**: Dateien und Ordner aufs Fenster ziehen oder „Öffnen mit
+  BuB3Player“ (auch `halcyon DATEI…` auf der Kommandozeile). Ein schon laufender Player übernimmt
+  die Dateien und kommt nach vorn, ein zweiter startet nicht. Neue Dateien, die die Bibliothek noch
+  nicht kennt, liest der Player vorher ein. Liegt die Musik außerhalb der Bibliothek, fragt er, ob
+  der Ordner dazukommen soll. M3U-Listen werden als Playlist übernommen.
+- Testwerkzeug `tools/mock-tray.py`: Ersatz für den Infobereich und die Benachrichtigungen.
+
+### Geändert
+- Die Ansicht „Für dich“ hat ein eigenes Symbol (das Herz gehört jetzt den Favoriten).
+
+### Behoben
+- Ein Musikordner, der hinzukam, während der Player gerade alles durchsuchte, wurde erst beim
+  nächsten Scan eingelesen.
+
 ## 1.3.1 - 2026-10-20
 
 Warteschlange mit Rechtsklick, Ordner und Dateien über den Dialog des Desktops.

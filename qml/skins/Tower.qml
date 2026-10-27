@@ -332,6 +332,16 @@ Item {
                         enabled: Player.currentId > 0 || skin.np
                         onClicked: window.nowPlayingOpen = !window.nowPlayingOpen
                     }
+                    TwButton { // the heart: favourite track
+                        anchors.verticalCenter: parent.verticalCenter
+                        round: true
+                        width: 24; height: 24
+                        iconName: Library.currentFavorite ? "heart" : "heart-outline"
+                        cap: Library.currentFavorite ? "#5a1f2a" : "#26282d"
+                        enabled: Player.currentId > 0
+                        Accessible.name: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten")
+                        onClicked: Library.toggleCurrentFavorite()
+                    }
                 }
             }
         }

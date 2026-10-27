@@ -309,6 +309,39 @@ Item {
                 }
 
                 Section {
+                    title: qsTr("Infobereich und Benachrichtigungen")
+                    text: qsTr("Das Symbol in der Leiste zeigt, was läuft. Ein Klick holt das Fenster hervor oder versteckt es, die mittlere Maustaste hält an, das Mausrad ändert die Lautstärke, ein Rechtsklick öffnet das Menü.")
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Symbol im Infobereich zeigen")
+                        checked: Tray.enabled
+                        onToggled: Tray.enabled = checked
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Beim Schließen des Fensters im Infobereich weiterspielen")
+                        checked: Tray.closeToTray
+                        enabled: Tray.enabled
+                        onToggled: Tray.closeToTray = checked
+                    }
+                    Text {
+                        visible: Tray.enabled && !Tray.available
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: qsTr("Diese Arbeitsumgebung zeigt gerade keine Symbole im Infobereich (unter GNOME braucht es dafür die Erweiterung »AppIndicator«). Das Fenster schließt dann wie gewohnt.")
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Benachrichtigung bei jedem neuen Titel, wenn das Fenster im Hintergrund ist")
+                        checked: Tray.notify
+                        onToggled: Tray.notify = checked
+                    }
+                }
+
+                Section {
                     title: qsTr("Eigene Ansichten")
                     text: qsTr("Ansichten sind gespeicherte Filter, z. B. »Hi-Res Jazz der 70er«. Lege sie in views.json an; ein Beispiel liegt daneben (views.example.json).")
                     Text {
@@ -350,6 +383,7 @@ Item {
                                 [qsTr("Strg + J"), qsTr("Warteschlange")],
                                 [qsTr("Strg + L"), qsTr("Großansicht")],
                                 [qsTr("Strg + Umschalt + L"), qsTr("Liedtext oder Cover in der Großansicht")],
+                                [qsTr("Strg + H"), qsTr("Laufenden Titel zu den Favoriten oder heraus")],
                                 [qsTr("F11"), qsTr("Vollbild an und aus")],
                                 [qsTr("Strg + T"), qsTr("Theme wechseln")],
                                 [qsTr("Strg + E"), qsTr("Klang: Ausgabe und Equalizer")],

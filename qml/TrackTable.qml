@@ -49,7 +49,8 @@ Item {
     readonly property int wFormat: showFormat ? 116 : 0
     readonly property int wExtra: showExtra ? 108 : 0
     readonly property int wDur: 60
-    readonly property int flex: inner - wLead - wYear - wFormat - wExtra - wDur - 16
+    readonly property int wFav: 34
+    readonly property int flex: inner - wLead - wYear - wFormat - wExtra - wFav - wDur - 16
     readonly property int wTitle: showAlbum ? Math.round(flex * 0.56) : flex
     readonly property int wAlbum: showAlbum ? flex - wTitle : 0
 
@@ -274,6 +275,15 @@ Item {
                 }
                 onDoubleClicked: (m) => { if (m.button === Qt.LeftButton) table.activated(index) }
             }
+            // the heart: always there for favourites, otherwise when the row is pointed at
+            HeartButton {
+                x: table.width - table.side - table.wDur - table.wFav
+                anchors.verticalCenter: parent.verticalCenter
+                size: 30
+                on: model.favorite === true
+                visible: on || mouse.containsMouse || hovered || activeFocus
+                onClicked: Library.setFavorite(model.trackId, !on)
+            }
         }
     }
 
@@ -282,6 +292,7 @@ Item {
         list: list
         enabled: table.reorderable
         visible: enabled
+        scrollBarWidth: table.side + table.wFav + table.wDur // the heart stays clickable
         onRowClicked: (r, mods) => table.rowClick(r, mods)
         onRowDoubleClicked: (r) => table.activated(r)
         onMoveRequested: (from, to) => { list.currentIndex = -1; table.moveRequested(from, to) }

@@ -36,6 +36,7 @@ class Library : public QObject
     Q_PROPERTY(bool watchFolders READ watchFolders WRITE setWatchFolders NOTIFY settingsChanged)
     Q_PROPERTY(QString watchStatus READ watchStatus NOTIFY watchStatusChanged)
     Q_PROPERTY(QString watchHint READ watchHint NOTIFY watchStatusChanged) // how to allow more watched folders
+    Q_PROPERTY(bool currentFavorite READ currentFavorite NOTIFY currentFavoriteChanged) // the playing track has the heart
 
 public:
     explicit Library(Player *player, PlayQueue *queue, QObject *parent = nullptr);
@@ -58,6 +59,14 @@ public:
     void setWatchFolders(bool on);
     QString watchStatus() const;
     QString watchHint() const;
+    bool currentFavorite() const { return m_currentFavorite; }
+
+    // Favourites (the heart): rating 5 in the database, nothing written to the files.
+    // Jellyfin tracks tell their server as well (see Jellyfin::setFavorites).
+    Q_INVOKABLE bool isFavorite(qint64 trackId);
+    Q_INVOKABLE void setFavorite(qint64 trackId, bool on);
+    Q_INVOKABLE void setFavoriteRows(TrackListModel *model, int row, bool on); // the selection, if the row is part of it
+    Q_INVOKABLE void toggleCurrentFavorite();
 
     Q_INVOKABLE void addRoot(const QVariant &pathOrUrl);
     Q_INVOKABLE void removeRoot(const QString &path);
@@ -81,6 +90,12 @@ public:
     Q_INVOKABLE void playGroup(GroupModel *model, int row, bool shuffle = false);
     Q_INVOKABLE void enqueueGroup(GroupModel *model, int row, bool next);
     Q_INVOKABLE void playSpec(const QVariantMap &spec, bool shuffle = false);
+    // Files and folders from the file manager (dropped, "Öffnen mit"): play them.
+    // Only music of the library plays; for anything outside it outsideLibrary asks first.
+    // quiet: no message when none of it is music (a playlist came along).
+    Q_INVOKABLE void openPaths(const QStringList &pathsOrUrls, bool quiet = false);
+    // The answer "yes": these folders join the library, then `paths` play.
+    Q_INVOKABLE void addRootsAndOpen(const QStringList &folders, const QStringList &paths);
 
     void startupScan(bool scan = true); // scan = false: only start watching (--no-scan)
     // Something other than the scanner changed tracks (e.g. a Jellyfin sync).
@@ -94,6 +109,10 @@ signals:
     void changed(); // library content changed: models reload
     void message(const QString &text);
     void watchStatusChanged();
+    void currentFavoriteChanged();
+    void favoritesChanged(const QVector<qint64> &ids, bool on);    // lists update their rows
+    void remoteFavoritesChanged(const QVariantList &items, bool on); // [{source, item}] for Jellyfin
+    void outsideLibrary(const QStringList &folders, const QStringList &paths); // openPaths: ask to add
 
 private:
     void refreshStats();
@@ -106,12 +125,17 @@ private:
     QStringList localRoots() const;
     void playIds(QVector<qint64> ids, int start, bool shuffle);
     QVector<qint64> idsForSpec(const QVariantMap &spec);
+    void applyFavorites(const QVector<qint64> &ids, bool on);
+    void updateCurrentFavorite();
+    void open(const QStringList &paths, bool retried, bool quiet = false);
+    void opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, bool retried);
 
     static Library *s_instance;
     QSettings m_settings;
     Scanner *m_scanner;
     Player *m_player;
     PlayQueue *m_queue;
+    bool m_currentFavorite = false;
     QStringList m_roots;
     QVariantList m_views;
     QString m_viewsError;
@@ -122,6 +146,7 @@ private:
     QStringList m_watchRoots;       // roots the watcher was started with
     QSet<QString> m_dirtyFolders;   // reported by the watcher, not scanned yet
     bool m_fullPending = false;     // full scan wanted while a small one ran
+    QStringList m_pendingOpen;      // opened files the scan has to read first
     QElapsedTimer m_firstDirty;
     QTimer m_dirtyTimer;            // waits until a copy is done
     bool m_checkAll = false;        // events were lost: look at everything

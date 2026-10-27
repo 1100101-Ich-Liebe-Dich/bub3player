@@ -6,6 +6,7 @@
 #include "library/QueryBuilder.h"
 
 #include <QDateTime>
+#include <QSet>
 #include <bit>
 #include <QLocale>
 #include <QPointer>
@@ -13,8 +14,27 @@
 
 TrackListModel::TrackListModel(QObject *parent) : QAbstractListModel(parent)
 {
-    if (Library::instance())
+    if (Library::instance()) {
         connect(Library::instance(), &Library::changed, this, &TrackListModel::reload);
+        connect(Library::instance(), &Library::favoritesChanged, this, &TrackListModel::favoritesChanged);
+    }
+}
+
+// Only the pages in memory hold copies of rows: at most MaxPages * PageSize to look at.
+void TrackListModel::favoritesChanged(const QVector<qint64> &ids, bool on)
+{
+    const QSet<qint64> changed(ids.cbegin(), ids.cend());
+    const int rating = on ? TrackRow::FavoriteRating : 0;
+    for (auto it = m_pages.begin(); it != m_pages.end(); ++it) {
+        QVector<TrackRow> &rows = it.value();
+        for (int i = 0; i < rows.size(); ++i) {
+            if (!changed.contains(rows[i].id) || rows[i].rating == rating)
+                continue;
+            rows[i].rating = rating;
+            const QModelIndex idx = index(it.key() * PageSize + i);
+            emit dataChanged(idx, idx, {FavoriteRole});
+        }
+    }
 }
 
 int TrackListModel::rowCount(const QModelIndex &parent) const
@@ -30,6 +50,7 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         {DurationMsRole, "durationMs"}, {FormatRole, "format"}, {TrackNoRole, "trackNo"}, {DiscNoRole, "discNo"},
         {GenreRole, "genre"}, {AddedRole, "added"}, {MtimeRole, "mtime"}, {PlayCountRole, "playCount"},
         {LastPlayedRole, "lastPlayed"}, {FileNameRole, "fileName"}, {ValidRole, "valid"}, {SelectedRole, "selected"},
+        {FavoriteRole, "favorite"},
     };
 }
 
@@ -84,6 +105,7 @@ QVariant TrackListModel::data(const QModelIndex &index, int role) const
     case LastPlayedRole: return r.lastPlayed > 0 ? shortDate(r.lastPlayed) : QString();
     case FileNameRole: return r.filename;
     case ValidRole: return r.valid;
+    case FavoriteRole: return r.favorite();
     }
     return {};
 }

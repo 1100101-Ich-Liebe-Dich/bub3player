@@ -149,6 +149,14 @@ Item {
                     color: Theme.textDim
                 }
             }
+            SoftButton {
+                visible: Player.currentId > 0
+                size: 40
+                iconName: Library.currentFavorite ? "heart" : "heart-outline"
+                active: Library.currentFavorite
+                tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten")
+                onClicked: Library.toggleCurrentFavorite()
+            }
             Row {
                 spacing: 16
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; iconName: "prev"; onClicked: Player.previous() }
@@ -435,6 +443,7 @@ Item {
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 58; iconName: "next"; onClicked: Player.next() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
+                SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
             }
             Row {
                 spacing: 14

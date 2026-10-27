@@ -109,6 +109,13 @@ private:
     void finishSync(qint64 serverId, const QString &error = {});
     void runInWorker(std::function<void()> work, std::function<void()> done);
 
+    // Favourites (the heart) set in the player: told to the server; kept until it
+    // answered, so a sync cannot take them back meanwhile.
+    void setFavorites(const QVariantList &items, bool on);
+    void sendFavorite(qint64 serverId, const QString &itemId, bool on);
+    void flushFavorites(qint64 serverId);
+    QHash<QString, bool> pendingFavorites(qint64 serverId) const; // item id -> heart
+
     // Playback reporting
     void onTrackChanged();
     void onStateChanged();
@@ -125,6 +132,7 @@ private:
     QVector<Server> m_servers;
     bool m_preferLocal = true;
     bool m_busy = false;
+    QHash<QString, bool> m_sendingFavorites; // "server/item" -> heart, on the way
 
     QString m_quickUrl, m_quickSecret, m_quickCode;
     QTimer m_quickPoll;

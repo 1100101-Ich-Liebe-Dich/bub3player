@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 1.3.1 LANGUAGES CXX)
+project(Halcyon VERSION 1.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -48,6 +48,8 @@ add_executable(halcyon
   src/ui/Memory.h              src/ui/Memory.cpp
   src/ui/Theme.h               src/ui/Theme.cpp
   src/ui/SystemDialogs.h       src/ui/SystemDialogs.cpp
+  src/ui/SingleInstance.h      src/ui/SingleInstance.cpp
+  src/ui/Tray.h                src/ui/Tray.cpp
   src/core/Paths.h
   src/core/Http.h              src/core/Http.cpp
 )

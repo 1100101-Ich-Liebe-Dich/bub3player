@@ -19,6 +19,8 @@ Item {
     // Playlists: a normal one can be edited and reordered, a smart one has rules.
     property var playlistId: 0
     property bool smart: false
+    // the "Favoriten" view (or any list of hearts only): its own hint when empty
+    readonly property bool favorites: !!spec && !!spec.filters && spec.filters.length === 1 && spec.filters[0].field === "rating"
     // re-read whenever the playlists change (counts, missing entries)
     readonly property var playlist: (Playlists.playlists, playlistId > 0 ? Playlists.get(playlistId) : ({}))
     readonly property bool editable: playlistId > 0 && !smart
@@ -252,15 +254,17 @@ Item {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: 60
         visible: !tracks.loading && tracks.count === 0
-        iconName: page.isSearch ? "search" : page.smart ? "filter" : page.playlistId > 0 ? "playlist" : "note"
+        iconName: page.isSearch ? "search" : page.smart ? "filter" : page.playlistId > 0 ? "playlist" : page.favorites ? "heart" : "note"
         title: page.isSearch ? qsTr("Keine Treffer")
              : page.smart ? qsTr("Gerade passt kein Titel")
              : page.playlistId > 0 ? qsTr("Diese Playlist ist leer")
+             : page.favorites ? qsTr("Noch keine Favoriten")
              : (Library.empty ? qsTr("Noch keine Musik hier") : qsTr("Diese Ansicht ist leer"))
         text: page.isSearch ? qsTr("Versuch es mit einem Teil des Namens oder einem anderen Wort.")
             : tracks.error !== "" ? tracks.error
             : page.smart ? qsTr("Die Regeln lassen sich jederzeit ändern. Sobald Titel passen, tauchen sie hier auf.")
             : page.playlistId > 0 ? qsTr("Rechtsklick auf Titel, Alben, Künstler oder Ordner → „Zur Playlist hinzufügen“. Mehrere Titel wählst du mit Strg oder Umschalt aus.")
+            : page.favorites ? qsTr("Ein Klick auf das Herz neben einem Titel, unten beim laufenden Titel oder in der Großansicht – oder Strg + H für den Titel, der gerade läuft.")
             : (Library.empty ? qsTr("Füge in den Einstellungen deinen Musikordner hinzu. Die ersten Titel erscheinen schon während des Scans.")
                              : qsTr("Sobald Titel zu dieser Ansicht passen, tauchen sie hier auf."))
         actionText: page.smart ? qsTr("Regeln bearbeiten") : (Library.empty && !page.isSearch && page.playlistId <= 0 ? qsTr("Musikordner hinzufügen") : "")
@@ -271,13 +275,18 @@ Item {
         id: menu
         property int row: -1
         property int n: 1 // rows the actions apply to (selection)
-        onAboutToShow: n = tracks.actionCount(row)
+        property bool fav: false // the clicked row has the heart: the item takes it away (from all of them)
+        onAboutToShow: { n = tracks.actionCount(row); fav = tracks.get(row).favorite === true }
         HMenuItem {
             text: menu.n > 1 ? qsTr("%1 Titel abspielen").arg(Library.formatCount(menu.n)) : qsTr("Abspielen")
             onTriggered: menu.n > 1 ? Library.playSelection(tracks, menu.row) : Library.playList(tracks, menu.row, false)
         }
         HMenuItem { text: qsTr("Als Nächstes spielen"); onTriggered: Library.enqueueList(tracks, menu.row, true) }
         HMenuItem { text: qsTr("Zur Warteschlange hinzufügen"); onTriggered: Library.enqueueList(tracks, menu.row, false) }
+        HMenuItem {
+            text: menu.fav ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten")
+            onTriggered: Library.setFavoriteRows(tracks, menu.row, !menu.fav)
+        }
         PlaylistMenu {
             onChosen: (id) => {
                 var r = menu.row

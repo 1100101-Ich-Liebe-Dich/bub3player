@@ -5,6 +5,7 @@
 #include "core/FolderWatcher.h"
 #include "core/Paths.h"
 #include "core/Scanner.h"
+#include "core/TagReader.h"
 #include "library/FolderModel.h"
 #include "library/GroupModel.h"
 #include "library/PlaylistStore.h"
@@ -17,7 +18,10 @@
 
 #include <QDateTime>
 #include <QSet>
+#include <QCoreApplication>
 #include <QDesktopServices>
+#include <QPointer>
+#include <QtConcurrent>
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
@@ -35,6 +39,8 @@ Library::Library(Player *player, PlayQueue *queue, QObject *parent)
         emit changed();
     });
     connect(m_scanner, &Scanner::finished, this, &Library::scanFinished);
+    connect(m_player, &Player::trackChanged, this, &Library::updateCurrentFavorite);
+    connect(this, &Library::changed, this, &Library::updateCurrentFavorite);
 
     connect(m_watcher, &FolderWatcher::foldersChanged, this, &Library::foldersChanged);
     connect(m_watcher, &FolderWatcher::everythingChanged, this, [this] {
@@ -305,6 +311,8 @@ void Library::scanFinished()
         p->relink(); // tracks that came back (drive plugged in, file moved)
     if (!m_dirtyFolders.isEmpty() || !m_subsetQueue.isEmpty() || m_checkAll)
         m_dirtyTimer.start(500);
+    else if (!m_pendingOpen.isEmpty())
+        open(std::exchange(m_pendingOpen, {}), true); // the opened files' folders are read now
     emit watchStatusChanged();
 }
 
@@ -341,10 +349,10 @@ void Library::rescan()
 {
     if (m_scanner->running()) {
         // A small automatic scan gives way; the full one starts when it has stopped.
-        if (m_scanner->background()) {
-            m_fullPending = true;
+        // A full scan already running started with the old folders: once more afterwards.
+        m_fullPending = true;
+        if (m_scanner->background())
             m_scanner->cancel();
-        }
         return;
     }
     m_fullPending = false;
@@ -444,6 +452,84 @@ void Library::enqueueList(TrackListModel *model, int row, bool next)
                           : tr("%1 Titel zur Warteschlange hinzugefügt").arg(QLocale(QLocale::German).toString(ids.size())));
 }
 
+// ---------------------------------------------------------------- favourites
+
+bool Library::isFavorite(qint64 trackId)
+{
+    return trackId > 0 && TrackCache::instance().get(trackId).favorite();
+}
+
+void Library::setFavorite(qint64 trackId, bool on)
+{
+    if (trackId > 0)
+        applyFavorites({trackId}, on);
+}
+
+void Library::setFavoriteRows(TrackListModel *model, int row, bool on)
+{
+    if (!model || row < 0 || row >= model->count())
+        return;
+    const QVector<qint64> ids = model->actionIds(row);
+    applyFavorites(ids, on);
+    const QString n = QLocale(QLocale::German).toString(ids.size());
+    if (ids.size() == 1)
+        emit message(on ? tr("Zu den Favoriten hinzugefügt") : tr("Aus den Favoriten entfernt"));
+    else
+        emit message(on ? tr("%1 Titel zu den Favoriten hinzugefügt").arg(n) : tr("%1 Titel aus den Favoriten entfernt").arg(n));
+}
+
+void Library::toggleCurrentFavorite()
+{
+    setFavorite(m_player->currentId(), !m_currentFavorite);
+}
+
+void Library::applyFavorites(const QVector<qint64> &ids, bool on)
+{
+    if (ids.isEmpty())
+        return;
+    const int rating = on ? TrackRow::FavoriteRating : 0;
+    // The lists show it at once; the database follows in the background (the
+    // scanner may hold the write lock for a moment).
+    TrackCache::instance().setRating(ids, rating);
+    emit favoritesChanged(ids, on);
+    updateCurrentFavorite();
+    QPointer<Library> self(this);
+    (void)QtConcurrent::run([self, ids, rating, on] {
+        QVariantList remote;
+        try {
+            DbConnection db = Database::open(1024);
+            Transaction tx(db);
+            Stmt u(db, "UPDATE tracks SET rating = ? WHERE id = ?");
+            Stmt r(db, "SELECT source_id, remote_id FROM tracks WHERE id = ? AND source_id <> 1 AND remote_id IS NOT NULL");
+            for (qint64 id : ids) {
+                u.bind(1, rating).bind(2, id);
+                u.exec();
+                r.bind(1, id);
+                if (r.step())
+                    remote << QVariantMap{{QStringLiteral("source"), r.i64(0)}, {QStringLiteral("item"), r.str(1)}};
+                r.reset();
+            }
+            tx.commit();
+        } catch (const std::exception &e) {
+            qWarning() << "Favoriten nicht gespeichert:" << e.what();
+        }
+        if (!remote.isEmpty())
+            QMetaObject::invokeMethod(qApp, [self, remote, on] {
+                if (self)
+                    emit self->remoteFavoritesChanged(remote, on);
+            });
+    });
+}
+
+void Library::updateCurrentFavorite()
+{
+    const bool fav = isFavorite(m_player->currentId());
+    if (fav != m_currentFavorite) {
+        m_currentFavorite = fav;
+        emit currentFavoriteChanged();
+    }
+}
+
 void Library::enqueueIds(const QVariantList &list, bool next)
 {
     QVector<qint64> ids;
@@ -497,6 +583,165 @@ void Library::enqueueGroup(GroupModel *model, int row, bool next)
 void Library::playSpec(const QVariantMap &spec, bool shuffle)
 {
     playIds(idsForSpec(spec), shuffle ? -1 : 0, shuffle);
+}
+
+// ---------------------------------------------------------------- opening files
+
+void Library::openPaths(const QStringList &pathsOrUrls, bool quiet)
+{
+    open(pathsOrUrls, false, quiet);
+}
+
+void Library::open(const QStringList &input, bool retried, bool quiet)
+{
+    auto insideRoots = [this](const QString &p) {
+        for (const QString &r : std::as_const(m_roots))
+            if (p == r || p.startsWith(r + QLatin1Char('/')))
+                return true;
+        return false;
+    };
+    QStringList paths, outsideFolders;
+    bool outside = false;
+    for (const QString &raw : input) {
+        const QString local = Paths::localPath(raw);
+        if (local.isEmpty())
+            continue;
+        QString p = QDir::cleanPath(QFileInfo(local).absoluteFilePath());
+        const QFileInfo fi(p);
+        if (!fi.exists())
+            continue;
+        if (fi.isFile()) {
+            const QByteArray name = QFile::encodeName(fi.fileName());
+            if (!TagReader::isAudioFile(name.constData(), size_t(name.size())))
+                continue;
+        }
+        if (!insideRoots(p)) {
+            // the file manager may show the library through a link
+            const QString real = fi.canonicalFilePath();
+            if (!real.isEmpty() && insideRoots(real)) {
+                p = real;
+            } else {
+                outside = true;
+                const QString folder = fi.isDir() ? p : fi.absolutePath();
+                if (!outsideFolders.contains(folder))
+                    outsideFolders << folder;
+            }
+        }
+        paths << p;
+    }
+    if (paths.isEmpty()) {
+        if (!quiet)
+            emit message(tr("Keine Musik zum Abspielen gefunden"));
+        return;
+    }
+    if (outside) {
+        emit outsideLibrary(outsideFolders, paths);
+        return;
+    }
+
+    // Folders can hold a whole library: look up off the UI thread.
+    QPointer<Library> self(this);
+    (void)QtConcurrent::run([self, paths, retried] {
+        QVector<qint64> ids;
+        QStringList missing;
+        try {
+            DbConnection db = Database::open(1024);
+            Stmt byPath(db, "SELECT t.id FROM tracks t JOIN folders f ON f.id = t.folder_id "
+                            "WHERE f.source_id = 1 AND f.path = ? AND t.filename = ?");
+            for (const QString &p : paths) {
+                const QFileInfo fi(p);
+                if (fi.isDir()) {
+                    const QueryBuilder::Built q = QueryBuilder::trackIds(QVariantMap{
+                        {QStringLiteral("filters"), QVariantList{QVariantMap{{QStringLiteral("field"), QStringLiteral("folder")},
+                                                                             {QStringLiteral("op"), QStringLiteral("under")},
+                                                                             {QStringLiteral("value"), p}}}},
+                        {QStringLiteral("sort"), QStringLiteral("path")}});
+                    if (!q.ok)
+                        continue;
+                    Stmt s(db, q.sql);
+                    for (int i = 0; i < q.binds.size(); ++i)
+                        s.bind(i + 1, q.binds[i]);
+                    const qsizetype before = ids.size();
+                    while (s.step())
+                        ids << s.i64(0);
+                    if (ids.size() == before)
+                        missing << p;
+                } else {
+                    byPath.bind(1, fi.absolutePath()).bind(2, fi.fileName());
+                    if (byPath.step())
+                        ids << byPath.i64(0);
+                    else
+                        missing << p;
+                    byPath.reset();
+                }
+            }
+        } catch (const std::exception &e) {
+            qWarning() << e.what();
+        }
+        QMetaObject::invokeMethod(qApp, [self, paths, ids = std::move(ids), missing, retried]() mutable {
+            if (self)
+                self->opened(paths, std::move(ids), missing, retried);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Library::opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, bool retried)
+{
+    if (!missing.isEmpty() && !retried) {
+        // New in the library and not read yet: read these folders (and their parents,
+        // for new subfolders), then try once more (scanFinished).
+        for (const QString &m : missing) {
+            const QString folder = QFileInfo(m).isDir() ? m : QFileInfo(m).absolutePath();
+            m_dirtyFolders.insert(folder);
+            const QString parent = QFileInfo(folder).absolutePath();
+            if (!m_roots.contains(folder) && parent != folder)
+                m_dirtyFolders.insert(parent);
+        }
+        m_pendingOpen = paths;
+        if (m_scanner->running())
+            emit message(tr("Wird gespielt, sobald die Bibliothek eingelesen ist"));
+        else
+            scanChangedFolders();
+        return;
+    }
+    const QLocale de(QLocale::German);
+    if (ids.isEmpty()) {
+        emit message(missing.size() == 1 ? tr("Kann nicht abgespielt werden: %1").arg(QFileInfo(missing.first()).fileName())
+                                         : tr("Keine Musik zum Abspielen gefunden"));
+        return;
+    }
+    const qsizetype count = ids.size();
+    playIds(std::move(ids), 0, false);
+    if (!missing.isEmpty())
+        emit message(missing.size() == 1 ? tr("1 Datei kann nicht abgespielt werden")
+                                         : tr("%1 Dateien können nicht abgespielt werden").arg(de.toString(missing.size())));
+    else if (count > 1)
+        emit message(tr("%1 Titel werden gespielt").arg(de.toString(count)));
+}
+
+void Library::addRootsAndOpen(const QStringList &folders, const QStringList &paths)
+{
+    bool added = false;
+    for (const QString &f : folders) {
+        const QString path = QDir::cleanPath(f);
+        if (path.isEmpty() || !QFileInfo(path).isDir())
+            continue;
+        bool known = false;
+        for (const QString &r : std::as_const(m_roots))
+            known = known || path == r || path.startsWith(r + QLatin1Char('/'));
+        if (known)
+            continue;
+        m_roots << path;
+        added = true;
+    }
+    if (!added) {
+        open(paths, true);
+        return;
+    }
+    m_settings.setValue(QStringLiteral("library/roots"), m_roots);
+    emit rootsChanged();
+    m_pendingOpen = paths;
+    rescan();
 }
 
 QVariant Library::setting(const QString &key, const QVariant &fallback) const

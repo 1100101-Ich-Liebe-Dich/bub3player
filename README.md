@@ -267,7 +267,11 @@ Jahrzehnt, Tempo, Tonart und Energie.
 - **Ansichten**: Alle Titel, Alben als Cover-Raster, Künstler, Genres, **Ordner wie auf der
   Platte**, Zuletzt hinzugefügt, nach Monat, Erscheinungsjahr, Jahrzehnte, Formate und Qualität
   („FLAC 24 bit, 96 kHz“), Hi-Res, Dateien nach Alter, **Nach Tempo**, **Nach Tonart**,
-  meistgespielt, lange nicht gehört, nie gespielt.
+  meistgespielt, lange nicht gehört, nie gespielt, **Favoriten**.
+- **Favoriten mit dem Herz**: in jeder Liste, in der Leiste und in der Großansicht jedes Themes,
+  im Rechtsklick-Menü und mit `Strg + H`. Dazu die Ansicht „Favoriten“ und die Regel „Favorit“ für
+  Smart-Playlists. Das Herz steht in der Datenbank des Players, die Dateien bleiben unberührt; bei
+  Jellyfin-Titeln kommt es auch auf dem Server an (und vom Server zurück).
 - **Jede Liste sortierbar** nach Titel, Künstler, Album, Jahr, Hinzugefügt, Genre, Format, Dauer,
   Wiedergaben, Tempo, Energie, Dateipfad …
 - **Künstlerbilder** aus dem Ordner des Künstlers: Liegt die Musik als `MUSIK/KÜNSTLER/ALBUM/…`
@@ -393,6 +397,7 @@ Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschal
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
 | `Strg + Umschalt + L` | Liedtext oder Cover in der Großansicht |
+| `Strg + H` | Laufenden Titel zu den Favoriten oder heraus |
 | `F11` | Vollbild an und aus |
 | `Strg + T` | Theme wechseln |
 | `Strg + E` | Klang: Ausgabe und Equalizer |
@@ -406,6 +411,17 @@ dieser Titel“ und mehr; in der Warteschlange „Zum Album“, „Zum Künstler
 und Dateien wählst du im gewohnten Dateidialog deines Desktops. Die Sitzung bleibt erhalten:
 Warteschlange, Titel und Position.
 **MPRIS** ist dabei – Medientasten, Desktop-Widgets, KDE Connect und `playerctl` funktionieren.
+
+- **Aus dem Dateimanager**: Dateien und Ordner aufs Fenster ziehen oder „Öffnen mit BuB3Player“ –
+  gespielt wird sofort, ein schon laufender Player übernimmt (ein zweiter startet nicht).
+  Liegt die Musik außerhalb der Bibliothek, fragt der Player, ob der Ordner dazukommen soll.
+  M3U-Listen werden als Playlist übernommen.
+- **Symbol im Infobereich** (KDE, Xfce, LXQt, Cinnamon, GNOME mit der Erweiterung „AppIndicator“):
+  Ein Klick holt das Fenster hervor oder versteckt es, die mittlere Maustaste hält an, das Mausrad
+  ändert die Lautstärke, der Rechtsklick zeigt Titel, Wiedergabe, Herz und Beenden. Auf Wunsch
+  spielt der Player beim Schließen des Fensters dort weiter.
+- **Benachrichtigung** mit Cover bei jedem neuen Titel – nur, wenn das Fenster im Hintergrund ist.
+  Beides lässt sich unter Einstellungen → Allgemein abschalten.
 
 <br>
 
@@ -656,7 +672,6 @@ Zum Ausprobieren ohne eigenen Jellyfin-Server:
 
 BuB3Player ist und bleibt ein **Linux-Player**. Ideen für die nächsten Versionen:
 
-- 📂 Titel direkt aus dem Dateimanager öffnen („Öffnen mit BuB3Player“)
 - 📡 Scrobbeln zu **ListenBrainz** und **Last.fm**
 - 🏷️ **Tag-Editor** für einzelne Titel und ganze Alben
 - 🪟 **Mini-Player** – klein, immer im Vordergrund

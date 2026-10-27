@@ -21,7 +21,9 @@
 #include "player/Player.h"
 #include "recommend/Recommender.h"
 #include "ui/SystemDialogs.h"
+#include "ui/SingleInstance.h"
 #include "ui/Theme.h"
+#include "ui/Tray.h"
 
 #include <QCommandLineParser>
 #include <QDir>
@@ -235,10 +237,17 @@ int main(int argc, char *argv[])
     parser.addOption({QStringLiteral("scan"), QStringLiteral("Ordner ohne Oberfläche scannen und Zeiten ausgeben.")});
     parser.addOption({QStringLiteral("analyze"), QStringLiteral("Dateien ohne Oberfläche analysieren (Tempo, Tonart, Lautheit …).")});
     parser.addOption({QStringLiteral("lyrics"), QStringLiteral("Liedtext von Dateien zeigen (.lrc daneben, Tags).")});
+    parser.addPositionalArgument(QStringLiteral("dateien"), QStringLiteral("Musikdateien oder Ordner zum Abspielen."),
+                                 QStringLiteral("[dateien…]"));
     parser.process(app);
 
     if (parser.isSet(QStringLiteral("db")))
         Database::setPath(parser.value(QStringLiteral("db")));
+    // A second start (file manager, starter): the running player takes the files
+    // or just comes to the front.
+    const QStringList openFiles = parser.positionalArguments();
+    if (SingleInstance::forward(openFiles))
+        return 0;
     try {
         Database::migrate();
     } catch (const std::exception &e) {
@@ -271,6 +280,7 @@ int main(int argc, char *argv[])
     analysis.setScanner(library.scanner());
     Recommender recommender(&player, &queue, &library);
     Jellyfin jellyfin(&player, &library);
+    Tray tray(&player, &library);
     QObject::connect(&jellyfin, &Jellyfin::message, &library, &Library::message);
     QObject::connect(library.scanner(), &Scanner::finished, &jellyfin, &Jellyfin::localLibraryChanged);
     if (parser.isSet(QStringLiteral("skin")))
@@ -310,6 +320,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Audio", &audio);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Lyrics", &lyrics);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "SystemDialogs", &dialogs);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Tray", &tray);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
@@ -327,6 +338,15 @@ int main(int argc, char *argv[])
 
     memory.setWindow(window);
     Mpris::install(&player, &queue, window);
+    tray.setWindow(window);
+    SingleInstance instance;
+    instance.setWindow(window);
+    auto openInWindow = [window](const QStringList &paths) {
+        QMetaObject::invokeMethod(window, "openPaths", Q_ARG(QVariant, QVariant(paths)));
+    };
+    QObject::connect(&instance, &SingleInstance::openRequested, window, openInWindow);
+    if (!openFiles.isEmpty())
+        QTimer::singleShot(0, window, [openInWindow, openFiles] { openInWindow(openFiles); });
     queue.restore();
     player.restoreSession();
 

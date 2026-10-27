@@ -265,6 +265,99 @@ ApplicationWindow {
     Connections {
         target: Library
         function onMessage(text) { toast.show(text) }
+        function onOutsideLibrary(folders, paths) {
+            outsideDialog.folders = folders
+            outsideDialog.paths = paths
+            outsideDialog.open()
+        }
+    }
+
+    // ---------- files from the file manager (dropped, "Öffnen mit") ----------
+    // Playlists (.m3u) are imported, music and folders play.
+    function openPaths(paths) {
+        var music = [], lists = 0
+        for (var i = 0; i < paths.length; ++i) {
+            var p = String(paths[i])
+            if (/\.m3u8?$/i.test(p)) {
+                Playlists.importFile(p)
+                ++lists
+            } else {
+                music.push(p)
+            }
+        }
+        if (music.length > 0)
+            Library.openPaths(music, lists > 0)
+    }
+    DropArea {
+        id: fileDrop
+        // Some drag sources (seen on X11) deliver the list only while dragging, not on the drop.
+        property var entered: []
+        function strings(urls) {
+            var list = []
+            for (var i = 0; i < urls.length; ++i) list.push(String(urls[i]))
+            return list
+        }
+        anchors.fill: parent
+        z: 90
+        keys: ["text/uri-list"]
+        onEntered: (drag) => {
+            drag.accepted = drag.hasUrls
+            entered = drag.hasUrls ? strings(drag.urls) : []
+        }
+        onExited: entered = []
+        onDropped: (drop) => {
+            var list = drop.urls.length > 0 ? strings(drop.urls) : entered
+            entered = []
+            if (list.length === 0) return
+            drop.acceptProposedAction()
+            window.openPaths(list)
+        }
+        Rectangle {
+            anchors.fill: parent
+            visible: fileDrop.containsDrag
+            color: Qt.rgba(0, 0, 0, 0.5)
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 18
+                radius: Theme.radius + 6
+                color: "transparent"
+                border.width: 2
+                border.color: Theme.accent
+            }
+            Column {
+                anchors.centerIn: parent
+                spacing: 12
+                Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "play"; size: 56; color: Theme.accent }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: qsTr("Loslassen zum Abspielen")
+                    font.family: Theme.displayFont
+                    font.pixelSize: 26
+                    color: "white"
+                }
+            }
+        }
+    }
+    HDialog {
+        id: outsideDialog
+        property var folders: []
+        property var paths: []
+        title: qsTr("Nicht in der Bibliothek")
+        text: folders.length === 1
+              ? qsTr("Der Ordner gehört nicht zur Bibliothek. Gespielt wird Musik aus der Bibliothek – soll er dazukommen? Der Player liest dort nur, an den Dateien ändert sich nichts.")
+              : qsTr("Diese Ordner gehören nicht zur Bibliothek. Gespielt wird Musik aus der Bibliothek – sollen sie dazukommen? Der Player liest dort nur, an den Dateien ändert sich nichts.")
+        acceptText: qsTr("Hinzufügen und abspielen")
+        acceptIcon: "add"
+        Text {
+            width: parent.width
+            text: outsideDialog.folders.join("\n")
+            wrapMode: Text.WrapAnywhere
+            font.family: Theme.uiFont
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+            color: Theme.text
+        }
+        onAccepted: Library.addRootsAndOpen(folders, paths)
     }
 
     // ---------- keyboard ----------
@@ -278,6 +371,14 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+J"; onActivated: window.queueOpen = !window.queueOpen }
     Shortcut { sequence: "Ctrl+L"; onActivated: window.nowPlayingOpen = !window.nowPlayingOpen }
     Shortcut { sequence: "Ctrl+Shift+L"; onActivated: window.toggleLyrics() }
+    Shortcut {
+        sequence: "Ctrl+H"
+        enabled: Player.currentId > 0
+        onActivated: {
+            Library.toggleCurrentFavorite()
+            toast.show(Library.currentFavorite ? qsTr("Zu den Favoriten hinzugefügt") : qsTr("Aus den Favoriten entfernt"))
+        }
+    }
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
     Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
     Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
@@ -332,7 +433,8 @@ ApplicationWindow {
 
     // Scripted states for automated screenshots (--ui-test).
     // "pauseat=MS playat=MS nextat=MS": player actions at fixed times (transition tests),
-    // "eqonat=MS eqoffat=MS bassat=MS": equalizer on, off, preset "Mehr Bass" (chain rebuild tests)
+    // "eqonat=MS eqoffat=MS bassat=MS": equalizer on, off, preset "Mehr Bass" (chain rebuild tests);
+    // "closeat=MS": close the window as the window manager would (tray tests)
     Component {
         id: actTimer
         Timer {
@@ -345,6 +447,7 @@ ApplicationWindow {
                 else if (act === "eqon") Audio.eqEnabled = true
                 else if (act === "eqoff") Audio.eqEnabled = false
                 else if (act === "bass") Audio.applyPreset("Mehr Bass")
+                else if (act === "close") window.close()
                 destroy()
             }
         }
@@ -408,7 +511,7 @@ ApplicationWindow {
                 Library.playSpec({ sort: "album" }, false)
             else if (a.indexOf("play") >= 0)
                 Library.playSpec({ sort: "album", filters: [{ field: "bits", op: "ge", value: 24 }] }, false)
-            var acts = ["pause", "play", "next", "eqon", "eqoff", "bass"]
+            var acts = ["pause", "play", "next", "eqon", "eqoff", "bass", "close"]
             for (var ai = 0; ai < acts.length; ++ai) {
                 var re = new RegExp(acts[ai] + "at=(\\d+)", "g"), mm
                 while ((mm = re.exec(a)) !== null)

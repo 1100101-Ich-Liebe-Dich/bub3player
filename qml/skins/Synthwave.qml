@@ -344,6 +344,13 @@ Item {
                     color: Theme.textFaint
                 }
             }
+            HeartButton {
+                visible: Player.currentId > 0
+                onColor: Theme.accent
+                offColor: Theme.accent2
+                on: Library.currentFavorite
+                onClicked: Library.toggleCurrentFavorite()
+            }
             Row {
                 spacing: 8
                 NeonButton { iconName: "prev"; onClicked: Player.previous() }
@@ -662,6 +669,7 @@ Item {
                 NeonButton { anchors.verticalCenter: parent.verticalCenter; iconName: "next"; onClicked: Player.next() }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; activeColor: Theme.accent2; onClicked: Queue.cycleRepeat() }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; activeColor: Theme.accent2; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
+                HeartButton { anchors.verticalCenter: parent.verticalCenter; size: 36; onColor: Theme.accent; offColor: Theme.accent2; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                 Item { width: 10; height: 1 }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter }
             }

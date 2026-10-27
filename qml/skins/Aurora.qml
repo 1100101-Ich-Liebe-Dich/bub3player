@@ -309,6 +309,11 @@ Item {
                     color: Theme.textDim
                 }
             }
+            HeartButton {
+                visible: Player.currentId > 0
+                on: Library.currentFavorite
+                onClicked: Library.toggleCurrentFavorite()
+            }
             Row {
                 spacing: 6
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "prev"; iconSize: 22; iconColor: Theme.text; tip: qsTr("Zurück"); onClicked: Player.previous() }
@@ -630,6 +635,7 @@ Item {
                         IconButton { anchors.verticalCenter: parent.verticalCenter; width: 48; height: 48; iconName: "next"; iconSize: 28; iconColor: Theme.text; onClicked: Player.next() }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
+                        HeartButton { anchors.verticalCenter: parent.verticalCenter; size: 36; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                     }
                 }
                 Row {

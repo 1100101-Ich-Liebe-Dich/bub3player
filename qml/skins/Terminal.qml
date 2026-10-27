@@ -197,6 +197,7 @@ Item {
                     TButton { text: "[>|]"; onClicked: Player.next() }
                     TButton { text: "[zufall:" + (Queue.shuffle ? "an " : "aus") + "]"; on: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
                     TButton { text: "[wdh:" + (Queue.repeat === 2 ? "eins" : Queue.repeat === 1 ? "alle" : "aus ") + "]"; on: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                    TButton { text: "[fav:" + (Library.currentFavorite ? "an " : "aus") + "]"; on: Library.currentFavorite; enabled: Player.currentId > 0; onClicked: Library.toggleCurrentFavorite() }
                     TButton {
                         text: "vol [" + "#".repeat(Math.round(Player.volume * 10)) + "-".repeat(10 - Math.round(Player.volume * 10)) + "]"
                         onClicked: {}
@@ -309,6 +310,7 @@ Item {
                     TButton { text: "[>|]"; onClicked: Player.next() }
                     TButton { text: "[zufall]"; on: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
                     TButton { text: "[wdh]"; on: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
+                    TButton { text: "[fav]"; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                     TButton { text: "[text]"; on: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; onClicked: window.toggleLyrics() }
                     TButton { text: "[esc]"; onClicked: window.nowPlayingOpen = false }
                 }
