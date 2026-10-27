@@ -6,7 +6,7 @@
 #include "library/QueryBuilder.h"
 
 #include <QDateTime>
-#include <QSet>
+#include <algorithm>
 #include <bit>
 #include <QLocale>
 #include <QPointer>
@@ -17,18 +17,31 @@ TrackListModel::TrackListModel(QObject *parent) : QAbstractListModel(parent)
     if (Library::instance()) {
         connect(Library::instance(), &Library::changed, this, &TrackListModel::reload);
         connect(Library::instance(), &Library::favoritesChanged, this, &TrackListModel::favoritesChanged);
+        // "Favoriten" and smart playlists with the rule: the list itself changes
+        connect(Library::instance(), &Library::favoritesSaved, this, [this] {
+            if (filtersOnRating())
+                reload();
+        });
     }
 }
 
+bool TrackListModel::filtersOnRating() const
+{
+    for (const QVariant &f : m_spec.value(QStringLiteral("filters")).toList())
+        if (f.toMap().value(QStringLiteral("field")).toString() == QLatin1String("rating"))
+            return true;
+    return false;
+}
+
 // Only the pages in memory hold copies of rows: at most MaxPages * PageSize to look at.
+// `ids` are sorted.
 void TrackListModel::favoritesChanged(const QVector<qint64> &ids, bool on)
 {
-    const QSet<qint64> changed(ids.cbegin(), ids.cend());
     const int rating = on ? TrackRow::FavoriteRating : 0;
     for (auto it = m_pages.begin(); it != m_pages.end(); ++it) {
         QVector<TrackRow> &rows = it.value();
         for (int i = 0; i < rows.size(); ++i) {
-            if (!changed.contains(rows[i].id) || rows[i].rating == rating)
+            if (rows[i].rating == rating || !std::binary_search(ids.cbegin(), ids.cend(), rows[i].id))
                 continue;
             rows[i].rating = rating;
             const QModelIndex idx = index(it.key() * PageSize + i);

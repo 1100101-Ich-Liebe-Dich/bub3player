@@ -3,20 +3,26 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPair>
 #include <QSet>
 #include <QSettings>
 #include <QStringList>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVector>
 
 class FolderWatcher;
+class QFileInfo;
 class Scanner;
 class Player;
 class PlayQueue;
 class TrackListModel;
 class FolderModel;
 class GroupModel;
+
+using RemoteItems = QVector<QPair<qint64, QString>>; // (source id, server item id)
 
 // The QML-facing library: folders to scan, scanner, views, and "play this" helpers.
 class Library : public QObject
@@ -111,7 +117,8 @@ signals:
     void watchStatusChanged();
     void currentFavoriteChanged();
     void favoritesChanged(const QVector<qint64> &ids, bool on);    // lists update their rows
-    void remoteFavoritesChanged(const QVariantList &items, bool on); // [{source, item}] for Jellyfin
+    void favoritesSaved();                                           // in the database now
+    void remoteFavoritesChanged(const RemoteItems &items, bool on);  // for Jellyfin
     void outsideLibrary(const QStringList &folders, const QStringList &paths); // openPaths: ask to add
 
 private:
@@ -125,9 +132,11 @@ private:
     QStringList localRoots() const;
     void playIds(QVector<qint64> ids, int start, bool shuffle);
     QVector<qint64> idsForSpec(const QVariantMap &spec);
-    void applyFavorites(const QVector<qint64> &ids, bool on);
+    void applyFavorites(QVector<qint64> ids, bool on);
     void updateCurrentFavorite();
     void open(const QStringList &paths, bool retried, bool quiet = false);
+    QString rootOf(const QString &path) const;         // the library folder holding it, or empty
+    QString libraryPath(const QFileInfo &file) const;  // empty: not in the library
     void opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, bool retried);
 
     static Library *s_instance;
@@ -136,6 +145,7 @@ private:
     Player *m_player;
     PlayQueue *m_queue;
     bool m_currentFavorite = false;
+    QThreadPool m_favoriteWriter; // one thread: hearts reach the database in click order
     QStringList m_roots;
     QVariantList m_views;
     QString m_viewsError;

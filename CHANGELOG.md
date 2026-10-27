@@ -10,7 +10,9 @@ Favoriten, Symbol im Infobereich, Musik aus dem Dateimanager.
   im Smart-Playlist-Editor. Das Herz steht nur in der Datenbank des Players, an den Dateien ändert
   sich nichts.
 - Jellyfin: Ein Herz für einen Server-Titel kommt auch auf dem Server an. Ist der Server gerade
-  nicht erreichbar, merkt sich der Player das und schickt es nach, sobald er wieder da ist.
+  nicht erreichbar, merkt sich der Player das (auch über einen Neustart) und schickt es nach,
+  sobald er wieder da ist. Herzen, die auf dem Server gesetzt wurden, bringt der Abgleich mit;
+  „Vollständig neu abgleichen“ holt alle.
 - **Symbol im Infobereich** (StatusNotifierItem: KDE, Xfce, LXQt, Cinnamon, GNOME mit der
   Erweiterung „AppIndicator“): Klick holt das Fenster hervor oder versteckt es, die mittlere
   Maustaste hält an, das Mausrad ändert die Lautstärke; im Menü der laufende Titel, Abspielen,

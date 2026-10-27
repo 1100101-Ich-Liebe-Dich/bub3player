@@ -270,8 +270,9 @@ Jahrzehnt, Tempo, Tonart und Energie.
   meistgespielt, lange nicht gehört, nie gespielt, **Favoriten**.
 - **Favoriten mit dem Herz**: in jeder Liste, in der Leiste und in der Großansicht jedes Themes,
   im Rechtsklick-Menü und mit `Strg + H`. Dazu die Ansicht „Favoriten“ und die Regel „Favorit“ für
-  Smart-Playlists. Das Herz steht in der Datenbank des Players, die Dateien bleiben unberührt; bei
-  Jellyfin-Titeln kommt es auch auf dem Server an (und vom Server zurück).
+  Smart-Playlists. Das Herz steht in der Datenbank des Players, die Dateien bleiben unberührt. Bei
+  Jellyfin-Titeln kommt es auch auf dem Server an; Herzen vom Server bringt der Abgleich mit
+  („Vollständig neu abgleichen“ holt alle).
 - **Jede Liste sortierbar** nach Titel, Künstler, Album, Jahr, Hinzugefügt, Genre, Format, Dauer,
   Wiedergaben, Tempo, Energie, Dateipfad …
 - **Künstlerbilder** aus dem Ordner des Künstlers: Liegt die Musik als `MUSIK/KÜNSTLER/ALBUM/…`
@@ -397,7 +398,7 @@ Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschal
 | `Strg + J` | Warteschlange |
 | `Strg + L` | Großansicht |
 | `Strg + Umschalt + L` | Liedtext oder Cover in der Großansicht |
-| `Strg + H` | Laufenden Titel zu den Favoriten oder heraus |
+| `Strg + H` | Herz für den laufenden Titel an oder aus (Favorit) |
 | `F11` | Vollbild an und aus |
 | `Strg + T` | Theme wechseln |
 | `Strg + E` | Klang: Ausgabe und Equalizer |

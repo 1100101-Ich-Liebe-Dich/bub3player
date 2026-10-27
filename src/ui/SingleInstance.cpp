@@ -12,6 +12,8 @@
 #include <QUrl>
 #include <QWindow>
 
+#include <utility>
+
 namespace {
 
 const QString Service = QStringLiteral("de.bauenundbooten.BuB3Player"); // = desktop ID
@@ -41,8 +43,11 @@ void raiseWindow(QWindow *window, const QString &token)
     // Qt's Wayland backend takes the token from here for the next activation.
     if (!token.isEmpty())
         qputenv("XDG_ACTIVATION_TOKEN", token.toUtf8());
-    if (!window->isVisible() || window->visibility() == QWindow::Minimized)
-        window->showNormal();
+    // keeps maximised and full screen as they were
+    if (window->windowStates() & Qt::WindowMinimized)
+        window->setWindowStates(window->windowStates() & ~Qt::WindowMinimized);
+    if (!window->isVisible())
+        window->show();
     window->raise();
     window->requestActivate();
 }
@@ -75,7 +80,7 @@ bool SingleInstance::forward(const QStringList &paths)
     return bus.call(call, QDBus::Block, 3000).type() == QDBusMessage::ReplyMessage;
 }
 
-SingleInstance::SingleInstance(QObject *parent) : QObject(parent)
+SingleInstance::SingleInstance(const QStringList &files, QObject *parent) : QObject(parent), m_waiting(files)
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected())
@@ -91,6 +96,8 @@ SingleInstance::SingleInstance(QObject *parent) : QObject(parent)
 void SingleInstance::setWindow(QWindow *window)
 {
     m_window = window;
+    if (window && !m_waiting.isEmpty())
+        emit openRequested(std::exchange(m_waiting, {}));
 }
 
 void SingleInstance::activate(const QVariantMap &platformData)
@@ -107,8 +114,13 @@ void SingleInstance::open(const QStringList &uris, const QVariantMap &platformDa
             paths << url.toLocalFile();
     }
     activate(platformData);
-    if (!paths.isEmpty())
+    if (paths.isEmpty())
+        return;
+    if (m_window)
         emit openRequested(paths);
+    else
+        m_waiting += paths; // still starting: when the window is there
+
 }
 
 ApplicationAdaptor::ApplicationAdaptor(QObject *holder, SingleInstance *instance)

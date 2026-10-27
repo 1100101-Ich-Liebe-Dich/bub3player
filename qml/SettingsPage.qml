@@ -383,7 +383,7 @@ Item {
                                 [qsTr("Strg + J"), qsTr("Warteschlange")],
                                 [qsTr("Strg + L"), qsTr("Großansicht")],
                                 [qsTr("Strg + Umschalt + L"), qsTr("Liedtext oder Cover in der Großansicht")],
-                                [qsTr("Strg + H"), qsTr("Laufenden Titel zu den Favoriten oder heraus")],
+                                [qsTr("Strg + H"), qsTr("Herz für den laufenden Titel an oder aus")],
                                 [qsTr("F11"), qsTr("Vollbild an und aus")],
                                 [qsTr("Strg + T"), qsTr("Theme wechseln")],
                                 [qsTr("Strg + E"), qsTr("Klang: Ausgabe und Equalizer")],

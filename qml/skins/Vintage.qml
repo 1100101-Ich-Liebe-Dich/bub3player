@@ -276,7 +276,7 @@ Item {
                         }
                         Item {
                             width: parent.width
-                            height: notesTitle.height
+                            height: Math.max(notesTitle.height, notesHeart.height + 2)
                             Text {
                                 id: notesTitle
                                 width: parent.width - notesHeart.width - 6

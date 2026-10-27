@@ -34,14 +34,28 @@ public:
     TrackRow get(qint64 id);
     QString pathOf(qint64 id);
     void invalidate();
-    void setRating(const QVector<qint64> &ids, int rating); // cached rows only (the database is written elsewhere)
+    // Hearts set but not in the database yet: rows read meanwhile (a list reloads,
+    // the cache was emptied) get them too. `sortedIds` sorted ascending; returns a
+    // ticket for donePending once the database has them (or failed to take them).
+    quint64 setPendingRating(QVector<qint64> sortedIds, int rating);
+    void donePending(quint64 ticket);
 
     DbConnection &db(); // main-thread connection (reads + small writes)
 
 private:
     TrackCache() = default;
+    void applyPending(TrackRow &row) const;
+
+    struct PendingRating
+    {
+        quint64 ticket;
+        QVector<qint64> ids; // sorted
+        int rating;
+    };
     DbConnection m_db;
     QHash<qint64, TrackRow> m_rows;
+    QVector<PendingRating> m_pending; // oldest first: the last match wins
+    quint64 m_nextTicket = 1;
 };
 
 QString formatDuration(qint64 ms);

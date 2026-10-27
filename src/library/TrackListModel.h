@@ -75,6 +75,7 @@ private:
     const TrackRow &rowAt(int row) const;
     void apply(int generation, QVector<qint64> ids, QVector<qint64> keys, qint64 totalMs, QString error);
     void favoritesChanged(const QVector<qint64> &ids, bool on);
+    bool filtersOnRating() const;
     void setBit(int row, bool on);
     void selectionUpdated();
 

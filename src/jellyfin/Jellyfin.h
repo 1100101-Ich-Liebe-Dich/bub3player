@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "library/Library.h" // RemoteItems
+
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
+#include <QStringList>
 #include <QThreadPool>
 #include <QTimer>
 #include <QVariantList>
 #include <functional>
 #include <memory>
 
-class Library;
 class Player;
 class QNetworkReply;
 class JellyfinWriter;
@@ -110,11 +114,14 @@ private:
     void runInWorker(std::function<void()> work, std::function<void()> done);
 
     // Favourites (the heart) set in the player: told to the server; kept until it
-    // answered, so a sync cannot take them back meanwhile.
-    void setFavorites(const QVariantList &items, bool on);
-    void sendFavorite(qint64 serverId, const QString &itemId, bool on);
+    // answered (also over a restart), so a sync cannot take them back meanwhile.
+    void setFavorites(const RemoteItems &items, bool on);
+    void queueFavorite(const QString &key);
+    void sendFavorites();
     void flushFavorites(qint64 serverId);
     QHash<QString, bool> pendingFavorites(qint64 serverId) const; // item id -> heart
+    void loadPendingFavorites();
+    void savePendingFavorites();
 
     // Playback reporting
     void onTrackChanged();
@@ -127,12 +134,19 @@ private:
 
     Player *m_player;
     Library *m_library;
+    // hearts for the servers, "server/item" (before m_nam: replies may still finish while it goes)
+    QHash<QString, bool> m_pendingFavorites; // -> heart wanted
+    QStringList m_favoriteQueue;
+    QSet<QString> m_favoriteQueued;
+    QSet<QString> m_favoritesInFlight;
+    bool m_favoritesPaused = false; // the server did not answer: wait for m_retryFavorites
+    QTimer m_saveFavorites;
+    QTimer m_retryFavorites;
     QNetworkAccessManager m_nam;
     QThreadPool m_pool;
     QVector<Server> m_servers;
     bool m_preferLocal = true;
     bool m_busy = false;
-    QHash<QString, bool> m_sendingFavorites; // "server/item" -> heart, on the way
 
     QString m_quickUrl, m_quickSecret, m_quickCode;
     QTimer m_quickPoll;

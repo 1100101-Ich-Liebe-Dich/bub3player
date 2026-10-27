@@ -22,6 +22,7 @@
 #include <QSvgRenderer>
 #include <QWindow>
 #include <QtConcurrent>
+#include <QUrl>
 #include <QtEndian>
 
 #include <utility>
@@ -145,8 +146,9 @@ TrayPixmaps renderIcon()
     return out;
 }
 
-QVariantMap item(const QString &label, bool enabled = true)
+QVariantMap item(QString label, bool enabled = true)
 {
+    label.replace(QLatin1Char('_'), QLatin1String("__")); // a single _ marks the access key
     return {{QStringLiteral("label"), label}, {QStringLiteral("enabled"), enabled}, {QStringLiteral("visible"), true}};
 }
 
@@ -209,6 +211,11 @@ void Tray::setWindow(QWindow *window)
         if (m_window && !m_window->isActive())
             m_deactivated.start();
     });
+    // "Fenster zeigen" or "verstecken": also when the window manager minimises it
+    connect(window, &QWindow::visibilityChanged, this, [this] {
+        if (m_running)
+            emit layoutUpdated(++m_revision, 0);
+    });
 }
 
 bool Tray::eventFilter(QObject *watched, QEvent *event)
@@ -219,7 +226,6 @@ bool Tray::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::Close && watched == m_window && m_closeToTray && m_available && !m_quitting) {
         event->ignore();
         m_window->hide();
-        emit layoutUpdated(++m_revision, 0);
         return true;
     }
     return QObject::eventFilter(watched, event);
@@ -405,7 +411,6 @@ void Tray::activate()
         m_window->hide(); // back into the tray
     else
         raiseWindow(m_window, token);
-    emit layoutUpdated(++m_revision, 0);
 }
 
 void Tray::secondaryActivate()
@@ -465,7 +470,7 @@ void Tray::showNotification(qint64 id, const QString &coverFile)
                       {QStringLiteral("transient"), true},
                       {QStringLiteral("urgency"), QVariant::fromValue<uchar>(0)}};
     if (!coverFile.isEmpty())
-        hints.insert(QStringLiteral("image-path"), coverFile);
+        hints.insert(QStringLiteral("image-path"), QUrl::fromLocalFile(coverFile).toString());
     QString body = escapeMarkup(m_player->artist());
     if (!m_player->album().isEmpty())
         body += QStringLiteral(" – ") + escapeMarkup(m_player->album());

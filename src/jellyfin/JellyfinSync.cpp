@@ -74,7 +74,7 @@ const char *UpsertSql =
     "disc_no = excluded.disc_no, duration_ms = excluded.duration_ms, bitrate = excluded.bitrate, sample_rate = excluded.sample_rate, "
     "channels = excluded.channels, bits = excluded.bits, codec = excluded.codec, "
     "play_count = max(tracks.play_count, excluded.play_count), last_played = max(tracks.last_played, excluded.last_played), "
-    "image_ref = excluded.image_ref "
+    "rating = excluded.rating, image_ref = excluded.image_ref "
     // only write when something really changed (keeps the search index and WAL quiet)
     "WHERE tracks.title IS NOT excluded.title OR tracks.artist IS NOT excluded.artist OR tracks.album IS NOT excluded.album "
     "OR tracks.aa IS NOT excluded.aa OR tracks.genre IS NOT excluded.genre OR tracks.year IS NOT excluded.year "
@@ -82,7 +82,8 @@ const char *UpsertSql =
     "OR tracks.duration_ms IS NOT excluded.duration_ms OR tracks.folder_id IS NOT excluded.folder_id "
     "OR tracks.image_ref IS NOT excluded.image_ref OR tracks.codec IS NOT excluded.codec "
     "OR tracks.remote_lib IS NOT excluded.remote_lib OR tracks.remote_path IS NOT excluded.remote_path "
-    "OR tracks.play_count < excluded.play_count OR tracks.last_played < excluded.last_played";
+    "OR tracks.play_count < excluded.play_count OR tracks.last_played < excluded.last_played "
+    "OR tracks.rating IS NOT excluded.rating";
 
 } // namespace
 

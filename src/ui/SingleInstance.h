@@ -27,7 +27,8 @@ public:
     // front without), this one should end. Paths may be relative or file URLs.
     static bool forward(const QStringList &paths);
 
-    explicit SingleInstance(QObject *parent = nullptr);
+    // `files`: from the command line, opened as soon as the window is there
+    explicit SingleInstance(const QStringList &files, QObject *parent = nullptr);
     void setWindow(QWindow *window);
 
     // called over D-Bus
@@ -40,6 +41,7 @@ signals:
 
 private:
     QPointer<QWindow> m_window;
+    QStringList m_waiting; // files that came before the window
 };
 
 // org.freedesktop.Application

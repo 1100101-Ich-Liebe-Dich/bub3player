@@ -246,8 +246,16 @@ int main(int argc, char *argv[])
     // A second start (file manager, starter): the running player takes the files
     // or just comes to the front.
     const QStringList openFiles = parser.positionalArguments();
-    if (SingleInstance::forward(openFiles))
+    if (SingleInstance::forward(openFiles)) {
+        for (const char *opt : {"add-folder", "view", "skin", "theme", "skin-opt", "ui-test", "screenshot", "no-scan"})
+            if (parser.isSet(QLatin1String(opt))) {
+                std::fprintf(stderr, "BuB3Player läuft schon; Optionen wirken nur beim ersten Start.\n");
+                break;
+            }
         return 0;
+    }
+    // From here on a second start comes to this one (files wait for the window).
+    SingleInstance instance(openFiles);
     try {
         Database::migrate();
     } catch (const std::exception &e) {
@@ -339,16 +347,13 @@ int main(int argc, char *argv[])
     memory.setWindow(window);
     Mpris::install(&player, &queue, window);
     tray.setWindow(window);
-    SingleInstance instance;
-    instance.setWindow(window);
-    auto openInWindow = [window](const QStringList &paths) {
-        QMetaObject::invokeMethod(window, "openPaths", Q_ARG(QVariant, QVariant(paths)));
-    };
-    QObject::connect(&instance, &SingleInstance::openRequested, window, openInWindow);
-    if (!openFiles.isEmpty())
-        QTimer::singleShot(0, window, [openInWindow, openFiles] { openInWindow(openFiles); });
     queue.restore();
     player.restoreSession();
+    // after the restored queue: opened files replace it
+    QObject::connect(&instance, &SingleInstance::openRequested, window, [window](const QStringList &paths) {
+        QMetaObject::invokeMethod(window, "openPaths", Q_ARG(QVariant, QVariant(paths)));
+    });
+    instance.setWindow(window);
 
     if (parser.isSet(QStringLiteral("add-folder")))
         library.addRoot(QDir(parser.value(QStringLiteral("add-folder"))).absolutePath());
