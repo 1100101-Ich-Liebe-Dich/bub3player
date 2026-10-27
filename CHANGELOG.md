@@ -30,6 +30,8 @@ Favoriten, Symbol im Infobereich, Musik aus dem Dateimanager.
 
 ### Geändert
 - Die Ansicht „Für dich“ hat ein eigenes Symbol (das Herz gehört jetzt den Favoriten).
+- Ein Musikordner, der schon einen Ordner der Bibliothek enthält, kommt nicht mehr dazu: Ineinander
+  liegende Bibliotheksordner sind nicht sicher, wenn der innere ein abgezogenes Laufwerk ist.
 
 ### Behoben
 - Ein Musikordner, der hinzukam, während der Player gerade alles durchsuchte, wurde erst beim
