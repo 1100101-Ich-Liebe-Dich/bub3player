@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QWindow>
 
+#include <cstdio>
 #include <utility>
 
 namespace {
@@ -89,6 +90,17 @@ SingleInstance::Forward SingleInstance::forward(const QStringList &paths)
     call << platformData();
     const QDBusMessage answer = bus.call(call, QDBus::Block, 30000);
     return answer.type() == QDBusMessage::ReplyMessage ? Forwarded : noAnswer(answer) ? NoAnswer : NotRunning;
+}
+
+void SingleInstance::tell(const QString &text)
+{
+    std::fprintf(stderr, "%s\n", text.toLocal8Bit().constData());
+    QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.Notifications"),
+                                                       QStringLiteral("/org/freedesktop/Notifications"),
+                                                       QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
+    call << QStringLiteral("BuB3Player") << uint(0) << Service << QStringLiteral("BuB3Player") << text << QStringList()
+         << QVariantMap{{QStringLiteral("desktop-entry"), Service}} << int(8000);
+    QDBusConnection::sessionBus().call(call, QDBus::Block, 2000);
 }
 
 SingleInstance::SingleInstance(const QStringList &files, QObject *parent) : QObject(parent), m_waiting(files)

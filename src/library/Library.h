@@ -144,6 +144,7 @@ private:
     void updateCurrentFavorite();
     void open(const QStringList &paths, bool retried, bool quiet = false);
     QString rootOf(const QString &path) const; // the library folder holding it, or empty
+    bool holdsRoot(const QString &path) const; // a library folder lies inside it
     void opened(const QStringList &paths, QVector<qint64> ids, const QStringList &missing, const QStringList &missingFolders,
                 bool retried);
 
@@ -158,7 +159,10 @@ private:
     {
         QMutex mutex;
         QVector<QPair<RemoteItems, bool>> items; // written, to be told to Jellyfin
+        QHash<QString, quint64> lastClick;       // "source/item" -> number of the write that set it
     };
+    quint64 m_writeSeq = 0; // heart writes started (numbered)
+    quint64 m_doneSeq = 0;  // ... and finished: Jellyfin knows all up to this one
     std::shared_ptr<RemoteOutbox> m_remoteOutbox = std::make_shared<RemoteOutbox>();
     QThreadPool m_openWorker;     // files from outside: one at a time, off the shared pool
     QStringList m_roots;

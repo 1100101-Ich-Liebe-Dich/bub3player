@@ -27,6 +27,8 @@ public:
     // front without), this one should end. Paths may be relative or file URLs.
     enum Forward { NotRunning, Forwarded, NoAnswer };
     static Forward forward(const QStringList &paths);
+    // For a start from the desktop, where nobody reads the terminal: a notification too.
+    static void tell(const QString &text);
 
     // `files`: from the command line, opened as soon as the window is there
     explicit SingleInstance(const QStringList &files, QObject *parent = nullptr);

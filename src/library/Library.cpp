@@ -337,6 +337,10 @@ void Library::addRoot(const QVariant &pathOrUrl)
         emit message(tr("Ist bereits Teil der Bibliothek: %1").arg(r));
         return;
     }
+    if (holdsRoot(path)) {
+        emit message(tr("»%1« enthält schon einen Musikordner der Bibliothek und kommt deshalb nicht dazu.").arg(path));
+        return;
+    }
     m_roots << path;
     m_settings.setValue(QStringLiteral("library/roots"), m_roots);
     emit rootsChanged();
@@ -505,7 +509,8 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
     emit favoritesChanged(ids, on);
     updateCurrentFavorite();
     QPointer<Library> self(this);
-    m_favoriteWriter.start([self, outbox = m_remoteOutbox, ids, rating, on, ticket] {
+    const quint64 seq = ++m_writeSeq;
+    m_favoriteWriter.start([self, outbox = m_remoteOutbox, ids, rating, on, ticket, seq] {
         RemoteItems remote;
         bool ok = false;
         try {
@@ -537,11 +542,14 @@ void Library::applyFavorites(QVector<qint64> ids, bool on)
         if (ok && !remote.isEmpty()) {
             // picked up below, or by finishWrites when the player is closing
             QMutexLocker lock(&outbox->mutex);
+            for (const auto &[source, item] : std::as_const(remote))
+                outbox->lastClick.insert(QString::number(source) + QLatin1Char('/') + item, seq);
             outbox->items.append({std::move(remote), on});
         }
-        QMetaObject::invokeMethod(qApp, [self, ok, ticket] {
+        QMetaObject::invokeMethod(qApp, [self, ok, ticket, seq] {
             if (!self)
                 return;
+            self->m_doneSeq = std::max(self->m_doneSeq, seq);
             TrackCache::instance().donePending(ticket);
             if (!ok) {
                 // back to what the database says
@@ -562,6 +570,13 @@ void Library::deliverRemoteFavorites()
     {
         QMutexLocker lock(&m_remoteOutbox->mutex);
         items.swap(m_remoteOutbox->items);
+        // Jellyfin knows these now: no longer newer than what it knows
+        for (const auto &[remote, on] : std::as_const(items))
+            for (const auto &[source, item] : remote) {
+                const QString key = QString::number(source) + QLatin1Char('/') + item;
+                if (m_remoteOutbox->lastClick.value(key) <= m_doneSeq)
+                    m_remoteOutbox->lastClick.remove(key);
+            }
     }
     for (const auto &[remote, on] : std::as_const(items))
         emit remoteFavoritesChanged(remote, on);
@@ -570,13 +585,21 @@ void Library::deliverRemoteFavorites()
 void Library::restoreRemoteHearts(qint64 sourceId, const QHash<QString, bool> &items)
 {
     QPointer<Library> self(this);
-    m_favoriteWriter.start([self, sourceId, items] {
+    // `items` is what Jellyfin knew; clicks written after that are newer and stay
+    m_favoriteWriter.start([self, outbox = m_remoteOutbox, sourceId, items, known = m_doneSeq] {
+        QHash<QString, bool> todo = items;
+        {
+            QMutexLocker lock(&outbox->mutex);
+            const QString prefix = QString::number(sourceId) + QLatin1Char('/');
+            for (auto it = todo.begin(); it != todo.end();)
+                it = outbox->lastClick.value(prefix + it.key()) > known ? todo.erase(it) : std::next(it);
+        }
         int changed = 0;
         try {
             DbConnection db = Database::open(1024);
             Transaction tx(db);
             Stmt u(db, "UPDATE tracks SET rating = ? WHERE source_id = ? AND remote_id = ? AND rating <> ?");
-            for (auto it = items.cbegin(); it != items.cend(); ++it) {
+            for (auto it = todo.cbegin(); it != todo.cend(); ++it) {
                 const int rating = it.value() ? TrackRow::FavoriteRating : 0;
                 u.bind(1, rating).bind(2, sourceId).bind(3, it.key()).bind(4, rating);
                 u.exec();
@@ -588,8 +611,10 @@ void Library::restoreRemoteHearts(qint64 sourceId, const QHash<QString, bool> &i
         }
         if (changed > 0)
             QMetaObject::invokeMethod(qApp, [self] {
-                if (self)
-                    self->notifyExternalChange();
+                if (!self)
+                    return;
+                TrackCache::instance().invalidate(); // lists and the heart in the bar
+                emit self->changed();
             }, Qt::QueuedConnection);
     });
 }
@@ -597,6 +622,7 @@ void Library::restoreRemoteHearts(qint64 sourceId, const QHash<QString, bool> &i
 void Library::finishWrites()
 {
     m_favoriteWriter.waitForDone();
+    m_doneSeq = m_writeSeq;
     deliverRemoteFavorites(); // to Jellyfin, which saves what it could not send
 }
 
@@ -704,6 +730,13 @@ QString Library::rootOf(const QString &path) const
     return ::rootOf(path, m_roots);
 }
 
+// Not around a library folder: nesting is not safe (the inner one may be a drive that
+// is away, and only a library folder itself is kept when it is missing).
+bool Library::holdsRoot(const QString &path) const
+{
+    return std::any_of(m_roots.cbegin(), m_roots.cend(), [&path](const QString &r) { return r != path && Paths::isUnder(r, path); });
+}
+
 void Library::openPaths(const QStringList &pathsOrUrls, bool quiet)
 {
     open(pathsOrUrls, false, quiet);
@@ -805,7 +838,7 @@ void Library::open(const QStringList &input, bool retried, bool quiet)
                     emit self->message(tr("Keine Musik zum Abspielen gefunden"));
             } else if (r.outside && !retried) {
                 emit self->outsideLibrary(r.outsideFolders, r.paths);
-            } else {
+            } else if (!r.inside.isEmpty() || !quiet) {
                 self->opened(r.inside, std::move(r.ids), r.missing, r.missingFolders, retried);
             }
         }, Qt::QueuedConnection);
@@ -852,12 +885,7 @@ void Library::addRootsAndOpen(const QStringList &folders, const QStringList &pat
     for (const QString &path : std::as_const(wanted)) {
         if (path.isEmpty() || !rootOf(path).isEmpty() || !QFileInfo(path).isDir())
             continue;
-        // Not around a library folder: nesting is not safe (that one may be a drive
-        // that is away, and only a library folder itself is kept when it is missing).
-        const bool holdsRoot = std::any_of(m_roots.cbegin(), m_roots.cend(), [&path](const QString &r) {
-            return Paths::isUnder(r, path);
-        });
-        if (holdsRoot) {
+        if (holdsRoot(path)) {
             emit message(tr("»%1« enthält schon einen Musikordner der Bibliothek und kommt deshalb nicht dazu.").arg(path));
             refused = true;
             continue;
@@ -866,8 +894,7 @@ void Library::addRootsAndOpen(const QStringList &folders, const QStringList &pat
         added = true;
     }
     if (!added) {
-        if (!refused)
-            open(paths, true); // already in the library meanwhile
+        open(paths, true, refused); // what is in the library plays (the rest was said)
         return;
     }
     m_settings.setValue(QStringLiteral("library/roots"), m_roots);

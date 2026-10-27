@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
     case SingleInstance::NotRunning:
         break;
     case SingleInstance::NoAnswer:
-        std::fprintf(stderr, "BuB3Player läuft schon, antwortet aber gerade nicht. Bitte gleich noch einmal versuchen.\n");
+        SingleInstance::tell(QStringLiteral("BuB3Player läuft schon, antwortet aber gerade nicht. Bitte gleich noch einmal versuchen."));
         return 1;
     case SingleInstance::Forwarded:
         for (const char *opt : {"add-folder", "view", "skin", "theme", "skin-opt", "ui-test", "screenshot", "no-scan"})

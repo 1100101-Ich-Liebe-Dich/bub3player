@@ -159,9 +159,10 @@ Jellyfin::Jellyfin(Player *player, Library *library, QObject *parent)
     m_retryFavorites.setSingleShot(true);
     m_retryFavorites.setInterval(FavoritesRetryMs);
     connect(&m_retryFavorites, &QTimer::timeout, this, [this] {
+        // the server may have been updated meanwhile (the address depends on its version)
         const QSet<qint64> paused = std::exchange(m_favoritesPaused, {});
         for (qint64 id : paused)
-            flushFavorites(id);
+            refreshVersion(id);
     });
     m_autoSync.setInterval(30 * 60 * 1000);
     connect(&m_autoSync, &QTimer::timeout, this, &Jellyfin::scheduleAutoSync);
@@ -778,13 +779,13 @@ void Jellyfin::sendFavorites()
             auto want = m_pendingFavorites.constFind(key);
             if (want != m_pendingFavorites.cend() && want.value() != on) {
                 m_favoriteQueue.insert(key); // clicked again meanwhile
-            } else if ((status >= 200 && status < 300)
-                       || (status >= 400 && status < 500 && status != 401 && status != 408 && status != 429)) {
-                // done, or the server will never take it (404: the title is gone there)
+            } else if ((status >= 200 && status < 300) || status == 400 || status == 404 || status == 410) {
+                // done, or the server will never take it (the title is gone there)
                 m_pendingFavorites.remove(key);
                 m_saveFavorites.start();
                 // a running sync may still write the state it fetched before
-                if (const Server *s = find(sid); s && s->syncing)
+                const Server *s = find(sid);
+                if (s && s->syncing && status < 300)
                     m_confirmedDuringSync[sid].insert(item, on);
             } else if (want != m_pendingFavorites.cend()) {
                 pauseFavorites(sid); // server away (or refusing): all of it again later
