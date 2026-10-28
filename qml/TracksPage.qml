@@ -209,30 +209,35 @@ Item {
                         onChosen: (id) => page.addTo(id, function (pid) { Playlists.addAll(pid, tracks) })
                     }
                 }
-                IconButton {
+                Item { // as high as the pills next to it (the header wraps its buttons: no anchors there)
                     visible: page.playlistId > 0
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    iconName: "more"
-                    tip: qsTr("Mehr")
-                    onClicked: plMenu.popup()
-                    HMenu {
-                        id: plMenu
-                        HMenuItem { text: qsTr("Umbenennen …"); onTriggered: window.playlistUi.rename(page.playlistId) }
-                        HMenuItem { visible: page.smart; height: visible ? implicitHeight : 0; text: qsTr("Regeln bearbeiten …"); onTriggered: window.playlistUi.editRules(page.playlistId) }
-                        HMenuItem {
-                            visible: page.smart; height: visible ? implicitHeight : 0
-                            text: qsTr("Als feste Playlist speichern")
-                            enabled: tracks.count > 0
-                            onTriggered: { var id = Playlists.freeze(page.playlistId, tracks); if (id > 0) window.playlistUi.openPlaylist(id) }
+                    width: moreButton.width
+                    height: 40
+                    IconButton {
+                        id: moreButton
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconName: "more"
+                        tip: qsTr("Mehr")
+                        onClicked: plMenu.popup()
+                        HMenu {
+                            id: plMenu
+                            HMenuItem { text: qsTr("Umbenennen …"); onTriggered: window.playlistUi.rename(page.playlistId) }
+                            HMenuItem { visible: page.smart; height: visible ? implicitHeight : 0; text: qsTr("Regeln bearbeiten …"); onTriggered: window.playlistUi.editRules(page.playlistId) }
+                            HMenuItem {
+                                visible: page.smart; height: visible ? implicitHeight : 0
+                                text: qsTr("Als feste Playlist speichern")
+                                enabled: tracks.count > 0
+                                onTriggered: { var id = Playlists.freeze(page.playlistId, tracks); if (id > 0) window.playlistUi.openPlaylist(id) }
+                            }
+                            HMenuItem { visible: page.editable; height: visible ? implicitHeight : 0; text: qsTr("Als M3U exportieren …"); onTriggered: window.playlistUi.exportFile(page.playlistId) }
+                            HMenuItem {
+                                visible: page.editable && page.playlist.missing > 0; height: visible ? implicitHeight : 0
+                                text: qsTr("Fehlende Titel entfernen")
+                                onTriggered: Playlists.removeMissing(page.playlistId)
+                            }
+                            MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
+                            HMenuItem { text: qsTr("Löschen …"); onTriggered: window.playlistUi.confirmDelete(page.playlistId) }
                         }
-                        HMenuItem { visible: page.editable; height: visible ? implicitHeight : 0; text: qsTr("Als M3U exportieren …"); onTriggered: window.playlistUi.exportFile(page.playlistId) }
-                        HMenuItem {
-                            visible: page.editable && page.playlist.missing > 0; height: visible ? implicitHeight : 0
-                            text: qsTr("Fehlende Titel entfernen")
-                            onTriggered: Playlists.removeMissing(page.playlistId)
-                        }
-                        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
-                        HMenuItem { text: qsTr("Löschen …"); onTriggered: window.playlistUi.confirmDelete(page.playlistId) }
                     }
                 }
             }
