@@ -59,6 +59,7 @@ public:
     Q_INVOKABLE void addFolder(qint64 id, const QString &path);
     Q_INVOKABLE void addQueue(qint64 id);
     Q_INVOKABLE void addTrack(qint64 id, qint64 trackId);
+    Q_INVOKABLE void addIds(qint64 id, const QVariantList &trackIds);
 
     // Editing a playlist shown in `model` (spec.playlist = id).
     Q_INVOKABLE void removeRows(qint64 id, TrackListModel *model, int row);

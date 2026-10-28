@@ -369,6 +369,24 @@ Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschal
 </tr>
 </table>
 
+### 📊 Statistik und „Dein Jahr in Musik“
+
+Unter „Hörverlauf → Statistik“: was du in einer Woche, einem Monat, einem Jahr oder überhaupt gehört
+hast – Hörzeit, Wiedergaben, der Verlauf, wann du hörst (Wochentag und Stunde), die zehn
+meistgehörten Künstler, Titel und Alben, Genres und Sender, dazu deine Bibliothek in Zahlen. Die
+Diagramme zeichnet jedes Theme auf seine Art: LED-Säulen im Hi-Fi Turm, Blockzeichen im Terminal,
+Bernstein-Lampen bei Vintage, Neon bei Synthwave.
+
+**Dein Jahr in Musik** erzählt das Jahr als Folge von Bildern: Hörzeit, Künstler, Lied und Album des
+Jahres, deine Top fünf, ob du Frühaufsteher oder Nachteule bist, dein Monat, Rekorde wie die längste
+Serie und die Dauerschleife, dein Sound aus der Audioanalyse (Tempo, Lieblingstonart), Jahrzehnte
+und neu entdeckte Künstler. Jedes Theme erzählt es anders – vom Notizzettel auf der Tapete bis zur
+Eingabezeile, die tippt. Am Ende steht alles auf einem Bild zum Speichern, und die Lieblingstitel
+des Jahres werden auf Wunsch eine Playlist.
+
+Alles bleibt auf deinem Rechner. Der Hörverlauf merkt sich, was lief, auch wenn eine Datei später
+verschoben oder gelöscht wird.
+
 ### 📻 Internetradio
 
 Unter „Hören → Internetradio“ in der Seitenleiste.
@@ -655,6 +673,7 @@ halcyon --scan ~/Musik --db test.db   # Scan ohne Oberfläche, mit Zeitmessung
 halcyon --analyze titel.flac          # Tempo, Tonart, Lautheit … eines Titels ausgeben
 halcyon --lyrics titel.flac           # Liedtext eines Titels ausgeben (.lrc daneben, Tags)
 halcyon --recommend 4711              # zeigen, was nach Titel 4711 käme
+halcyon --stats 2026                  # Statistik und Jahresrückblick als JSON (ohne Jahr: insgesamt)
 ```
 
 Alles weitere: `halcyon --help`
@@ -675,6 +694,7 @@ src/recommend Empfehlungen: Lernen aus dem Hörverlauf, Auswahl, Autoplay, Radio
 src/jellyfin  Anmeldung, Abgleich, Streaming-Adressen, Rückmeldung an den Server
 src/radio     Internetradio: Senderliste, Senderlisten-Dateien (.pls, .m3u …), radio-browser.info
 src/cd        Audio-CD: Laufwerk, Inhalt, MusicBrainz, Einlesen als FLAC
+src/stats     Statistik und Jahresrückblick aus dem Hörverlauf
 src/ui        Theme-System, Dateidialoge des Desktops (XDG-Portal, kdialog, zenity)
 qml/          gemeinsame Seiten und Bausteine
 qml/skins/    die acht Themes
@@ -684,7 +704,8 @@ shaders/      Aurora-Licht, Milchglas, Neumorphism, Synthwave-Szene, Vinyl, CD, 
 tools/        Testwerkzeuge: Vorführ- und Riesen-Bibliothek erzeugen, Klick- und
               Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API),
               mock-lrclib.py (Ersatz für LRCLIB), mock-portal.py (Ersatz für den Dateidialog),
-              mock-radio.py (Radiosender, radio-browser.info und MusicBrainz zum Ausprobieren)
+              mock-radio.py (Radiosender, radio-browser.info und MusicBrainz zum Ausprobieren),
+              make-history.py (ein Hörverlauf für Statistik und Jahresrückblick)
 dist/         Desktop-Eintrag, AppStream, Symbol, AppImage-Skripte
 ```
 
@@ -710,7 +731,6 @@ Zum Ausprobieren ohne eigenen Jellyfin-Server:
 BuB3Player ist und bleibt ein **Linux-Player**. Ideen für die nächsten Versionen:
 
 - 📡 Scrobbeln zu **ListenBrainz** und **Last.fm**
-- 🏷️ **Tag-Editor** für einzelne Titel und ganze Alben
 - 🪟 **Mini-Player** – klein, immer im Vordergrund
 - 😴 **Schlaf-Timer** mit sanftem Ausblenden
 - 📱 **Fernbedienung** übers Handy oder den Browser im Heimnetz

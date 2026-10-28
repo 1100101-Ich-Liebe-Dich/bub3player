@@ -11,6 +11,9 @@ Item {
     readonly property bool animated: false
     readonly property bool wantsLevels: false
     readonly property int toastMargin: playerBar.height + 18
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
     function focusSearch() { sidebar.focusSearch() }
     function clearSearch() { sidebar.clearSearch() }
     function setSearchText(t) { sidebar.searchText = t }
@@ -29,7 +32,8 @@ Item {
         anchors.bottomMargin: playerBar.height
         spacing: 0
         // Hidden under the full-screen view: nothing to draw, nothing to pay for.
-        visible: !(nowPlaying.open && nowPlaying.opacity === 1)
+        visible: !(nowPlaying.open && nowPlaying.opacity === 1) && skin.rvMix < 1
+        opacity: 1 - skin.rvMix
 
         Sidebar {
             id: sidebar
@@ -60,6 +64,8 @@ Item {
         queueOpen: window.queueOpen
         onToggleQueue: window.queueOpen = !window.queueOpen
         onOpenNowPlaying: window.nowPlayingOpen = true
+        opacity: 1 - skin.rvMix
+        visible: opacity > 0.01
         z: 5
     }
 

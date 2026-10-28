@@ -61,6 +61,30 @@ GstElement *make(const char *factory, const char *name)
 // Returns whether it counted as a play or a skip (else: just loaded, ignored).
 int recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
 {
+    if (External::isStation(id) && listenedMs >= 60000) {
+        // radio counts as listening time (statistics), not as plays; a long session
+        // in pieces per hour, so that "when you listen" and the days stay right
+        const QString name = TrackCache::instance().get(id).title;
+        (void)QtConcurrent::run([station = External::stationOf(id), name, listenedMs] {
+            try {
+                DbConnection db = Database::open(1024);
+                WriteTx tx(db); // all pieces or none
+                Stmt p(db, "INSERT INTO station_plays(station_id, name, played_at, listened_ms) VALUES (?, ?, ?, ?)");
+                const qint64 end = QDateTime::currentMSecsSinceEpoch();
+                for (qint64 from = end - listenedMs; from < end;) {
+                    const qint64 nextHour = (from / 3600000 + 1) * 3600000; // whole hours (UTC; local zones differ by whole or half hours)
+                    const qint64 to = std::min(end, nextHour);
+                    p.bind(1, station).bind(2, name).bind(3, from / 1000).bind(4, to - from);
+                    p.exec();
+                    from = to;
+                }
+                tx.commit();
+            } catch (const std::exception &e) {
+                qWarning() << "Wiedergabestatistik nicht gespeichert:" << e.what();
+            }
+        });
+        return 0;
+    }
     if (id <= 0 || listenedMs < 1500)
         return 0; // loaded but never really played
     const bool counted = listenedMs >= std::min<qint64>(240000, std::max<qint64>(30000, durationMs / 2));
@@ -80,7 +104,11 @@ int recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
                 u.bind(1, id);
                 u.exec();
             }
-            Stmt p(db, "INSERT INTO plays(track_id, played_at, listened_ms, completed) VALUES (?, ?, ?, ?)");
+            // with what was played: the history stays readable when the file is gone
+            Stmt p(db, "INSERT INTO plays(track_id, played_at, listened_ms, completed, title, artist, album, aa, genre, year) "
+                       "SELECT ?1, ?2, ?3, ?4, COALESCE(t.title, ''), COALESCE(t.artist, ''), COALESCE(t.album, ''), "
+                       "COALESCE(t.aa, ''), COALESCE(t.genre, ''), COALESCE(t.year, 0) "
+                       "FROM (SELECT 1) LEFT JOIN tracks t ON t.id = ?1"); // a title gone meanwhile still counts
             p.bind(1, id).bind(2, now).bind(3, listenedMs).bind(4, counted ? 1 : 0);
             p.exec();
         } catch (const std::exception &e) {

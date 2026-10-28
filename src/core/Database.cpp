@@ -11,7 +11,7 @@ namespace {
 QString g_path;
 bool g_hasFts = false;
 
-const int SchemaVersion = 5;
+const int SchemaVersion = 6;
 
 const char *SchemaV1 = R"SQL(
 CREATE TABLE IF NOT EXISTS sources (
@@ -162,26 +162,28 @@ DbConnection open(int cacheKiB)
     return db;
 }
 
+static bool hasColumn(DbConnection &db, const char *table, const char *col)
+{
+    Stmt s(db, QStringLiteral("PRAGMA table_info(%1)").arg(QLatin1String(table)));
+    while (s.step())
+        if (s.str(1) == QLatin1String(col))
+            return true;
+    return false;
+}
+
 // V2: Jellyfin. Server settings, server path and cover reference per track,
 // a flag for remote copies of local tracks, and a unique key for upserts.
 void migrateV2(DbConnection &db)
 {
-    auto hasColumn = [&](const char *table, const char *col) {
-        Stmt s(db, QStringLiteral("PRAGMA table_info(%1)").arg(QLatin1String(table)));
-        while (s.step())
-            if (s.str(1) == QLatin1String(col))
-                return true;
-        return false;
-    };
-    if (!hasColumn("sources", "config"))
+    if (!hasColumn(db, "sources", "config"))
         db.exec("ALTER TABLE sources ADD COLUMN config TEXT NOT NULL DEFAULT '{}'");
-    if (!hasColumn("tracks", "remote_path"))
+    if (!hasColumn(db, "tracks", "remote_path"))
         db.exec("ALTER TABLE tracks ADD COLUMN remote_path TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "image_ref"))
+    if (!hasColumn(db, "tracks", "image_ref"))
         db.exec("ALTER TABLE tracks ADD COLUMN image_ref TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "remote_lib"))
+    if (!hasColumn(db, "tracks", "remote_lib"))
         db.exec("ALTER TABLE tracks ADD COLUMN remote_lib TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "dup"))
+    if (!hasColumn(db, "tracks", "dup"))
         db.exec("ALTER TABLE tracks ADD COLUMN dup INTEGER NOT NULL DEFAULT 0");
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_remote_u ON tracks(source_id, remote_id) WHERE remote_id IS NOT NULL");
 }
@@ -287,6 +289,33 @@ CREATE TABLE IF NOT EXISTS stations (
 );
 )SQL";
 
+// V6: the listening history keeps what was played (statistics, "your year in
+// music"), also when the file is gone or its id changed after a move; and the time
+// spent with each radio station.
+const char *SchemaV6 = R"SQL(
+CREATE TABLE IF NOT EXISTS station_plays (
+  id          INTEGER PRIMARY KEY,
+  station_id  INTEGER NOT NULL,
+  name        TEXT NOT NULL DEFAULT '',   -- as it was called then
+  played_at   INTEGER NOT NULL,
+  listened_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_station_plays_time ON station_plays(played_at);
+)SQL";
+
+static void migrateV6(DbConnection &db, qint64 version)
+{
+    db.exec(SchemaV6);
+    for (const char *col : {"title", "artist", "album", "aa", "genre"})
+        if (!hasColumn(db, "plays", col))
+            db.exec(QStringLiteral("ALTER TABLE plays ADD COLUMN %1 TEXT NOT NULL DEFAULT ''").arg(QLatin1String(col)).toUtf8().constData());
+    if (!hasColumn(db, "plays", "year"))
+        db.exec("ALTER TABLE plays ADD COLUMN year INTEGER NOT NULL DEFAULT 0");
+    if (version < 6) // what is still known of the plays so far
+        db.exec("UPDATE plays SET title = t.title, artist = t.artist, album = t.album, aa = t.aa, genre = t.genre, year = t.year "
+                "FROM tracks t WHERE t.id = plays.track_id AND plays.title = '' AND plays.artist = ''"); // never what is there
+}
+
 void migrate()
 {
     DbConnection db = open();
@@ -300,22 +329,13 @@ void migrate()
     db.exec(SchemaV3);
     db.exec(SchemaV4);
     db.exec(SchemaV5);
-    {   // V4: device of each folder, to tell an unmounted drive from deleted folders
-        bool hasDev = false;
-        Stmt s(db, "PRAGMA table_info(folders)");
-        while (s.step())
-            hasDev = hasDev || s.str(1) == QLatin1String("dev");
-        if (!hasDev)
-            db.exec("ALTER TABLE folders ADD COLUMN dev INTEGER NOT NULL DEFAULT 0");
-    }
-    {   // test builds of 0.6 created artist_stats without a name
-        bool hasName = false;
-        Stmt s(db, "PRAGMA table_info(artist_stats)");
-        while (s.step())
-            hasName = hasName || s.str(1) == QLatin1String("name");
-        if (!hasName)
-            db.exec("ALTER TABLE artist_stats ADD COLUMN name TEXT NOT NULL DEFAULT ''");
-    }
+    // V4: device of each folder, to tell an unmounted drive from deleted folders
+    if (!hasColumn(db, "folders", "dev"))
+        db.exec("ALTER TABLE folders ADD COLUMN dev INTEGER NOT NULL DEFAULT 0");
+    // test builds of 0.6 created artist_stats without a name
+    if (!hasColumn(db, "artist_stats", "name"))
+        db.exec("ALTER TABLE artist_stats ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+    migrateV6(db, version);
     if (version < 3)
         setMeta(db, "learn_rebuild", "1"); // learn from the existing play history once
     db.exec(SortIndexesV1); // also restores them after an interrupted bulk import

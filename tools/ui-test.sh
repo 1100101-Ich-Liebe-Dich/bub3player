@@ -32,6 +32,7 @@
 # lyrics, lyrics-off (lyrics in the big view on/off),
 # funkadd=URL, funkon=N, funksuche=WORT (internet radio, with tools/mock-radio.py),
 # scheibe=N, scheibelesen (audio CD with --view cd; HALCYON_TEST_CDROM=image.cue),
+# statzeit=week|month|year|all, scrolly=Y, rueckblick[=N], bildnach=PFAD, jahrliste (statistics, year in review),
 # fullscreen (needs a window manager to take effect, e.g. openbox on the Xvfb).
 #
 # Audio tests: HALCYON_TEST_SINK="filesink location=/tmp/x.raw" replaces the

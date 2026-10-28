@@ -83,6 +83,8 @@ src/radio       Stations (QML „Stations“: Senderliste in der Tabelle `statio
                 Adresse/Liste, radio-browser.info), StreamList (Parser für .pls/.m3u/.xspf/.asx)
 src/cd          AudioCd (QML „AudioCd“: Laufwerk, Inhalt über die GStreamer-CD-Quelle, MusicBrainz,
                 Einlesen als FLAC)
+src/stats       Stats (QML „Stats“: Übersicht je Zeitraum, Bibliothek in Zahlen, Jahresrückblick;
+                alles aus `plays`/`station_plays`, jede Abfrage im Worker mit eigener Verbindung)
 src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen), SystemDialogs (QML
                 „SystemDialogs“: Datei-/Ordnerwahl über XDG-Portal, sonst kdialog/zenity),
                 Tray (QML „Tray“: Symbol im Infobereich als StatusNotifierItem + dbusmenu,
@@ -99,7 +101,7 @@ tools/          Test- und Hilfswerkzeuge (siehe unten)
 ```
 
 Daten: `~/.local/share/halcyon/library.db` (SQLite, Schema-Version in `PRAGMA user_version`,
-derzeit 5), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
+derzeit 6), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
 `~/.cache/halcyon/` (Cover, Wellenformen, `lyrics/` mit Antworten von LRCLIB, `stations/` mit
 Senderlogos, `cd/` mit Namen und Covern von CDs je MusicBrainz-Kennung).
 Desktop-ID: `de.bauenundbooten.BuB3Player`.
@@ -150,6 +152,13 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
   `RENAME_NOREPLACE`, sonst harter Link, sonst Kopie mit `O_EXCL`; nie `QFile::rename`, das bei
   einem toten Link hindurch schreibt). Vorhanden ist, was `lstat` findet; `cover.jpg` nur, wenn es
   keines gibt. Während des Einlesens spielt die CD nicht (`External::cdBusy`).
+- Statistik: `plays` hat seit Schema 6 Titel, Künstler, Album, Albumkünstler, Genre und Jahr der
+  Wiedergabe (Gruppen nach Namen, nicht nach Titel-ID; die ID nur für Cover und Abspielen, über
+  `resolve()` neu gesucht, wenn es sie nicht mehr gibt). Sender zählen in `station_plays` (ab
+  einer Minute). Der Look je Theme steht in `qml/StatLook.qml` (`window.look`: Balkenart, Karte,
+  Schrift der Zahlen, Übergang); `StatBars`, `StatHeat`, `StatMeter`, `StatCard` für die Seite,
+  `YearReview` mit `RvSlide`, `RvCard`, `RvNumber`, `RvText`, `ShareCard` für den Rückblick. Der
+  Rückblick liegt über dem Hintergrund des Themes; die Skins blenden ihre Möbel mit `rvMix` aus.
 - Liedtexte: gesucht nur, solange eine Großansicht offen ist (`Lyrics.active`); ins Netz (LRCLIB)
   nur, wenn eingeschaltet und Liedtexte gezeigt werden sollen. Nie etwas neben die Musik schreiben.
   Jede Großansicht zeigt `LyricsView` statt des Covers, wenn `window.lyricsOn`; Schalter ruft
@@ -184,6 +193,7 @@ Werkzeuge in `tools/`:
 | `tools/mock-portal.py --answer PFAD` | Ersatz für den Dateidialog des XDG-Portals (`pip install dbus-next`), in `dbus-run-session` zusammen mit dem Player starten; zeigt die Aufrufe |
 | `tools/mock-tray.py` | Ersatz für Infobereich (StatusNotifierWatcher) und Benachrichtigungen; Befehle auf stdin (`menu`, `click ID`, `activate` …), zusammen mit dem Player in `dbus-run-session` |
 | `tools/mock-radio.py --audio ORDNER` | Radiosender (`/stream/N`, `/list/N.pls`) mit wechselnden ICY-Titeln, radio-browser.info, MusicBrainz und Cover Art Archive auf Port 8099; Player mit `HALCYON_RADIOBROWSER_URL`, `HALCYON_MUSICBRAINZ_URL`, `HALCYON_COVERART_URL=http://127.0.0.1:8099` starten |
+| `tools/make-history.py DB [JAHRE] [PRO_TAG]` | Hörverlauf (Wiedergaben und Radiozeiten über Jahre) für Statistik und Jahresrückblick; `halcyon --stats [JAHR] --db DB` zeigt die Zahlen als JSON mit Zeiten |
 | `tools/mock-lrclib.py` | Ersatz für LRCLIB; Player mit `HALCYON_LRCLIB_URL=http://127.0.0.1:8098` starten, `/mock/requests` zeigt die Anfragen |
 | `dist/appimage/build-appimage.sh` | AppImage lokal bauen |
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
@@ -209,6 +219,9 @@ Ton prüfen ohne Soundkarte:
 - Internetradio: `--ui-test "funkadd=URL funkon=N funksuche=WORT"` (Sender hinzufügen, den N-ten
   spielen, im Verzeichnis suchen) mit `tools/mock-radio.py`; `--cut SEK` lässt dessen Ströme
   abbrechen (neu verbinden), `/seite` ist eine Webseite statt eines Senders.
+- Statistik: `--view stats --ui-test "statzeit=week|month|year|all scrolly=Y"`, Jahresrückblick
+  `--ui-test "rueckblick=N"` (Folie N ab 0), dazu `bildnach=PFAD` (Bild der letzten Folie speichern)
+  und `jahrliste` (Playlist anlegen).
 - Audio-CD ohne Laufwerk: `HALCYON_TEST_CDROM=DATEI.cue` (Abbild aus .cue und .bin, gelesen mit
   `cdiocddasrc`, cdparanoia wird dafür abgeschaltet), `--view cd --ui-test "scheibe=N scheibelesen"`
   (N-ten Titel ab 0 spielen, einlesen). Ein Abbild: 16-Bit-PCM (Little Endian, 44,1 kHz, Stereo) als
@@ -293,11 +306,12 @@ Typischer Ablauf vor einem PR:
 - **Als Nächstes** (Wunsch des Inhabers: weiter als 1.4.x, nur bis Paket 3):
   - **1.4.1**: Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
     radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
-    vorhandene Dateien anfassen, auf Wunsch MusicBrainz). Gebaut, PR offen.
-  - **1.4.2**: Statistik/„Dein Jahr in Musik“ (Tabelle `plays`).
+    vorhandene Dateien anfassen, auf Wunsch MusicBrainz).
+  - **1.4.2**: Statistik und „Dein Jahr in Musik“ in allen acht Themes. Gebaut, PR offen.
   - Englische Oberfläche (Paket 4) vorerst nicht. ReplayGain bleibt titelweise (Wunsch des
     Inhabers: alle Titel gleich laut), nichts in die Dateien.
-- **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
+- Tags bearbeiten: baut der Inhaber als eigenes, externes Werkzeug – nicht im Player.
+- **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.
 - **Öffentlich** seit 2026-10-20 (mit 1.2.1): Lizenz GPL-3.0-or-later, CONTRIBUTING.md,

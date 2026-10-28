@@ -21,6 +21,7 @@
 #include "player/Player.h"
 #include "radio/Stations.h"
 #include "cd/AudioCd.h"
+#include "stats/Stats.h"
 #include "recommend/Recommender.h"
 #include "ui/SystemDialogs.h"
 #include "ui/SingleInstance.h"
@@ -28,6 +29,9 @@
 #include "ui/Tray.h"
 
 #include <QCommandLineParser>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QDir>
 #include <atomic>
 #include <QUrl>
@@ -193,6 +197,45 @@ int runHeadlessRecommend(int argc, char **argv)
     return 0;
 }
 
+// halcyon --stats [JAHR] [--db FILE]
+// The statistics as JSON: the year in review of JAHR, otherwise everything so far
+// and the library (with the time it took).
+int runHeadlessStats(int argc, char *argv[])
+{
+    QCoreApplication app(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("halcyon"));
+    QCoreApplication::setOrganizationName(QStringLiteral("halcyon"));
+    QCommandLineParser p;
+    p.addOption({QStringLiteral("stats"), QStringLiteral("Statistik zeigen.")});
+    p.addOption({QStringLiteral("db"), QStringLiteral("Datenbankdatei."), QStringLiteral("file")});
+    p.addPositionalArgument(QStringLiteral("jahr"), QStringLiteral("Jahr des Rückblicks"));
+    p.process(app);
+    if (p.isSet(QStringLiteral("db")))
+        Database::setPath(p.value(QStringLiteral("db")));
+    Database::migrate();
+    QElapsedTimer t;
+    t.start();
+    QJsonObject out;
+    if (!p.positionalArguments().isEmpty()) {
+        bool ok = false;
+        const int year = p.positionalArguments().first().toInt(&ok);
+        if (!ok || year < 1970 || year > 9999) {
+            std::fprintf(stderr, "Kein gültiges Jahr: %s\n", qPrintable(p.positionalArguments().first()));
+            return 1;
+        }
+        out.insert(QStringLiteral("review"), QJsonObject::fromVariantMap(Stats::reviewOf(year)));
+        out.insert(QStringLiteral("reviewMs"), t.restart());
+    } else {
+        out.insert(QStringLiteral("overview"), QJsonObject::fromVariantMap(Stats::overviewOf(QStringLiteral("all"), 0)));
+        out.insert(QStringLiteral("overviewMs"), t.restart());
+        out.insert(QStringLiteral("library"), QJsonObject::fromVariantMap(Stats::libraryNumbers()));
+        out.insert(QStringLiteral("libraryMs"), t.restart());
+        out.insert(QStringLiteral("years"), QJsonArray::fromVariantList(Stats::yearsWithPlays()));
+    }
+    std::printf("%s\n", QJsonDocument(out).toJson(QJsonDocument::Indented).constData());
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -207,6 +250,8 @@ int main(int argc, char *argv[])
             return runHeadlessRecommend(argc, argv);
         else if (qstrcmp(argv[i], "--lyrics") == 0)
             return runHeadlessLyrics(argc, argv);
+        else if (qstrcmp(argv[i], "--stats") == 0)
+            return runHeadlessStats(argc, argv);
 
     gst_init(&argc, &argv);
 
@@ -239,6 +284,7 @@ int main(int argc, char *argv[])
     parser.addOption({QStringLiteral("scan"), QStringLiteral("Ordner ohne Oberfläche scannen und Zeiten ausgeben.")});
     parser.addOption({QStringLiteral("analyze"), QStringLiteral("Dateien ohne Oberfläche analysieren (Tempo, Tonart, Lautheit …).")});
     parser.addOption({QStringLiteral("lyrics"), QStringLiteral("Liedtext von Dateien zeigen (.lrc daneben, Tags).")});
+    parser.addOption({QStringLiteral("stats"), QStringLiteral("Statistik als JSON zeigen (mit Jahr: der Jahresrückblick).")});
     parser.addPositionalArgument(QStringLiteral("dateien"), QStringLiteral("Musikdateien oder Ordner zum Abspielen."),
                                  QStringLiteral("[dateien…]"));
     parser.process(app);
@@ -299,6 +345,7 @@ int main(int argc, char *argv[])
     Tray tray(&player, &library);
     Stations stations(&player, &queue);
     QObject::connect(&stations, &Stations::message, &library, &Library::message);
+    Stats stats(&player, &queue);
     AudioCd cd(&player, &queue);
     QObject::connect(&cd, &AudioCd::message, &library, &Library::message);
     QObject::connect(&cd, &AudioCd::driveChanged, &library, &Library::reloadViews); // a USB drive comes or goes
@@ -344,6 +391,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Tray", &tray);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Stations", &stations);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "AudioCd", &cd);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Stats", &stats);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");
