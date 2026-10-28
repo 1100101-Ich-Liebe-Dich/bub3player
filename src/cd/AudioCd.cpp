@@ -98,6 +98,18 @@ bool taken(const QString &path)
     return ::lstat(QFile::encodeName(path).constData(), &st) == 0;
 }
 
+// On the disk before it gets its real name: after a power cut there is no empty
+// "NN Titel.flac" that the next reading would take for an existing file.
+bool flush(const QString &path)
+{
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    const bool ok = ::fsync(fd) == 0;
+    ::close(fd);
+    return ok;
+}
+
 // Gives the finished file `from` its name `to` without ever replacing or writing
 // through anything that is there (not even a dangling link). False: `to` was
 // taken (`*error` empty) or the file system refused (`*error` says why); `from`
@@ -126,25 +138,38 @@ bool place(const QString &from, const QString &to, QString *error)
     const int out = ::open(t.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
     if (out < 0)
         return fail(errno);
-    QFile in(from);
-    bool ok = in.open(QIODevice::ReadOnly);
-    while (ok) {
-        const QByteArray chunk = in.read(1 << 20);
-        if (chunk.isEmpty()) {
-            ok = in.atEnd();
+    int problem = 0; // the errno of the first call that failed
+    const int in = ::open(f.constData(), O_RDONLY | O_CLOEXEC);
+    if (in < 0)
+        problem = errno;
+    char buf[1 << 16];
+    while (!problem) {
+        const ssize_t got = ::read(in, buf, sizeof buf);
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got <= 0) {
+            problem = got < 0 ? errno : 0;
             break;
         }
-        for (qsizetype done = 0; ok && done < chunk.size();) {
-            const ssize_t n = ::write(out, chunk.constData() + done, size_t(chunk.size() - done));
-            ok = n > 0 || (n < 0 && errno == EINTR);
-            done += n > 0 ? n : 0;
+        for (ssize_t done = 0; !problem && done < got;) {
+            const ssize_t n = ::write(out, buf + done, size_t(got - done));
+            if (n > 0)
+                done += n;
+            else if (n < 0 && errno != EINTR)
+                problem = errno;
+            else if (n == 0)
+                problem = EIO;
         }
     }
-    const int writeErrno = errno;
-    ok = ::close(out) == 0 && ok;
-    if (!ok) {
+    if (in >= 0)
+        ::close(in);
+    if (!problem && ::fsync(out) != 0)
+        problem = errno;
+    if (::close(out) != 0 && !problem)
+        problem = errno;
+    if (problem) {
         ::unlink(t.constData()); // the file we just made, not one that was there
-        return fail(writeErrno ? writeErrno : EIO);
+        return fail(problem);
     }
     ::unlink(f.constData());
     return true;
@@ -616,6 +641,10 @@ void AudioCd::play(int index)
 {
     if (m_status != 3 || m_tracks.isEmpty())
         return;
+    if (m_ripping) { // the queue stays as it is
+        emit message(External::cdBusyText());
+        return;
+    }
     QVector<qint64> items;
     for (const Track &t : std::as_const(m_tracks))
         items << External::cdItem(t.number);
@@ -696,10 +725,10 @@ void AudioCd::rip()
         emit message(tr("In den Ordner %1 kann nicht geschrieben werden").arg(root));
         return;
     }
-    if (External::isCd(m_player->currentId()))
-        m_player->stop(); // one drive cannot play and be read at once
-    m_ripping = true;
+    // one drive cannot play and be read at once
     External::setCdBusy(true);
+    m_player->releaseCd();
+    m_ripping = true;
     m_ripCancel = false;
     m_ripProgress = 0;
     m_ripText = tr("Wird eingelesen …");
@@ -739,7 +768,9 @@ void AudioCd::rip()
             if (src) {
                 g_object_set(src, "device", dev.constData(), "track", guint(t.number), nullptr);
                 if (element == "cdparanoiasrc")
-                    g_object_set(src, "paranoia-mode", 0xff, nullptr); // full error correction
+                    // full error correction, but a sector that cannot be read is skipped in
+                    // the end (0xff would retry it forever: "never skip")
+                    g_object_set(src, "paranoia-mode", 0xdf, nullptr);
             }
             if (sink)
                 g_object_set(sink, "location", QFile::encodeName(part).constData(), nullptr);
@@ -813,7 +844,10 @@ void AudioCd::rip()
                 break;
             }
             QString placeError;
-            if (place(part, target, &placeError))
+            if (!flush(part)) {
+                error = tr("%1 lässt sich nicht speichern").arg(QFileInfo(target).fileName());
+                QFile::remove(part);
+            } else if (place(part, target, &placeError))
                 ++written;
             else if (placeError.isEmpty())
                 ++skipped; // appeared meanwhile: left as it is

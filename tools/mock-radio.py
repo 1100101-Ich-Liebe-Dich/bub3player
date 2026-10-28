@@ -11,7 +11,9 @@ internet:
 Stations (endless MP3 streams with ICY metadata: the song title changes every
 --every seconds):
     /stream/<n>          station n (0…4), "Testwelle <n>"
+    /icy/<n>             the same as an old SHOUTcast server ("ICY 200 OK")
     /list/<n>.pls|.m3u   a station list pointing at /stream/<n>
+    /nest/<n>.pls        a list pointing at /list/<n>.m3u
     /broken              answers 404
     /seite               a web page (text/html), not a station
 radio-browser.info (only what the player uses):
@@ -99,9 +101,9 @@ class H(BaseHTTPRequestHandler):
         base = "http://%s" % self.headers.get("Host", "127.0.0.1:%d" % args.port)
         with lock:
             requests.append({"path": self.path, "ua": self.headers.get("User-Agent", ""), "time": time.time()})
-        m = re.fullmatch(r"/stream/(\d)", u.path)
+        m = re.fullmatch(r"/(stream|icy)/(\d)", u.path)
         if m:
-            return self.stream(int(m.group(1)))
+            return self.stream(int(m.group(2)), m.group(1) == "icy")
         m = re.fullmatch(r"/list/(\d)\.(pls|m3u)", u.path)
         if m:
             n = int(m.group(1))
@@ -112,6 +114,10 @@ class H(BaseHTTPRequestHandler):
             return self.send_body(body.encode(), "audio/x-mpegurl")
         if u.path == "/seite":
             return self.send_body(b"<html><body>Kein Radio</body></html>", "text/html; charset=utf-8")
+        m = re.fullmatch(r"/nest/(\d)\.pls", u.path)
+        if m:  # a list that points at a list
+            body = "[playlist]\nNumberOfEntries=1\nFile1=%s/list/%s.m3u\n" % (base, m.group(1))
+            return self.send_body(body.encode(), "audio/x-scpls")
         m = re.fullmatch(r"/logo/(\d)\.png", u.path)
         if m:
             n = int(m.group(1))
@@ -146,18 +152,18 @@ class H(BaseHTTPRequestHandler):
                 return self.send_body(json.dumps(requests).encode(), "application/json")
         return self.send_body(b"not found", "text/plain", 404)
 
-    def stream(self, n):
+    def stream(self, n, v1=False):
         icy = self.headers.get("Icy-MetaData") == "1"
         metaint = 8192
-        self.send_response(200)
-        self.send_header("Content-Type", "audio/mpeg")
-        self.send_header("icy-name", NAMES[n])
-        self.send_header("icy-genre", TAGS[n])
-        self.send_header("icy-br", "128")
-        self.send_header("icy-url", "http://example.org/%d" % n)
-        if icy:
-            self.send_header("icy-metaint", str(metaint))
-        self.end_headers()
+        head = [("Content-Type", "audio/mpeg"), ("icy-name", NAMES[n]), ("icy-genre", TAGS[n]), ("icy-br", "128"),
+                ("icy-url", "http://example.org/%d" % n)] + ([("icy-metaint", str(metaint))] if icy else [])
+        if v1:  # old SHOUTcast: "ICY 200 OK" instead of an HTTP status line
+            self.wfile.write(b"ICY 200 OK\r\n" + b"".join(("%s: %s\r\n" % h).encode() for h in head) + b"\r\n")
+        else:
+            self.send_response(200)
+            for k, v in head:
+                self.send_header(k, v)
+            self.end_headers()
         start = time.time()
         sent = 0         # audio bytes since the last metadata block
         fi = 0

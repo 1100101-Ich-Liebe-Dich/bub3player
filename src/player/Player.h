@@ -174,6 +174,9 @@ public:
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
+    // The drive is about to be read into files (External::cdBusy): nothing of the
+    // CD plays on, neither now nor as the next track.
+    void releaseCd();
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void seek(qint64 ms);

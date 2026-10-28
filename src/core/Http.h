@@ -32,6 +32,7 @@ QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *stat
 struct Probe
 {
     int status = 0;
+    int error = 0;  // QNetworkReply::NetworkError (0: none)
     QList<QPair<QByteArray, QByteArray>> headers;
     QByteArray head;
     QUrl finalUrl;

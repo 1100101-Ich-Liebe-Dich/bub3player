@@ -28,6 +28,11 @@ bool cdBusy()
     return g_cdBusy.load();
 }
 
+QString cdBusyText()
+{
+    return QCoreApplication::translate("External", "Während des Einlesens kann die CD nicht spielen.");
+}
+
 void setDisc(const CdDisc &disc)
 {
     QMutexLocker lock(&g_mutex);

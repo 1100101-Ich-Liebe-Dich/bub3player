@@ -77,7 +77,7 @@ private:
     static bool isAudio(const Http::Probe &p); // a stream, not a web page or a picture
     void insert(QVector<Station> stations, bool announce, bool playFirst = false);
     void fetchLogo(qint64 id, const QString &address);
-    void onTrackChanged();
+    void countListening(); // the station that plays now (last played, radio-browser click)
     void run(std::function<void()> work); // network and database writes, one after the other
     QString directory() const;            // radio-browser.info, or a stand-in for tests
     std::function<bool()> cancelled() const; // for requests: true once the player quits

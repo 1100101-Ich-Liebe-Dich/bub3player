@@ -42,6 +42,7 @@ Item {
                 loading: AudioCd.status === 2 || AudioCd.ripping
                 PillButton {
                     visible: page.ready
+                    enabled: !AudioCd.ripping
                     text: qsTr("Abspielen")
                     iconName: "play"
                     primary: true
@@ -161,6 +162,7 @@ Item {
                             id: rowHover
                             anchors.fill: parent
                             hoverEnabled: true
+                            enabled: !AudioCd.ripping
                             cursorShape: Qt.PointingHandCursor
                             onClicked: row.current ? Player.toggle() : AudioCd.play(index)
                         }

@@ -310,8 +310,8 @@ Item {
 
                 Section {
                     title: qsTr("Internetradio und Audio-CD")
-                    text: (AudioCd.available ? qsTr("Beides findest du in der Seitenleiste unter „Hören“ (die Audio-CD nur mit CD-Laufwerk).")
-                                             : qsTr("Das Internetradio findest du in der Seitenleiste unter „Hören“, die Audio-CD dort, sobald es ein CD-Laufwerk gibt."))
+                    text: (AudioCd.available ? qsTr("Beides findest du in der Seitenleiste unter „Hören“.")
+                                             : qsTr("Das Internetradio findest du in der Seitenleiste unter „Hören“, die Audio-CD dort, wenn der Rechner ein CD-Laufwerk hat und GStreamer CDs lesen kann (cdparanoia aus gst-plugins-base)."))
                           + " " + qsTr("Ins Netz geht der Player dafür nur, wenn du es hier oder auf der Seite einschaltest.")
                     HToggle {
                         width: col.width

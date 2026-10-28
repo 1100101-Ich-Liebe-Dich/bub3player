@@ -18,11 +18,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkReply>
 #include <QPointer>
 #include <QSaveFile>
 #include <QSet>
 #include <QSettings>
 #include <QUrlQuery>
+#include <QtConcurrent>
 
 namespace {
 
@@ -39,7 +41,9 @@ QString hostName(const QUrl &u)
 Stations::Stations(Player *player, PlayQueue *queue, QObject *parent) : QObject(parent), m_player(player), m_queue(queue)
 {
     m_pool.setMaxThreadCount(1);
-    connect(player, &Player::trackChanged, this, &Stations::onTrackChanged);
+    // counted when a station really plays (not when it is only shown after a start)
+    connect(player, &Player::trackChanged, this, &Stations::countListening);
+    connect(player, &Player::stateChanged, this, &Stations::countListening);
     reload();
 }
 
@@ -149,6 +153,7 @@ void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
         qint64 firstId = 0; // the first station, new or known
 
         QVector<QPair<qint64, QString>> logos;
+        bool failed = false;
         try {
             DbConnection db = Database::open(1024);
             WriteTx tx(db); // all or nothing
@@ -179,10 +184,19 @@ void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
             tx.commit();
         } catch (const std::exception &e) {
             qWarning() << "Sender nicht gespeichert:" << e.what();
+            // rolled back: none of it is there
+            failed = true;
+            added = known = 0;
+            firstId = 0;
+            logos.clear();
         }
-        QMetaObject::invokeMethod(qApp, [self, added, known, logos, announce, playFirst, firstId, stations] {
+        QMetaObject::invokeMethod(qApp, [self, added, known, logos, announce, playFirst, firstId, stations, failed] {
             if (!self)
                 return;
+            if (failed) {
+                emit self->message(tr("Die Sender konnten nicht gespeichert werden"));
+                return;
+            }
             self->reload();
             for (const auto &[id, address] : logos)
                 self->fetchLogo(id, address);
@@ -212,40 +226,41 @@ void Stations::add(const QString &address, const QString &name, bool playNow)
     QPointer<Stations> self(this);
     const QString given = name.trimmed();
     run([self, url, given, playNow, quitting = cancelled()] {
-        // What answers there: the stream, or a list of streams?
+        const auto refuse = [self](const QString &text) {
+            QMetaObject::invokeMethod(qApp, [self, text] {
+                if (self)
+                    emit self->message(text);
+            }, Qt::QueuedConnection);
+        };
         const Http::Headers headers{{"User-Agent", Http::userAgent()}, {"Icy-MetaData", "1"}};
-        Http::Probe p = Http::probe(url, headers, 10000, 64 * 1024, quitting);
         Station st;
         st.url = url.toString();
         st.stream = url.toString();
-        if (p.status >= 400) {
-            QMetaObject::invokeMethod(qApp, [self, status = p.status] {
-                if (self)
-                    emit self->message(tr("Der Sender antwortet mit einem Fehler (HTTP %1)").arg(status));
-            }, Qt::QueuedConnection);
-            return;
-        }
+        // What answers there: the stream, or a list of streams (at most a list of lists)?
         QString listTitle;
-        if (p.status > 0 && StreamList::looksLikeList(url, p.header("content-type"), p.head) && !StreamList::isHls(p.head)) {
-            const QVector<StreamList::Entry> entries = StreamList::parse(p.head, p.finalUrl.isValid() ? p.finalUrl : url);
-            if (entries.isEmpty()) {
-                QMetaObject::invokeMethod(qApp, [self] {
-                    if (self)
-                        emit self->message(tr("In dieser Liste steht kein Sender"));
-                }, Qt::QueuedConnection);
-                return;
-            }
-            st.stream = entries.first().url.toString();
-            listTitle = entries.first().title;
-            p = Http::probe(entries.first().url, headers, 10000, 4096, quitting); // the stream's own name and format
+        QUrl current = url;
+        Http::Probe p = Http::probe(current, headers, 10000, 64 * 1024, quitting);
+        for (int depth = 0;; ++depth) {
+            // Old SHOUTcast servers answer "ICY 200 OK", which Qt does not take for HTTP
+            // and drops: no status, no headers, but they play all the same.
+            const bool oldShoutcast = p.status == 0 && p.error == QNetworkReply::RemoteHostClosedError;
+            if (p.status == 0 && !oldShoutcast)
+                return refuse(tr("Unter dieser Adresse antwortet niemand"));
+            if (p.status >= 400)
+                return refuse(tr("Der Sender antwortet mit einem Fehler (HTTP %1)").arg(p.status));
+            if (oldShoutcast || !StreamList::looksLikeList(current, p.header("content-type"), p.head) || StreamList::isHls(p.head))
+                break;
+            const QVector<StreamList::Entry> entries = StreamList::parse(p.head, p.finalUrl.isValid() ? p.finalUrl : current);
+            if (entries.isEmpty() || depth == 2)
+                return refuse(tr("In dieser Liste steht kein Sender"));
+            current = entries.first().url;
+            st.stream = current.toString();
+            if (listTitle.isEmpty())
+                listTitle = entries.first().title;
+            p = Http::probe(current, headers, 10000, 64 * 1024, quitting); // the stream's own name and format
         }
-        if (p.status > 0 && !isAudio(p)) { // a web page, a picture … (a link dropped from the browser)
-            QMetaObject::invokeMethod(qApp, [self] {
-                if (self)
-                    emit self->message(tr("Unter dieser Adresse ist kein Radiosender"));
-            }, Qt::QueuedConnection);
-            return;
-        }
+        if (p.status > 0 && !isAudio(p)) // a web page, a picture … (a link dropped from the browser)
+            return refuse(tr("Unter dieser Adresse ist kein Radiosender"));
         // ICY headers: "icy-name", "icy-br", "icy-genre", "icy-url"
         const QString icyName = QString::fromUtf8(p.header("icy-name")).trimmed();
         st.name = !given.isEmpty() ? given : !icyName.isEmpty() ? icyName : !listTitle.isEmpty() ? listTitle : hostName(QUrl(st.stream));
@@ -255,15 +270,9 @@ void Stations::add(const QString &address, const QString &name, bool playNow)
         const QUrl home(QString::fromUtf8(p.header("icy-url")).trimmed());
         if (Http::isWeb(home))
             st.homepage = home.toString();
-        // Old SHOUTcast servers answer "ICY 200 OK", which Qt does not take for HTTP
-        // (status 0, no headers): they play all the same, so the station is kept.
-        const bool silent = p.status == 0;
-        QMetaObject::invokeMethod(qApp, [self, st, playNow, silent] {
-            if (!self)
-                return;
-            if (silent)
-                emit self->message(tr("Der Sender antwortet gerade nicht; er kommt trotzdem in die Liste"));
-            self->insert({st}, !silent, playNow);
+        QMetaObject::invokeMethod(qApp, [self, st, playNow] {
+            if (self)
+                self->insert({st}, true, playNow);
         }, Qt::QueuedConnection);
     });
 }
@@ -282,7 +291,8 @@ void Stations::openList(const QVariant &pathOrUrl)
 void Stations::readList(const QString &path, bool playNow, bool orPlaylist)
 {
     QPointer<Stations> self(this);
-    run([self, path, playNow, orPlaylist] {
+    // not in the queue of network requests: a playlist of files must not wait for them
+    (void)QtConcurrent::run([self, path, playNow, orPlaylist] {
         // .pls, .xspf and .asx only carry addresses; an .m3u may list files
         const bool m3u = path.endsWith(QLatin1String(".m3u"), Qt::CaseInsensitive) || path.endsWith(QLatin1String(".m3u8"), Qt::CaseInsensitive);
         if (orPlaylist && m3u && !isStationList(path)) {
@@ -318,7 +328,7 @@ bool Stations::isAudio(const Http::Probe &p)
 {
     const QByteArray ct = p.header("content-type").toLower();
     if (ct.isEmpty() || ct.startsWith("audio/") || ct.startsWith("video/") || ct.startsWith("application/ogg")
-        || ct.startsWith("application/octet-stream") || ct.contains("mpegurl") || StreamList::isHls(p.head))
+        || ct.startsWith("application/octet-stream") || StreamList::isHls(p.head))
         return true;
     for (const auto &h : p.headers)
         if (h.first.startsWith("icy-"))
@@ -415,10 +425,10 @@ void Stations::play(qint64 id)
     m_player->playCurrent();
 }
 
-void Stations::onTrackChanged()
+void Stations::countListening()
 {
     const qint64 item = m_player->currentId();
-    if (!External::isStation(item) || item == m_lastPlayed)
+    if (!External::isStation(item) || item == m_lastPlayed || m_player->state() != 1)
         return;
     m_lastPlayed = item;
     const qint64 id = External::stationOf(item);

@@ -44,6 +44,7 @@ CdDisc disc();
 // The drive is being read into files: its tracks do not play meanwhile.
 void setCdBusy(bool busy);
 bool cdBusy();
+QString cdBusyText(); // what to tell when the CD is asked to play meanwhile
 
 // Station logo in the cache (may not exist).
 QString stationLogoFile(qint64 stationId);

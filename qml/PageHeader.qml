@@ -91,8 +91,9 @@ Item {
             color: Theme.textDim
             elide: Text.ElideRight
         }
-        Row {
+        Flow { // wraps when the page is narrow (themes with side panels)
             id: actionRow
+            Layout.fillWidth: true
             Layout.topMargin: 10
             spacing: 10
         }

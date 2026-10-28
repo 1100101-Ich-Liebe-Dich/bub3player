@@ -136,6 +136,8 @@ QString codecName(const QString &description)
     // the order matters: "MPEG-4 AAC" is no MP3, "audio/ogg; codecs=opus" no Vorbis
     const QString d = description.toLower();
     const auto has = [&d](const char *s) { return d.contains(QLatin1String(s)); };
+    if (has("mpegurl")) // a list (HLS): says nothing about the codec
+        return {};
     if (has("aac"))
         return QStringLiteral("AAC");
     if (has("opus"))

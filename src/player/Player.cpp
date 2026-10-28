@@ -710,10 +710,8 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         }
         // No gapless hand-over armed (transitions on, or the blend could not
         // start in time): continue with the next track the plain way.
-        if (m_queue->nextId() != 0 && m_queue->advance()) {
-            load(m_queue->currentId(), true);
+        if (m_queue->nextId() != 0 && m_queue->advance() && load(m_queue->currentId(), true))
             break;
-        }
         gst_element_set_state(d.playbin, GST_STATE_READY);
         m_position = 0;
         emit positionChanged();
@@ -759,11 +757,11 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
                 m_suspectId = 0;
                 retryOutput(Resume::None);
             }
-            load(m_queue->currentId(), m_wantPlay);
-        } else {
-            m_switching = false;
-            setState(0);
+            if (load(m_queue->currentId(), m_wantPlay))
+                break;
         }
+        m_switching = false;
+        setState(0);
         break;
     }
     case GST_MESSAGE_WARNING: {
@@ -1295,7 +1293,10 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
     const QByteArray uri = uriFor(id);
     if (uri.isEmpty()) {
         if (External::isCd(id) && External::cdBusy()) {
-            m_error = tr("Während des Einlesens kann die CD nicht spielen.");
+            // the queue points at the CD track now: nothing else plays on as if it were it
+            if (m_state != 0)
+                stop();
+            m_error = External::cdBusyText();
             emit errorChanged();
         }
         return false;
@@ -1333,7 +1334,7 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
 // station by itself).
 bool Player::reconnect()
 {
-    if (!live() || m_position < 10000)
+    if (!live() || m_position < 10000 || m_state != 1) // paused: Play connects anew
         return false;
     qInfo() << "Sender: neu verbinden";
     return load(m_playingId, true, 0, true);
@@ -1410,6 +1411,14 @@ void Player::stop()
     m_position = 0;
     emit positionChanged();
     setState(0);
+}
+
+void Player::releaseCd()
+{
+    if (External::isCd(m_playingId) && m_state != 0)
+        stop();
+    else if (External::isCd(m_queue->nextId()))
+        armNext(); // the hand-over finds no address now
 }
 
 void Player::next()

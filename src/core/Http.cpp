@@ -89,6 +89,7 @@ Probe probe(const QUrl &url, const Headers &headers, int timeoutMs, qint64 maxBy
     watch(poll, reply, cancel);
     loop.exec();
     p.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    p.error = int(reply->error());
     p.finalUrl = reply->url();
     for (const auto &h : reply->rawHeaderPairs())
         p.headers.append({h.first.toLower(), h.second});
