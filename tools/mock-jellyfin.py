@@ -274,7 +274,33 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 reports.append({"path": path, "body": b, "time": time.time()})
             return self.empty(204)
+        if self.favorite(p, True):
+            return
         return self.empty(404)
+
+    def do_DELETE(self):
+        path, q = self.q()
+        if not self.authed(q):
+            return self.empty(401)
+        if not self.favorite(path.lower(), False):
+            self.empty(404)
+
+    def favorite(self, p, on):
+        """POST/DELETE /UserFavoriteItems/<item> (10.9+) or /Users/<user>/FavoriteItems/<item>: the
+        heart, also in /mock/reports. Like Jellyfin, it does not count as a change for the
+        incremental sync (only a full one brings it)."""
+        m = re.fullmatch(r"(?:/users/[0-9a-f]+)?/(?:user)?favoriteitems/([0-9a-f]+)", p)
+        if not m:
+            return False
+        t = items.get(m.group(1))
+        if not t:
+            self.empty(404)
+            return True
+        with lock:
+            t["UserData"]["IsFavorite"] = on
+            reports.append({"path": self.path, "favorite": on, "time": time.time()})
+        self.send_json({"IsFavorite": on, "Key": t["Id"]})
+        return True
 
     def quick_initiate(self):
         s = uuid.uuid4().hex

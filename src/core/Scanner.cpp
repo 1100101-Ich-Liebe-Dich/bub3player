@@ -2,6 +2,7 @@
 #include "core/Scanner.h"
 
 #include "core/Database.h"
+#include "core/Paths.h"
 #include "core/TagReader.h"
 
 #include <QDebug>
@@ -513,7 +514,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                                 const QString real = QFileInfo(QFile::decodeName(QByteArray(sub.data(), int(sub.size())))).canonicalFilePath();
                                 bool inside = false;
                                 for (const QString &r : std::as_const(roots))
-                                    inside = inside || real == r || real.startsWith(r + QLatin1Char('/'));
+                                    inside = inside || Paths::isUnder(real, r);
                                 if (inside)
                                     continue;
                             }
@@ -534,7 +535,7 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                 // that is gone is handled by its parent (which saw it go).
                 auto rootOf = [&](const QString &p) -> QString {
                     for (const QString &r : std::as_const(roots))
-                        if (p == r || p.startsWith(r + QLatin1Char('/')))
+                        if (Paths::isUnder(p, r))
                             return r;
                     return {};
                 };
@@ -552,8 +553,10 @@ void Scanner::run(QStringList roots, int threads, bool verbose, int mode, QStrin
                     if (root.isEmpty() || !rootUsable(root))
                         continue; // not ours, or the whole drive is away: keep everything
                     // nearest folder that exists and that the database knows
-                    while (f != root && (!QFileInfo(f).isDir() || knownId(f) == 0))
-                        f = f.left(f.lastIndexOf(QLatin1Char('/')));
+                    while (f != root && (!QFileInfo(f).isDir() || knownId(f) == 0)) {
+                        const qsizetype cut = f.lastIndexOf(QLatin1Char('/'));
+                        f = cut > 0 ? f.left(cut) : root; // the root may be "/"
+                    }
                     todo.insert(f);
                     st.scanned << f;
                 }

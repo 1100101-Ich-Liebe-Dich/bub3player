@@ -88,10 +88,12 @@ QVariantList builtIn()
         view("tracks", "Alle Titel", "note", lib, "tracks", {{QStringLiteral("sort"), QStringLiteral("album")}}),
         view("albums", "Alben", "album", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("album")}}, "grid"),
         view("artists", "Künstler", "artist", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("albumArtist")}}, "grid"),
+        view("favorites", "Favoriten", "heart", lib, "tracks",
+             {{QStringLiteral("filters"), QVariantList{filter("rating", "ge", 5)}}, {QStringLiteral("sort"), QStringLiteral("artist")}}),
         view("genres", "Genres", "tag", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("genre")}}, "tiles"),
         view("folders", "Ordner", "folder", lib, "folders", {}),
 
-        view("foryou", "Für dich", "heart", disc, "foryou", {}),
+        view("foryou", "Für dich", "radio", disc, "foryou", {}),
         view("recent", "Zuletzt hinzugefügt", "new", disc, "tracks",
              {{QStringLiteral("sort"), QStringLiteral("added")}, {QStringLiteral("desc"), true}}),
         view("added-month", "Nach Monat hinzugefügt", "calendar", disc, "groups",

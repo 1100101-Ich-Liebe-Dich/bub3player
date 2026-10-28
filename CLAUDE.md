@@ -80,7 +80,10 @@ src/analysis    AudioAnalyzer (ein Durchgang: Lautheit, Tempo, Tonart, Wellenfor
 src/recommend   Recommender (Lernen aus dem Hörverlauf, Radio, Autoplay, „Für dich“)
 src/jellyfin    Anmeldung, Abgleich in dieselbe Datenbank, Streaming, Rückmeldung
 src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen), SystemDialogs (QML
-                „SystemDialogs“: Datei-/Ordnerwahl über XDG-Portal, sonst kdialog/zenity)
+                „SystemDialogs“: Datei-/Ordnerwahl über XDG-Portal, sonst kdialog/zenity),
+                Tray (QML „Tray“: Symbol im Infobereich als StatusNotifierItem + dbusmenu,
+                Benachrichtigung beim Titelwechsel), SingleInstance (ein Player pro Datenbank,
+                org.freedesktop.Application: „Öffnen mit“ an den laufenden Player)
 qml/            gemeinsame Seiten und Bausteine (H*-Bausteine: HDialog, HCombo, HTextField,
                 HMenu …), PlaylistUi (alle Playlist-Dialoge), SmartEditor, LyricsView
                 (Liedtext für die Großansichten; die Themes wählen nur Schrift, Farben, Ausrichtung)
@@ -114,6 +117,20 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
 - Scanner: Ordner mit Gerät (`folders.dev`); verschwundene Einhängepunkte und leere
   Einhängepunkte mit bekannter Musik gelten als „nicht da“ und werden nie gelöscht.
 - Jede optionale GStreamer-Komponente vorher prüfen; fehlt sie, fällt nur die Funktion weg.
+- Favoriten: das Herz ist `tracks.rating = 5` (`TrackRow::FavoriteRating`), nie in die Dateien.
+  Setzen über `Library.setFavorite/setFavoriteRows/toggleCurrentFavorite` (Listen sofort, Datenbank
+  in einem eigenen Schreib-Thread, bis dahin gilt das Herz vorläufig im `TrackCache`);
+  Jellyfin-Titel gehen über `remoteFavoritesChanged` an den Server (höchstens 4 Anfragen, eine je
+  Titel). Offen Gebliebenes steht in `<datenbank>-jellyfin-favorites.txt` (eine Zeile je Herz)
+  und wird nachgeschickt; der Abgleich übernimmt `IsFavorite` vom Server, schreibt danach aber die
+  eigenen offenen Herzen zurück. Jedes Theme zeigt das Herz in Leiste und Großansicht
+  (`Library.currentFavorite`).
+- Infobereich und Benachrichtigungen direkt über D-Bus, ohne QtWidgets und ohne Qt.labs.platform
+  (auf Debian/Ubuntu nicht immer installiert). Schließen in den Infobereich nur, wenn ein Infobereich
+  das Symbol angenommen hat (`Tray.available`), sonst wäre das Fenster nicht mehr erreichbar.
+- Dateien von außen (Ziehen und Ablegen, „Öffnen mit“, Kommandozeile) laufen über
+  `window.openPaths` → `Library.openPaths`: gespielt wird nur, was in der Bibliothek ist;
+  außerhalb fragt der Player, ob der Ordner dazukommen soll.
 - Liedtexte: gesucht nur, solange eine Großansicht offen ist (`Lyrics.active`); ins Netz (LRCLIB)
   nur, wenn eingeschaltet und Liedtexte gezeigt werden sollen. Nie etwas neben die Musik schreiben.
   Jede Großansicht zeigt `LyricsView` statt des Covers, wenn `window.lyricsOn`; Schalter ruft
@@ -146,6 +163,7 @@ Werkzeuge in `tools/`:
 | `tools/ui-test.sh mem NAME SEK [Optionen]` | Speicher: gesamt und eigene Daten, Spitze und Ende |
 | `tools/mock-jellyfin.py --audio ORDNER` | kleiner Jellyfin-Server (Benutzer/Passwort `demo`), auch mit Liedtexten |
 | `tools/mock-portal.py --answer PFAD` | Ersatz für den Dateidialog des XDG-Portals (`pip install dbus-next`), in `dbus-run-session` zusammen mit dem Player starten; zeigt die Aufrufe |
+| `tools/mock-tray.py` | Ersatz für Infobereich (StatusNotifierWatcher) und Benachrichtigungen; Befehle auf stdin (`menu`, `click ID`, `activate` …), zusammen mit dem Player in `dbus-run-session` |
 | `tools/mock-lrclib.py` | Ersatz für LRCLIB; Player mit `HALCYON_LRCLIB_URL=http://127.0.0.1:8098` starten, `/mock/requests` zeigt die Anfragen |
 | `dist/appimage/build-appimage.sh` | AppImage lokal bauen |
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
@@ -243,6 +261,13 @@ Typischer Ablauf vor einem PR:
   Sprung per Klick, in allen acht Themes.
 - **1.3.1**: Rechtsklick in der Warteschlange (Abspielen, Zum Album, Zum Künstler, Entfernen),
   Datei- und Ordnerwahl über den Dialog des Desktops.
+- **1.4.0** „Alltag“: Favoriten (Herz, auch zu Jellyfin), Symbol im Infobereich und
+  Benachrichtigung, Ziehen und Ablegen und „Öffnen mit“ (ein Player).
+- **Als Nächstes**: 1.5.0 Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
+  radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
+  vorhandene Dateien anfassen, auf Wunsch MusicBrainz); 1.6.0 Statistik/„Dein Jahr in Musik“
+  (Tabelle `plays`); 2.0.0 englische Oberfläche (Deutsch bleibt Standard) und englische README.
+  ReplayGain bleibt titelweise (Wunsch des Inhabers: alle Titel gleich laut), nichts in die Dateien.
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.

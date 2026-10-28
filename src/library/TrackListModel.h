@@ -27,7 +27,7 @@ public:
     enum Roles {
         IdRole = Qt::UserRole + 1, TitleRole, ArtistRole, AlbumRole, AlbumArtistRole, YearRole, DurationRole,
         DurationMsRole, FormatRole, TrackNoRole, DiscNoRole, GenreRole, AddedRole, MtimeRole, PlayCountRole,
-        LastPlayedRole, FileNameRole, ValidRole, SelectedRole
+        LastPlayedRole, FileNameRole, ValidRole, SelectedRole, FavoriteRole
     };
     enum SelectMode { Replace = 0, Toggle = 1, Range = 2 };
     Q_ENUM(SelectMode)
@@ -74,6 +74,8 @@ signals:
 private:
     const TrackRow &rowAt(int row) const;
     void apply(int generation, QVector<qint64> ids, QVector<qint64> keys, qint64 totalMs, QString error);
+    void favoritesChanged(const QVector<qint64> &ids, bool on);
+    bool filtersOnRating() const;
     void setBit(int row, bool on);
     void selectionUpdated();
 

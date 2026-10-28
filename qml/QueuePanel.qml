@@ -245,6 +245,7 @@ Rectangle {
                     rowMenu.trackId = model.trackId
                     rowMenu.album = model.album || ""
                     rowMenu.albumArtist = model.albumArtist || ""
+                    rowMenu.fav = Library.isFavorite(model.trackId)
                     rowMenu.popup()
                 }
             }
@@ -269,12 +270,17 @@ Rectangle {
         property var trackId: 0
         property string album: ""
         property string albumArtist: ""
+        property bool fav: false
         // the same track, and not the one playing (that can change while the menu is open)
         function usable() { return Queue.idAt(row) === trackId && row !== Queue.currentRow }
         HMenuItem {
             text: qsTr("Abspielen")
             enabled: rowMenu.row !== Queue.currentRow
             onTriggered: if (rowMenu.usable()) Player.playRow(rowMenu.row)
+        }
+        HMenuItem {
+            text: rowMenu.fav ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten")
+            onTriggered: Library.setFavorite(rowMenu.trackId, !rowMenu.fav)
         }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
         HMenuItem {

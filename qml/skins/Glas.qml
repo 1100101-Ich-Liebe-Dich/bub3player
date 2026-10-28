@@ -320,26 +320,43 @@ Item {
                             text: Player.format
                         }
                     }
-                    Column {
+                    Item {
                         width: parent.width
-                        spacing: 3
-                        Text {
-                            width: parent.width
-                            text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
-                            elide: Text.ElideRight
-                            font.family: Theme.displayFont
-                            font.pixelSize: 21
-                            font.weight: Font.Bold
-                            color: Theme.text
+                        height: nowText.implicitHeight
+                        Column {
+                            id: nowText
+                            anchors.left: parent.left
+                            anchors.right: sideHeart.left
+                            spacing: 3
+                            Text {
+                                width: parent.width
+                                text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
+                                elide: Text.ElideRight
+                                font.family: Theme.displayFont
+                                font.pixelSize: 21
+                                font.weight: Font.Bold
+                                color: Theme.text
+                            }
+                            Text {
+                                width: parent.width
+                                text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
+                                elide: Text.ElideRight
+                                font.family: Theme.uiFont
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                                color: Theme.textDim
+                            }
                         }
-                        Text {
-                            width: parent.width
-                            text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
-                            elide: Text.ElideRight
-                            font.family: Theme.uiFont
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
-                            color: Theme.textDim
+                        HeartButton {
+                            id: sideHeart
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: Player.currentId > 0
+                            width: visible ? size : 0
+                            onColor: "white"
+                            offColor: Qt.rgba(1, 1, 1, 0.75)
+                            on: Library.currentFavorite
+                            onClicked: Library.toggleCurrentFavorite()
                         }
                     }
                     GlassSeek { width: parent.width }
@@ -635,7 +652,7 @@ Item {
                 Item {
                     width: parent.width
                     height: 84
-                    GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 46; quiet: true; iconName: "shuffle"; active: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
+                    GlassButton { id: bigShuffle; anchors.verticalCenter: parent.verticalCenter; size: 46; quiet: true; iconName: "shuffle"; active: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
                     Row {
                         anchors.centerIn: parent
                         spacing: 18
@@ -644,7 +661,8 @@ Item {
                         GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 58; iconName: "next"; onClicked: Player.next() }
                     }
                     GlassButton { id: bigRepeat; anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; size: 46; quiet: true; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
-                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.right: bigRepeat.left; anchors.rightMargin: 8; size: 46; quiet: true; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
+                    GlassButton { id: bigLyrics; anchors.verticalCenter: parent.verticalCenter; anchors.right: bigRepeat.left; anchors.rightMargin: 8; size: 46; quiet: true; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
+                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.left: bigShuffle.right; anchors.leftMargin: 8; size: 46; quiet: true; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
                 }
             }
         }

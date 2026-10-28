@@ -34,6 +34,7 @@ HDialog {
         { key: "year", label: qsTr("Erscheinungsjahr"), type: "number" },
         { key: "added", label: qsTr("Hinzugefügt"), type: "date" },
         { key: "lastPlayed", label: qsTr("Zuletzt gespielt"), type: "played" },
+        { key: "rating", label: qsTr("Favorit"), type: "favorite" },
         { key: "playCount", label: qsTr("Wiedergaben"), type: "number" },
         { key: "skipCount", label: qsTr("Übersprungen"), type: "number" },
         { key: "duration", label: qsTr("Dauer (Minuten)"), type: "minutes" },
@@ -65,10 +66,11 @@ HDialog {
                  { value: "never", label: qsTr("noch nie") }, { value: "ever", label: qsTr("schon mal") }],
         key: [{ value: "eq", label: qsTr("ist") }, { value: "ne", label: qsTr("ist nicht") }],
         source: [{ value: "local", label: qsTr("ist lokal") }, { value: "remote", label: qsTr("ist der Jellyfin-Server") }],
+        favorite: [{ value: "fav", label: qsTr("ist ein Favorit") }, { value: "nofav", label: qsTr("ist kein Favorit") }],
         playlist: [{ value: "eq", label: qsTr("ist in") }, { value: "ne", label: qsTr("ist nicht in") }],
         folder: [{ value: "under", label: qsTr("liegt in") }]
     })
-    readonly property var noValueOps: ["empty", "notEmpty", "never", "ever", "local", "remote"]
+    readonly property var noValueOps: ["empty", "notEmpty", "never", "ever", "local", "remote", "fav", "nofav"]
     readonly property var sortOptions: [
         { value: "random", label: qsTr("Zufällig") }, { value: "added", label: qsTr("Hinzugefügt") },
         { value: "lastPlayed", label: qsTr("Zuletzt gespielt") }, { value: "playCount", label: qsTr("Wiedergaben") },
@@ -138,6 +140,8 @@ HDialog {
         case "ever": return { field: r.field, op: "gt", value: 0 }
         case "local": return { field: "source", op: "eq", value: 1 }
         case "remote": return { field: "source", op: "ne", value: 1 }
+        case "fav": return { field: "rating", op: "ge", value: 5 }
+        case "nofav": return { field: "rating", op: "lt", value: 5 }
         case "empty": case "notEmpty": return { field: r.field, op: r.op }
         }
         var v = r.value
@@ -152,6 +156,7 @@ HDialog {
         var t = typeOf(f.field)
         var op = f.op, v = f.value
         if (f.field === "source") return { field: "source", op: f.op === "eq" ? "local" : "remote", value: "" }
+        if (f.field === "rating") return { field: "rating", op: f.op === "lt" ? "nofav" : "fav", value: "" }
         if (t === "played" && f.op === "eq" && Number(v) === 0) return { field: f.field, op: "never", value: "" }
         if (t === "played" && f.op === "gt" && Number(v) === 0) return { field: f.field, op: "ever", value: "" }
         if (v === undefined || v === null) v = ""

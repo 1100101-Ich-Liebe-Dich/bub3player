@@ -9,5 +9,5 @@
 
 - [ ] `cmake --build build` ohne Warnungen
 - [ ] in mindestens zwei Themes angesehen (bei Änderungen an der Oberfläche)
-- [ ] `CHANGELOG.md` unter „Unveröffentlicht“ ergänzt
+- [ ] `CHANGELOG.md` ergänzt (neue Version oben)
 - [ ] Ausgehängte Laufwerke löschen weiterhin nichts (bei Änderungen an Scanner oder Bibliothek)

@@ -4,10 +4,12 @@
 #include "core/Database.h"
 #include <QStringList>
 
+#include <algorithm>
+
 namespace {
 const char *Columns = "t.id, t.folder_id, t.added_at, t.mtime, t.last_played, t.title, t.artist, t.album, t.aa, "
                       "t.genre, t.codec, t.filename, t.year, t.track_no, t.disc_no, t.duration_ms, t.bitrate, "
-                      "t.sample_rate, t.bits, t.play_count, t.source_id, COALESCE(t.remote_id, '')";
+                      "t.sample_rate, t.bits, t.play_count, t.source_id, COALESCE(t.remote_id, ''), t.rating";
 
 TrackRow readRow(const Stmt &s)
 {
@@ -34,6 +36,7 @@ TrackRow readRow(const Stmt &s)
     r.playCount = s.i32(19);
     r.sourceId = s.i64(20);
     r.remoteId = s.str(21);
+    r.rating = s.i32(22);
     r.valid = true;
     return r;
 }
@@ -96,6 +99,7 @@ QVector<TrackRow> TrackCache::fetch(const QVector<qint64> &ids)
         Stmt s(db(), sql);
         while (s.step()) {
             TrackRow r = readRow(s);
+            applyPending(r);
             found.insert(r.id, r);
         }
     } catch (const SqlError &) {
@@ -117,8 +121,10 @@ TrackRow TrackCache::get(qint64 id)
     try {
         Stmt s(db(), QStringLiteral("SELECT %1 FROM tracks t WHERE t.id = ?").arg(QLatin1String(Columns)));
         s.bind(1, id);
-        if (s.step())
+        if (s.step()) {
             r = readRow(s);
+            applyPending(r);
+        }
     } catch (const SqlError &) {
     }
     m_rows.insert(id, r);
@@ -135,6 +141,30 @@ QString TrackCache::pathOf(qint64 id)
     } catch (const SqlError &) {
     }
     return {};
+}
+
+quint64 TrackCache::setPendingRating(QVector<qint64> sortedIds, int rating)
+{
+    for (qint64 id : std::as_const(sortedIds)) {
+        auto it = m_rows.find(id);
+        if (it != m_rows.end())
+            it->rating = rating;
+    }
+    const quint64 ticket = m_nextTicket++;
+    m_pending.append({ticket, std::move(sortedIds), rating});
+    return ticket;
+}
+
+void TrackCache::donePending(quint64 ticket)
+{
+    m_pending.removeIf([ticket](const PendingRating &p) { return p.ticket == ticket; });
+}
+
+void TrackCache::applyPending(TrackRow &row) const
+{
+    for (const PendingRating &p : m_pending)
+        if (std::binary_search(p.ids.cbegin(), p.ids.cend(), row.id))
+            row.rating = p.rating;
 }
 
 void TrackCache::invalidate()

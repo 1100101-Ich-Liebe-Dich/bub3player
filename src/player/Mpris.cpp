@@ -4,6 +4,7 @@
 #include "core/CoverProvider.h"
 #include "player/PlayQueue.h"
 #include "player/Player.h"
+#include "ui/SingleInstance.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -32,11 +33,7 @@ QStringList MprisRoot::mimeTypes() const
 
 void MprisRoot::Raise()
 {
-    if (window) {
-        window->show();
-        window->raise();
-        window->requestActivate();
-    }
+    raiseWindow(window);
 }
 
 void MprisRoot::Quit()

@@ -2,6 +2,7 @@
 #include "core/FolderWatcher.h"
 
 #include "core/Database.h"
+#include "core/Paths.h"
 #include "core/TagReader.h"
 
 #include <QDebug>
@@ -27,11 +28,6 @@ namespace {
 // written; IN_CLOSE_WRITE follows), IN_ATTRIB too (a tag editor writes the file).
 constexpr uint32_t WatchMask = IN_CREATE | IN_DELETE | IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF
                                | IN_MOVE_SELF | IN_ONLYDIR | IN_EXCL_UNLINK;
-
-bool under(const QString &path, const QString &root)
-{
-    return path == root || path.startsWith(root + QLatin1Char('/'));
-}
 
 } // namespace
 
@@ -156,7 +152,7 @@ void FolderWatcher::addWatches(const QStringList &paths, bool all, const QString
         db.exec("PRAGMA mmap_size=0"); // a short look at the folder list: no need to map the file
         auto inRoots = [&](const QString &p) {
             for (const QString &r : roots)
-                if (under(p, r))
+                if (Paths::isUnder(p, r))
                     return true;
             return false;
         };

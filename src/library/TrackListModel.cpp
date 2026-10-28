@@ -6,6 +6,7 @@
 #include "library/QueryBuilder.h"
 
 #include <QDateTime>
+#include <algorithm>
 #include <bit>
 #include <QLocale>
 #include <QPointer>
@@ -13,8 +14,41 @@
 
 TrackListModel::TrackListModel(QObject *parent) : QAbstractListModel(parent)
 {
-    if (Library::instance())
+    if (Library::instance()) {
         connect(Library::instance(), &Library::changed, this, &TrackListModel::reload);
+        connect(Library::instance(), &Library::favoritesChanged, this, &TrackListModel::favoritesChanged);
+        // "Favoriten" and smart playlists with the rule: the list itself changes
+        connect(Library::instance(), &Library::favoritesSaved, this, [this] {
+            if (filtersOnRating())
+                reload();
+        });
+    }
+}
+
+bool TrackListModel::filtersOnRating() const
+{
+    for (const char *key : {"filters", "require"})
+        for (const QVariant &f : m_spec.value(QLatin1String(key)).toList())
+            if (f.toMap().value(QStringLiteral("field")).toString() == QLatin1String("rating"))
+                return true;
+    return false;
+}
+
+// Only the pages in memory hold copies of rows: at most MaxPages * PageSize to look at.
+// `ids` are sorted.
+void TrackListModel::favoritesChanged(const QVector<qint64> &ids, bool on)
+{
+    const int rating = on ? TrackRow::FavoriteRating : 0;
+    for (auto it = m_pages.begin(); it != m_pages.end(); ++it) {
+        QVector<TrackRow> &rows = it.value();
+        for (int i = 0; i < rows.size(); ++i) {
+            if (rows[i].rating == rating || !std::binary_search(ids.cbegin(), ids.cend(), rows[i].id))
+                continue;
+            rows[i].rating = rating;
+            const QModelIndex idx = index(it.key() * PageSize + i);
+            emit dataChanged(idx, idx, {FavoriteRole});
+        }
+    }
 }
 
 int TrackListModel::rowCount(const QModelIndex &parent) const
@@ -30,6 +64,7 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         {DurationMsRole, "durationMs"}, {FormatRole, "format"}, {TrackNoRole, "trackNo"}, {DiscNoRole, "discNo"},
         {GenreRole, "genre"}, {AddedRole, "added"}, {MtimeRole, "mtime"}, {PlayCountRole, "playCount"},
         {LastPlayedRole, "lastPlayed"}, {FileNameRole, "fileName"}, {ValidRole, "valid"}, {SelectedRole, "selected"},
+        {FavoriteRole, "favorite"},
     };
 }
 
@@ -84,6 +119,7 @@ QVariant TrackListModel::data(const QModelIndex &index, int role) const
     case LastPlayedRole: return r.lastPlayed > 0 ? shortDate(r.lastPlayed) : QString();
     case FileNameRole: return r.filename;
     case ValidRole: return r.valid;
+    case FavoriteRole: return r.favorite();
     }
     return {};
 }

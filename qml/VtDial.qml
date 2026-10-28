@@ -164,7 +164,17 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: dial.sx - 6
             y: parent.height * 0.47
-            spacing: 8
+            spacing: 10
+            // the heart: lit for a favourite, a click sets it (see the MouseArea below)
+            Lamp {
+                id: heartLamp
+                visible: Player.currentId > 0
+                text: "♥"
+                on: Library.currentFavorite
+                col: "#FF4F6E"
+                font.pixelSize: Math.max(12, Math.round(dial.height * 0.16))
+                anchors.verticalCenter: parent.verticalCenter
+            }
             Lamp { text: Player.format !== "" ? Player.format.toUpperCase() : "PHONO"; on: Player.currentId > 0; col: "#7CFF7A" }
         }
 
@@ -211,12 +221,24 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        cursorShape: Player.duration > 0 ? Qt.SizeHorCursor : Qt.ArrowCursor
-        enabled: Player.duration > 0
+        hoverEnabled: true
+        readonly property bool overHeart: heartLamp.visible && containsMouse
+                                          && heartLamp.contains(heartLamp.mapFromItem(this, mouseX, mouseY))
+        cursorShape: overHeart ? Qt.PointingHandCursor : Player.duration > 0 ? Qt.SizeHorCursor : Qt.ArrowCursor
+        enabled: Player.currentId > 0
         function f(x) { return Math.max(0, Math.min(1, (x - dial.sx - 3) / (width - 2 * dial.sx - 6))) }
-        onPressed: (m) => dial.dragFrac = f(m.x)
-        onPositionChanged: (m) => { if (pressed) dial.dragFrac = f(m.x) }
-        onReleased: { Player.seek(Math.round(dial.dragFrac * Player.duration)); dial.dragFrac = -1 }
+        onPressed: (m) => {
+            if (heartLamp.visible && heartLamp.contains(heartLamp.mapFromItem(this, m.x, m.y)))
+                Library.toggleCurrentFavorite()
+            else if (Player.duration > 0)
+                dial.dragFrac = f(m.x)
+        }
+        onPositionChanged: (m) => { if (pressed && dial.dragFrac >= 0) dial.dragFrac = f(m.x) }
+        onReleased: {
+            if (dial.dragFrac >= 0)
+                Player.seek(Math.round(dial.dragFrac * Player.duration))
+            dial.dragFrac = -1
+        }
         onCanceled: dial.dragFrac = -1
     }
 

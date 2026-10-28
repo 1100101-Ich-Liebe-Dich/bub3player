@@ -17,6 +17,10 @@
 #include <QJsonArray>
 #include <QHostAddress>
 #include <QJsonDocument>
+#include <QFile>
+#include <QFileInfo>
+#include <QSaveFile>
+#include <QVersionNumber>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
@@ -27,6 +31,26 @@
 using namespace JellyfinAccess;
 
 namespace {
+constexpr int FavoritesInFlight = 4;          // requests on the way at once
+constexpr int FavoritesRetryMs = 2 * 60 * 1000; // after a failure: try again
+
+// Hearts not taken by the server yet, next to the database they belong to.
+QString pendingFavoritesFile()
+{
+    const QFileInfo db(Database::path());
+    return db.absolutePath() + QLatin1Char('/') + db.completeBaseName() + QStringLiteral("-jellyfin-favorites.txt");
+}
+
+QString favoriteKey(qint64 serverId, const QString &itemId)
+{
+    return QString::number(serverId) + QLatin1Char('/') + itemId;
+}
+
+qint64 serverOfKey(const QString &key)
+{
+    return QStringView(key).left(key.indexOf(QLatin1Char('/'))).toLongLong();
+}
+
 constexpr int PageSize = 1000;
 constexpr int IdPageSize = 5000;
 const char *ItemFields = "Path,MediaSources,DateCreated,Genres";
@@ -114,6 +138,7 @@ Jellyfin::Jellyfin(Player *player, Library *library, QObject *parent)
     m_progressTimer.setInterval(10000);
     connect(&m_progressTimer, &QTimer::timeout, this, &Jellyfin::reportProgress);
     connect(m_player, &Player::trackChanged, this, &Jellyfin::onTrackChanged);
+    connect(m_library, &Library::remoteFavoritesChanged, this, &Jellyfin::setFavorites);
     connect(m_player, &Player::stateChanged, this, &Jellyfin::onStateChanged);
     connect(m_player, &Player::positionChanged, this, [this] { m_lastPos = m_player->position(); });
     connect(m_player, &Player::seeked, this, [this] {
@@ -127,6 +152,18 @@ Jellyfin::Jellyfin(Player *player, Library *library, QObject *parent)
             JellyfinAccess::setOnline(srv.id, srv.status != QLatin1String("offline") && srv.status != QLatin1String("denied"));
     });
     load();
+    loadPendingFavorites();
+    m_saveFavorites.setSingleShot(true);
+    m_saveFavorites.setInterval(1000);
+    connect(&m_saveFavorites, &QTimer::timeout, this, &Jellyfin::savePendingFavorites);
+    m_retryFavorites.setSingleShot(true);
+    m_retryFavorites.setInterval(FavoritesRetryMs);
+    connect(&m_retryFavorites, &QTimer::timeout, this, [this] {
+        // the server may have been updated meanwhile (the address depends on its version)
+        const QSet<qint64> paused = std::exchange(m_favoritesPaused, {});
+        for (qint64 id : paused)
+            refreshVersion(id);
+    });
     m_autoSync.setInterval(30 * 60 * 1000);
     connect(&m_autoSync, &QTimer::timeout, this, &Jellyfin::scheduleAutoSync);
     m_autoSync.start();
@@ -579,6 +616,13 @@ void Jellyfin::remove(qint64 serverId)
     // Sign out on the server (best effort).
     post(s->url, QStringLiteral("/Sessions/Logout"), s->token, {});
     JellyfinAccess::remove(serverId);
+    // its hearts that were still to be sent
+    const QHash<QString, bool> pending = pendingFavorites(serverId);
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        m_pendingFavorites.remove(favoriteKey(serverId, it.key()));
+    m_favoritesPaused.remove(serverId);
+    m_confirmedDuringSync.remove(serverId);
+    m_saveFavorites.start();
     for (int i = 0; i < m_servers.size(); ++i)
         if (m_servers[i].id == serverId)
             m_servers.removeAt(i);
@@ -603,8 +647,171 @@ void Jellyfin::checkOnline()
                       : status == 401 ? QStringLiteral("denied")
                       : QStringLiteral("online"); // older servers: no /Users/Me
             emit serversChanged();
+            if (s->status == QLatin1String("online"))
+                refreshVersion(id); // then sends what is pending
+            else if (!pendingFavorites(id).isEmpty())
+                pauseFavorites(id); // and try again later
         });
     }
+}
+
+// The server may have been updated since the login (the address for hearts depends on it).
+void Jellyfin::refreshVersion(qint64 serverId)
+{
+    const Server *srv = find(serverId);
+    if (!srv)
+        return;
+    onReply(get(srv->url, QStringLiteral("/System/Info/Public"), {}), [this, serverId](int status, const QByteArray &data) {
+        Server *s = find(serverId);
+        if (!s)
+            return;
+        const QString version = QJsonDocument::fromJson(data).object().value(QLatin1String("Version")).toString();
+        if (status == 200 && !version.isEmpty() && version != s->version) {
+            s->version = version;
+            s->config.insert(QStringLiteral("version"), version);
+            save(*s);
+        }
+        flushFavorites(serverId);
+    });
+}
+
+// ---------------------------------------------------------------- favourites
+
+void Jellyfin::loadPendingFavorites()
+{
+    // one line per heart: "server/item<TAB>1" (linear to read and write, also for many)
+    QFile f(pendingFavoritesFile());
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    QHash<qint64, QHash<QString, bool>> perServer;
+    const QList<QByteArray> lines = f.readAll().split('\n');
+    for (const QByteArray &line : lines) {
+        const qsizetype tab = line.indexOf('\t');
+        if (tab <= 0)
+            continue;
+        const QString key = QString::fromUtf8(line.left(tab));
+        const bool on = line.mid(tab + 1).trimmed() == "1";
+        m_pendingFavorites.insert(key, on);
+        perServer[serverOfKey(key)].insert(key.mid(key.indexOf(QLatin1Char('/')) + 1), on);
+    }
+    // a sync that ran when the player was closed may have written over them
+    for (auto it = perServer.cbegin(); it != perServer.cend(); ++it)
+        m_library->restoreRemoteHearts(it.key(), it.value());
+}
+
+void Jellyfin::savePendingFavorites()
+{
+    const QString file = pendingFavoritesFile();
+    if (m_pendingFavorites.isEmpty()) {
+        QFile::remove(file);
+        return;
+    }
+    QByteArray out;
+    out.reserve(m_pendingFavorites.size() * 48);
+    for (auto it = m_pendingFavorites.cbegin(); it != m_pendingFavorites.cend(); ++it)
+        out += it.key().toUtf8() + (it.value() ? "\t1\n" : "\t0\n");
+    QSaveFile f(file);
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(out);
+        f.commit();
+    }
+}
+
+void Jellyfin::setFavorites(const RemoteItems &items, bool on)
+{
+    for (const auto &[sid, item] : items) {
+        if (!find(sid) || item.isEmpty())
+            continue;
+        const QString key = favoriteKey(sid, item);
+        m_pendingFavorites.insert(key, on);
+        m_favoriteQueue.insert(key);
+    }
+    m_saveFavorites.start();
+    if (!m_favoritesPaused.isEmpty() && !m_retryFavorites.isActive())
+        m_retryFavorites.start();
+    sendFavorites();
+}
+
+void Jellyfin::pauseFavorites(qint64 serverId)
+{
+    m_favoritesPaused.insert(serverId);
+    if (!m_retryFavorites.isActive())
+        m_retryFavorites.start();
+}
+
+// A few at a time, at most one per title: the last click is what the server keeps.
+void Jellyfin::sendFavorites()
+{
+    while (!m_favoritesStopped && m_favoritesInFlight.size() < FavoritesInFlight && !m_favoriteQueue.isEmpty()) {
+        const QString key = *m_favoriteQueue.cbegin();
+        m_favoriteQueue.erase(m_favoriteQueue.cbegin());
+        auto want = m_pendingFavorites.constFind(key);
+        if (want == m_pendingFavorites.cend() || m_favoritesInFlight.contains(key))
+            continue; // done meanwhile, or on the way (checked again when it is back)
+        const qint64 sid = serverOfKey(key);
+        if (m_favoritesPaused.contains(sid))
+            continue; // the retry queues it again
+        Server *s = find(sid);
+        if (!s) {
+            m_pendingFavorites.remove(key); // server removed
+            m_saveFavorites.start();
+            continue;
+        }
+        if (s->token.isEmpty() || s->userId.isEmpty())
+            continue;
+        const bool on = want.value();
+        const QString item = key.mid(key.indexOf(QLatin1Char('/')) + 1);
+        // 10.9 and later: /UserFavoriteItems; older ones only know the user in the path
+        QUrl url(s->url + QStringLiteral("/UserFavoriteItems/") + item);
+        if (QVersionNumber::fromString(s->version) >= QVersionNumber(10, 9))
+            url.setQuery(QStringLiteral("userId=") + s->userId);
+        else
+            url = QUrl(s->url + QStringLiteral("/Users/%1/FavoriteItems/%2").arg(s->userId, item));
+        QNetworkRequest req(url);
+        req.setRawHeader("Authorization", authHeader(s->token));
+        req.setTransferTimeout(30000);
+        QNetworkReply *r = on ? m_nam.post(req, QByteArray()) : m_nam.deleteResource(req);
+        m_favoritesInFlight.insert(key);
+        connect(r, &QNetworkReply::finished, this, [this, r, key, sid, item, on] {
+            r->deleteLater();
+            m_favoritesInFlight.remove(key);
+            const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            auto want = m_pendingFavorites.constFind(key);
+            if (want != m_pendingFavorites.cend() && want.value() != on) {
+                m_favoriteQueue.insert(key); // clicked again meanwhile
+            } else if ((status >= 200 && status < 300) || status == 400 || status == 404 || status == 410) {
+                // done, or the server will never take it (the title is gone there)
+                m_pendingFavorites.remove(key);
+                m_saveFavorites.start();
+                // a running sync may still write the state it fetched before
+                const Server *s = find(sid);
+                if (s && s->syncing && status < 300)
+                    m_confirmedDuringSync[sid].insert(item, on);
+            } else if (want != m_pendingFavorites.cend()) {
+                pauseFavorites(sid); // server away (or refusing): all of it again later
+            }
+            sendFavorites();
+        });
+    }
+}
+
+void Jellyfin::flushFavorites(qint64 serverId)
+{
+    m_favoritesPaused.remove(serverId);
+    const QHash<QString, bool> pending = pendingFavorites(serverId);
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        m_favoriteQueue.insert(favoriteKey(serverId, it.key()));
+    sendFavorites();
+}
+
+QHash<QString, bool> Jellyfin::pendingFavorites(qint64 serverId) const
+{
+    QHash<QString, bool> out;
+    const QString prefix = QString::number(serverId) + QLatin1Char('/');
+    for (auto it = m_pendingFavorites.cbegin(); it != m_pendingFavorites.cend(); ++it)
+        if (it.key().startsWith(prefix))
+            out.insert(it.key().mid(prefix.size()), it.value());
+    return out;
 }
 
 // ---------------------------------------------------------------- sync
@@ -634,8 +841,10 @@ void Jellyfin::sync(qint64 serverId, bool full)
     s->job = job;
     s->syncing = true;
     s->progress = 0;
+    m_confirmedDuringSync.remove(serverId); // left from a sync that ended before they came
     s->syncText = tr("Abgleich startet …");
     emit serversChanged();
+    flushFavorites(serverId); // hearts set while the server was away
 
     // Drop libraries that are no longer selected; keep the folder view's root
     // names ("Server · Library") in step with renames on the server.
@@ -930,6 +1139,13 @@ void Jellyfin::finishSync(qint64 serverId, const QString &error)
             return;
         s->syncing = false;
         s->job.reset();
+        // Hearts set here stay as set here: the sync wrote the server's state from
+        // before (those still to be sent, and those the server took meanwhile). Through
+        // the library's writer, in order with new clicks.
+        QHash<QString, bool> mine = m_confirmedDuringSync.take(serverId);
+        mine.insert(pendingFavorites(serverId));
+        if (!mine.isEmpty())
+            m_library->restoreRemoteHearts(serverId, mine);
         s->progress = ok ? 1 : 0;
         if (ok) {
             s->lastSync = job->startedAt;
@@ -1080,14 +1296,17 @@ QNetworkReply *Jellyfin::reportStopped()
 
 void Jellyfin::shutdown()
 {
+    m_favoritesStopped = true; // nothing new goes out; what is open stays in the file
+    m_favoriteQueue.clear();
     for (Server &s : m_servers)
         if (s.job)
             s.job->cancelled = true;
-    QNetworkReply *r = reportStopped();
-    if (!r)
-        return;
-    QEventLoop loop;
-    QTimer::singleShot(1500, &loop, &QEventLoop::quit);
-    connect(r, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
+    if (QNetworkReply *r = reportStopped()) {
+        QEventLoop loop;
+        QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+        connect(r, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    m_saveFavorites.stop();
+    savePendingFavorites();
 }

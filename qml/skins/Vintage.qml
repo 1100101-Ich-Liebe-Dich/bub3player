@@ -274,15 +274,31 @@ Item {
                             Text { text: qsTr("SEITE A"); font.family: "Barlow Condensed"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 2; color: "#7a2f14" }
                             Text { text: "·  33⅓ U/min  ·  STEREO"; font.family: "Barlow Condensed"; font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 1.5; color: "#6b5d48" }
                         }
-                        Text {
+                        Item {
                             width: parent.width
-                            text: Player.title
-                            font.family: "Righteous"
-                            font.pixelSize: Math.max(20, Math.min(36, notes.width / 13))
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 2
-                            elide: Text.ElideRight
-                            color: "#2a1c10"
+                            height: Math.max(notesTitle.height, notesHeart.height + 2)
+                            Text {
+                                id: notesTitle
+                                width: parent.width - notesHeart.width - 6
+                                text: Player.title
+                                font.family: "Righteous"
+                                font.pixelSize: Math.max(20, Math.min(36, notes.width / 13))
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                                color: "#2a1c10"
+                            }
+                            // a heart drawn on the paper
+                            HeartButton {
+                                id: notesHeart
+                                anchors.right: parent.right
+                                y: 2
+                                size: 34
+                                onColor: "#a3321a"
+                                offColor: "#6b5d48"
+                                on: Library.currentFavorite
+                                onClicked: Library.toggleCurrentFavorite()
+                            }
                         }
                         Text {
                             width: parent.width

@@ -52,7 +52,8 @@ Rectangle {
         Column {
             anchors.left: cover.right
             anchors.leftMargin: 14
-            anchors.right: parent.right
+            anchors.right: barHeart.left
+            anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
             spacing: 3
             Text {
@@ -72,6 +73,15 @@ Rectangle {
                 font.pixelSize: 13
                 color: Theme.textDim
             }
+        }
+        HeartButton {
+            id: barHeart
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: Player.currentId > 0
+            width: visible ? size : 0
+            on: Library.currentFavorite
+            onClicked: Library.toggleCurrentFavorite()
         }
     }
 
