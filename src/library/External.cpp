@@ -5,15 +5,28 @@
 #include "library/TrackCache.h"
 
 #include <QCoreApplication>
-#include <QUrl>
 #include <QMutex>
+#include <QUrl>
+
+#include <atomic>
 
 namespace External {
 
 namespace {
 QMutex g_mutex;
 CdDisc g_disc;
+std::atomic<bool> g_cdBusy{false};
 } // namespace
+
+void setCdBusy(bool busy)
+{
+    g_cdBusy = busy;
+}
+
+bool cdBusy()
+{
+    return g_cdBusy.load();
+}
 
 void setDisc(const CdDisc &disc)
 {

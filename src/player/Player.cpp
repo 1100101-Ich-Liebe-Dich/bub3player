@@ -4,11 +4,13 @@
 #include "analysis/AnalysisService.h"
 #include "core/CoverProvider.h"
 #include "core/Database.h"
+#include "core/Http.h"
 #include "jellyfin/JellyfinAccess.h"
 #include "library/External.h"
 #include "library/TrackCache.h"
 #include "player/AudioOutput.h"
 #include "player/PlayQueue.h"
+#include "radio/StreamList.h"
 
 #include <QDateTime>
 #include <QFileInfo>
@@ -410,8 +412,11 @@ bool Player::live() const
 QByteArray Player::uriFor(qint64 id) const
 {
     const TrackRow r = TrackCache::instance().get(id);
-    if (r.isExternal())
-        return r.valid ? QUrl(r.url).toEncoded() : QByteArray();
+    if (r.isExternal()) {
+        // a station only ever from the internet; the CD not while it is read into files
+        const bool ok = r.valid && (External::isStation(id) ? Http::isWeb(QUrl(r.url)) : !External::cdBusy());
+        return ok ? QUrl(r.url).toEncoded() : QByteArray();
+    }
     if (r.isRemote())
         return JellyfinAccess::streamUrl(r.sourceId, r.remoteId);
     const QString path = TrackCache::instance().pathOf(id);
@@ -694,13 +699,9 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         finishTrack(false);
         cancelPrepared();
         if (live()) {
-            // A station does not end: the connection broke. Once more, then give up
-            // (never on to the next station by itself).
-            if (!m_reconnected && m_listenedMs > 10000) {
-                m_reconnected = true;
-                load(m_playingId, true, 0, true);
+            // A station does not end: the connection broke.
+            if (reconnect())
                 break;
-            }
             m_error = tr("Die Verbindung zum Sender ist abgebrochen.");
             emit errorChanged();
             gst_element_set_state(d.playbin, GST_STATE_READY);
@@ -730,6 +731,11 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
             break;
         }
         const bool station = live();
+        if (station && reconnect()) { // a dropped connection usually ends as an error (load() makes the rest stale)
+            g_clear_error(&err);
+            g_free(dbg);
+            break;
+        }
         if (station)
             m_error = tr("Der Sender ist gerade nicht erreichbar.");
         else if (External::isCd(m_playingId))
@@ -890,7 +896,6 @@ void Player::updateMeta(qint64 id)
     m_listenedMs = 0;
     m_lastPollPos = 0;
     m_streamTitle.clear();
-    m_reconnected = false;
     const TrackRow r = TrackCache::instance().get(id);
     m_title = r.title;
     m_artist = r.artist;
@@ -940,24 +945,17 @@ void Player::handleStreamTags(const QString &text, const QString &codec, int kbp
         return;
     bool changed = false;
     if (m_format.isEmpty() || !codec.isEmpty() || kbps > 0) {
-        QString c = m_format.section(QLatin1Char(' '), 0, 0);
-        const QString lc = codec.toLower();
-        if (lc.contains(QLatin1String("mp3")) || lc.contains(QLatin1String("layer 3")))
-            c = QStringLiteral("MP3");
-        else if (lc.contains(QLatin1String("aac")))
-            c = QStringLiteral("AAC");
-        else if (lc.contains(QLatin1String("vorbis")))
-            c = QStringLiteral("OGG");
-        else if (lc.contains(QLatin1String("opus")))
-            c = QStringLiteral("OPUS");
-        else if (lc.contains(QLatin1String("flac")))
-            c = QStringLiteral("FLAC");
+        QString c = StreamList::codecName(codec);
+        if (c.isEmpty())
+            c = m_format.section(QLatin1Char(' '), 0, 0);
         const QString f = kbps > 0 && !c.isEmpty() ? QStringLiteral("%1 %2").arg(c).arg(kbps) : c;
         if (!f.isEmpty() && f != m_format) {
             m_format = f;
+            changed = true;
             emit trackInfoChanged();
         }
     }
+    bool newSong = false;
     const QString t = text.trimmed();
     if (!t.isEmpty() && t != m_streamTitle) {
         m_streamTitle = t;
@@ -972,10 +970,12 @@ void Player::handleStreamTags(const QString &text, const QString &codec, int kbp
             m_title = t;
         }
         m_album = r.title;
-        changed = true;
+        changed = newSong = true;
     }
     if (changed)
         emit metaChanged();
+    if (newSong)
+        emit streamTitleChanged();
 }
 
 void Player::updateTrackInfo()
@@ -1293,8 +1293,13 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
     if (!d.playbin || id == 0)
         return false;
     const QByteArray uri = uriFor(id);
-    if (uri.isEmpty())
+    if (uri.isEmpty()) {
+        if (External::isCd(id) && External::cdBusy()) {
+            m_error = tr("Während des Einlesens kann die CD nicht spielen.");
+            emit errorChanged();
+        }
         return false;
+    }
     stopTail();
     cancelPrepared();
     d.expectAdvance = false;
@@ -1321,6 +1326,17 @@ bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
     m_error.clear();
     emit errorChanged();
     return true;
+}
+
+// A station whose connection broke after a while of listening: connect again (a
+// connection that fails within seconds is not tried again, and never on to the next
+// station by itself).
+bool Player::reconnect()
+{
+    if (!live() || m_position < 10000)
+        return false;
+    qInfo() << "Sender: neu verbinden";
+    return load(m_playingId, true, 0, true);
 }
 
 void Player::finishTrack(bool skipped)
@@ -1409,8 +1425,8 @@ void Player::next()
 
 void Player::previous()
 {
-    // Restart the track first, like every hardware player.
-    if (m_position > 3000) {
+    // Restart the track first, like every hardware player (a station has no start).
+    if (m_position > 3000 && !live()) {
         seek(0);
         return;
     }
@@ -1775,8 +1791,10 @@ void Player::restoreSession()
     QSettings s;
     const qint64 pos = s.value(QStringLiteral("player/position"), 0).toLongLong();
     const qint64 id = m_queue->currentId();
-    if (id != 0 && s.value(QStringLiteral("player/trackId")).toLongLong() == id)
-        load(id, false, External::isStation(id) ? 0 : pos);
+    // a station is not connected before Play (it would stream into the void, and
+    // fail at every start without network)
+    if (id != 0 && s.value(QStringLiteral("player/trackId")).toLongLong() == id && !External::isStation(id))
+        load(id, false, pos);
     else if (id != 0)
         updateMeta(id);
 }

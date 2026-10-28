@@ -34,28 +34,6 @@ namespace {
 
 const QChar Sep(0x1f); // hint fields: path, title, artist, album, length (ms)
 
-// A write that is rolled back unless it is committed (also when it throws).
-struct WriteTx
-{
-    DbConnection &db;
-    bool done = false;
-    explicit WriteTx(DbConnection &d, const char *begin = "BEGIN IMMEDIATE") : db(d) { db.exec(begin); }
-    void commit()
-    {
-        db.exec("COMMIT");
-        done = true;
-    }
-    ~WriteTx()
-    {
-        if (!done) {
-            try {
-                db.exec("ROLLBACK");
-            } catch (...) {
-            }
-        }
-    }
-};
-
 // The list changed between showing and editing it (another edit was faster).
 struct StaleEdit : std::runtime_error
 {

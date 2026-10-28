@@ -271,7 +271,7 @@ END;
 // analysis; the player knows them by negative ids, see External).
 const char *SchemaV5 = R"SQL(
 CREATE TABLE IF NOT EXISTS stations (
-  id          INTEGER PRIMARY KEY,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT, -- never reused: the queue keeps -id over a restart
   name        TEXT NOT NULL,
   url         TEXT NOT NULL,              -- as given (may be a .pls/.m3u address)
   stream      TEXT NOT NULL,              -- what plays
@@ -282,7 +282,6 @@ CREATE TABLE IF NOT EXISTS stations (
   codec       TEXT NOT NULL DEFAULT '',
   bitrate     INTEGER NOT NULL DEFAULT 0,
   uuid        TEXT NOT NULL DEFAULT '',   -- radio-browser station uuid
-  pos         INTEGER NOT NULL DEFAULT 0, -- order in the list
   added       INTEGER NOT NULL DEFAULT 0,
   last_played INTEGER NOT NULL DEFAULT 0
 );

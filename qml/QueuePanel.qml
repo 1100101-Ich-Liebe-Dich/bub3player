@@ -280,16 +280,18 @@ Rectangle {
         }
         HMenuItem {
             text: rowMenu.fav ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten")
+            enabled: rowMenu.trackId > 0 // not for a station or a CD track
             onTriggered: Library.setFavorite(rowMenu.trackId, !rowMenu.fav)
         }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }
         HMenuItem {
             text: qsTr("Zum Album")
+            enabled: rowMenu.trackId > 0
             onTriggered: window.openAlbum(rowMenu.albumArtist, rowMenu.album, rowMenu.trackId)
         }
         HMenuItem {
             text: qsTr("Zum Künstler")
-            enabled: rowMenu.albumArtist !== ""
+            enabled: rowMenu.trackId > 0 && rowMenu.albumArtist !== ""
             onTriggered: window.openArtist(rowMenu.albumArtist, rowMenu.trackId)
         }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: Theme.border } }

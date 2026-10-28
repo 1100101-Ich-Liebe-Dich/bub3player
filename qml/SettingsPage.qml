@@ -310,7 +310,9 @@ Item {
 
                 Section {
                     title: qsTr("Internetradio und Audio-CD")
-                    text: qsTr("Beides findest du in der Seitenleiste unter „Hören“. Ins Netz geht der Player dafür nur, wenn du es hier oder auf der Seite einschaltest.")
+                    text: (AudioCd.available ? qsTr("Beides findest du in der Seitenleiste unter „Hören“ (die Audio-CD nur mit CD-Laufwerk).")
+                                             : qsTr("Das Internetradio findest du in der Seitenleiste unter „Hören“, die Audio-CD dort, sobald es ein CD-Laufwerk gibt."))
+                          + " " + qsTr("Ins Netz geht der Player dafür nur, wenn du es hier oder auf der Seite einschaltest.")
                     HToggle {
                         width: col.width
                         label: qsTr("Senderverzeichnis radio-browser.info verwenden (Suche, Senderlogos)")

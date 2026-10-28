@@ -293,11 +293,8 @@ ApplicationWindow {
             if (/^https?:\/\//i.test(p)) {
                 Stations.add(p, "", true) // a stream or a station list on the web: play it
                 ++lists
-            } else if (/\.(pls|xspf)$/i.test(p) || (/\.m3u8?$/i.test(p) && Stations.isStationList(p))) {
-                Stations.importFile(p, true) // stations, not files
-                ++lists
-            } else if (/\.m3u8?$/i.test(p)) {
-                Playlists.importFile(p)
+            } else if (/\.(pls|xspf|asx|m3u8?)$/i.test(p)) {
+                Stations.openList(p) // stations (and play), or a playlist: Stations.onNotStations
                 ++lists
             } else {
                 music.push(p)
@@ -487,6 +484,10 @@ ApplicationWindow {
             if (n) AudioCd.play(Number(n[1]))
             if (uiTest.indexOf("scheibelesen") >= 0 && !AudioCd.ripping && (!AudioCd.online || AudioCd.album !== "")) AudioCd.rip()
         }
+    }
+    Connections {
+        target: Stations
+        function onNotStations(path) { Playlists.importFile(path) }
     }
     Connections {
         target: Jellyfin

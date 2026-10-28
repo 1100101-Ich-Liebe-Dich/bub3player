@@ -10,7 +10,9 @@ Internetradio und Audio-CD.
   Entfernen. Weiter und Zurück wechseln den Sender.
 - Was gerade läuft, kommt aus dem Datenstrom des Senders (ICY): Titel und Künstler in der Leiste, in
   der Großansicht aller acht Themes, im Infobereich, in der Benachrichtigung und bei MPRIS. Statt der
-  Länge steht „Live“; Spulen, Herz, Liedtext und Wiedergabezähler gibt es für Sender nicht.
+  Länge steht „Live“; Spulen, Herz, Liedtext und Wiedergabezähler gibt es für Sender nicht. Bricht
+  die Verbindung ab, verbindet der Player neu; einen Sender, der nicht antwortet, versucht er nicht
+  endlos und wechselt auch nicht von selbst zum nächsten.
 - **Senderverzeichnis radio-browser.info**, nur wenn eingeschaltet (auf der Seite oder unter
   Einstellungen → Allgemein): Suche nach Name oder Richtung, Hinzufügen mit einem Klick, Senderlogos.
 - Senderlisten und Senderadressen lassen sich auch aus dem Dateimanager öffnen („Öffnen mit“, auch
@@ -30,6 +32,8 @@ Internetradio und Audio-CD.
 ### Geändert
 - Datenbank-Schema 5 (neue Tabelle `stations`), die Umstellung geschieht beim ersten Start von selbst.
 - Das AppImage bringt die GStreamer-Plugins für CDs (cdparanoia) und für HLS-Radiosender mit.
+- Im Rechtsklick-Menü der Warteschlange sind „Zum Album“, „Zum Künstler“ und das Herz für Sender und
+  CD-Titel ausgegraut.
 
 ## 1.4.0 - 2026-10-27
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "radio/StreamList.h"
 
+#include "core/Http.h"
+
 #include <QMap>
 #include <QRegularExpression>
 #include <QStringDecoder>
@@ -22,18 +24,13 @@ QString decode(const QByteArray &data)
     return s;
 }
 
-bool isStream(const QUrl &u)
-{
-    return u.isValid() && (u.scheme() == QLatin1String("http") || u.scheme() == QLatin1String("https"));
-}
-
 void addEntry(QVector<Entry> &out, const QUrl &base, const QString &address, const QString &title)
 {
     const QString a = address.trimmed();
     if (a.isEmpty())
         return;
     const QUrl u = base.isValid() ? base.resolved(QUrl(a)) : QUrl(a);
-    if (!isStream(u))
+    if (!Http::isWeb(u))
         return;
     for (const Entry &e : std::as_const(out))
         if (e.url == u)
@@ -132,6 +129,24 @@ bool looksLikeList(const QUrl &url, const QByteArray &contentType, const QByteAr
     const QByteArray start = head.left(64).trimmed().toLower();
     return start.startsWith("[playlist]") || start.startsWith("#extm3u") || start.startsWith("<?xml")
            || start.startsWith("<asx") || start.startsWith("<playlist");
+}
+
+QString codecName(const QString &description)
+{
+    // the order matters: "MPEG-4 AAC" is no MP3, "audio/ogg; codecs=opus" no Vorbis
+    const QString d = description.toLower();
+    const auto has = [&d](const char *s) { return d.contains(QLatin1String(s)); };
+    if (has("aac"))
+        return QStringLiteral("AAC");
+    if (has("opus"))
+        return QStringLiteral("OPUS");
+    if (has("flac"))
+        return QStringLiteral("FLAC");
+    if (has("vorbis") || has("ogg"))
+        return QStringLiteral("OGG");
+    if (has("mp3") || has("mpeg") || has("layer 3"))
+        return QStringLiteral("MP3");
+    return {};
 }
 
 } // namespace StreamList

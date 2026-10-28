@@ -105,7 +105,7 @@ private:
     bool m_canRip = false;
     int m_status = 0;
     int m_lastDrive = -1;            // what the drive said last (to read a new disc once)
-    std::atomic<int> m_gen{0};       // a newer read or rip makes older results stale
+    std::atomic<int> m_gen{0};       // a newer read of the disc (or quitting) makes older results stale
     QString m_discId, m_album, m_artist, m_coverFile, m_coverVersion;
     int m_year = 0;
     QVector<Track> m_tracks;

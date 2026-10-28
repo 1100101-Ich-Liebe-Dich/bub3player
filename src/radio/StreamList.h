@@ -26,4 +26,8 @@ bool looksLikeList(const QUrl &url, const QByteArray &contentType, const QByteAr
 // HLS (#EXT-X-…) is a stream of its own, not a list of stations.
 bool isHls(const QByteArray &data);
 
+// "MP3", "AAC", "OPUS", "FLAC", "OGG" from a content type ("audio/aacp") or a
+// GStreamer codec description ("MPEG-4 AAC"); empty if unknown.
+QString codecName(const QString &description);
+
 } // namespace StreamList

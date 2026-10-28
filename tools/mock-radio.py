@@ -13,6 +13,7 @@ Stations (endless MP3 streams with ICY metadata: the song title changes every
     /stream/<n>          station n (0…4), "Testwelle <n>"
     /list/<n>.pls|.m3u   a station list pointing at /stream/<n>
     /broken              answers 404
+    /seite               a web page (text/html), not a station
 radio-browser.info (only what the player uses):
     /json/stations/search?name=…|tag=…   finds the five stations
     /json/url/<uuid>     counts a click
@@ -109,6 +110,8 @@ class H(BaseHTTPRequestHandler):
                 return self.send_body(body.encode(), "audio/x-scpls")
             body = "#EXTM3U\n#EXTINF:-1,%s\n%s/stream/%d\n" % (NAMES[n], base, n)
             return self.send_body(body.encode(), "audio/x-mpegurl")
+        if u.path == "/seite":
+            return self.send_body(b"<html><body>Kein Radio</body></html>", "text/html; charset=utf-8")
         m = re.fullmatch(r"/logo/(\d)\.png", u.path)
         if m:
             n = int(m.group(1))
@@ -161,7 +164,7 @@ class H(BaseHTTPRequestHandler):
         pending = b""
         frame_time = 1152 / 44100
         try:
-            while True:
+            while not args.cut or time.time() - start < args.cut:
                 pending += frames[fi % len(frames)]
                 fi += 1
                 if not icy:
@@ -194,6 +197,7 @@ def main():
     ap.add_argument("--port", type=int, default=8099)
     ap.add_argument("--audio", required=True, help="folder with MP3 files (44.1 kHz)")
     ap.add_argument("--every", type=float, default=12, help="seconds per song title")
+    ap.add_argument("--cut", type=float, default=0, help="end every stream after this many seconds (dropped connection)")
     args = ap.parse_args()
     for root, _, files in os.walk(args.audio):
         for f in sorted(files):

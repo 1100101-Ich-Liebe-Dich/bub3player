@@ -41,6 +41,9 @@ struct CdDisc
 };
 void setDisc(const CdDisc &disc); // empty: no disc
 CdDisc disc();
+// The drive is being read into files: its tracks do not play meanwhile.
+void setCdBusy(bool busy);
+bool cdBusy();
 
 // Station logo in the cache (may not exist).
 QString stationLogoFile(qint64 stationId);

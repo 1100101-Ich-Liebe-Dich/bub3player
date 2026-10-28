@@ -188,7 +188,7 @@ Tray::Tray(Player *player, Library *library, QObject *parent)
     m_notify = s.value(QStringLiteral("tray/notify"), true).toBool();
 
     connect(player, &Player::trackChanged, this, &Tray::onTrackChanged);
-    connect(player, &Player::metaChanged, this, &Tray::onTrackChanged); // the next song of a station
+    connect(player, &Player::streamTitleChanged, this, &Tray::onTrackChanged); // the next song of a station
     connect(player, &Player::stateChanged, this, &Tray::stateChanged);
     connect(library, &Library::currentFavoriteChanged, this, [this] { emit layoutUpdated(++m_revision, 0); });
     // Quitting (menu, Ctrl+Q) first closes all windows: that close must not end in the tray.

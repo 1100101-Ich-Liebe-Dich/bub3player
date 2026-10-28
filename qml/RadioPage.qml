@@ -16,7 +16,7 @@ Item {
 
     function importList() {
         SystemDialogs.openFile(qsTr("Senderliste importieren"), lastFolder || Playlists.defaultFolder(),
-                               [{ name: qsTr("Senderlisten"), patterns: ["*.pls", "*.m3u", "*.m3u8", "*.xspf"] },
+                               [{ name: qsTr("Senderlisten"), patterns: ["*.pls", "*.m3u", "*.m3u8", "*.xspf", "*.asx"] },
                                 { name: qsTr("Alle Dateien"), patterns: ["*"] }],
                                function (path) {
                                    if (path === null) importDlg.open()
@@ -334,7 +334,7 @@ Item {
         title: qsTr("Senderliste importieren")
         fileMode: FileDialog.OpenFile
         currentFolder: Playlists.defaultFolder()
-        nameFilters: [qsTr("Senderlisten (*.pls *.m3u *.m3u8 *.xspf)"), qsTr("Alle Dateien (*)")]
+        nameFilters: [qsTr("Senderlisten (*.pls *.m3u *.m3u8 *.xspf *.asx)"), qsTr("Alle Dateien (*)")]
         onAccepted: Stations.importFile(selectedFile)
     }
 }

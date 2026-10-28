@@ -186,6 +186,28 @@ private:
     sqlite3 *m_db = nullptr;
 };
 
+// A write that is rolled back unless it is committed (also when it throws).
+struct WriteTx
+{
+    DbConnection &db;
+    bool done = false;
+    explicit WriteTx(DbConnection &d, const char *begin = "BEGIN IMMEDIATE") : db(d) { db.exec(begin); }
+    void commit()
+    {
+        db.exec("COMMIT");
+        done = true;
+    }
+    ~WriteTx()
+    {
+        if (!done) {
+            try {
+                db.exec("ROLLBACK");
+            } catch (...) {
+            }
+        }
+    }
+};
+
 // Commits on destruction unless rolled back; batches many writes into one fsync.
 class Transaction
 {

@@ -26,35 +26,12 @@
 
 namespace {
 
-const QByteArray UserAgent = QByteArrayLiteral("BuB3Player/" HALCYON_VERSION " (https://github.com/1100101-Ich-Liebe-Dich/bub3player)");
-
-QString codecOf(const QByteArray &contentType)
-{
-    const QByteArray ct = contentType.toLower();
-    if (ct.contains("mpeg") || ct.contains("mp3"))
-        return QStringLiteral("MP3");
-    if (ct.contains("aac"))
-        return QStringLiteral("AAC");
-    if (ct.contains("ogg") || ct.contains("vorbis"))
-        return QStringLiteral("OGG");
-    if (ct.contains("opus"))
-        return QStringLiteral("OPUS");
-    if (ct.contains("flac"))
-        return QStringLiteral("FLAC");
-    return {};
-}
-
 QString hostName(const QUrl &u)
 {
     QString h = u.host();
     if (h.startsWith(QLatin1String("www.")))
         h = h.mid(4);
     return h.isEmpty() ? u.toString() : h;
-}
-
-bool isWeb(const QUrl &u)
-{
-    return u.isValid() && (u.scheme() == QLatin1String("http") || u.scheme() == QLatin1String("https")) && !u.host().isEmpty();
 }
 
 } // namespace
@@ -68,6 +45,7 @@ Stations::Stations(Player *player, PlayQueue *queue, QObject *parent) : QObject(
 
 Stations::~Stations()
 {
+    m_closing = true;
     ++m_searchGen;
     m_pool.clear();
     m_pool.waitForDone();
@@ -93,6 +71,12 @@ QString Stations::directory() const
     const QByteArray env = qgetenv("HALCYON_RADIOBROWSER_URL"); // tests: a local stand-in
     // all.api.radio-browser.info: one of the directory's servers (they share a certificate)
     return env.isEmpty() ? QStringLiteral("https://all.api.radio-browser.info") : QString::fromUtf8(env);
+}
+
+std::function<bool()> Stations::cancelled() const
+{
+    const std::atomic<bool> *closing = &m_closing; // ~Stations waits for every request
+    return [closing] { return closing->load(); };
 }
 
 void Stations::run(std::function<void()> work)
@@ -148,6 +132,16 @@ void Stations::reload()
 
 void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
 {
+    // only internet streams; a web page or logo elsewhere is simply left out
+    stations.removeIf([](const Station &st) { return !Http::isWeb(QUrl(st.stream)); });
+    for (Station &st : stations) {
+        if (!Http::isWeb(QUrl(st.homepage)))
+            st.homepage.clear();
+        if (!Http::isWeb(QUrl(st.logo)))
+            st.logo.clear();
+        if (!Http::isWeb(QUrl(st.url)))
+            st.url = st.stream;
+    }
     QPointer<Stations> self(this);
     const bool fetchLogos = online();
     run([self, stations, announce, playFirst, fetchLogos] {
@@ -157,7 +151,7 @@ void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
         QVector<QPair<qint64, QString>> logos;
         try {
             DbConnection db = Database::open(1024);
-            Transaction tx(db);
+            WriteTx tx(db); // all or nothing
             Stmt has(db, "SELECT id FROM stations WHERE stream = ? OR (uuid <> '' AND uuid = ?)");
             Stmt ins(db, "INSERT INTO stations(name, url, stream, homepage, logo, tags, country, codec, bitrate, uuid, added) "
                          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -197,7 +191,7 @@ void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
             if (!announce || (playFirst && added == 0)) // a known station that plays needs no word
                 return;
             if (added == 1 && stations.size() == 1)
-                emit self->message(tr("Sender »%1« hinzugefügt").arg(stations.first().name));
+                emit self->message(tr("Sender „%1“ hinzugefügt").arg(stations.first().name));
             else if (added > 0)
                 emit self->message(added == 1 ? tr("1 Sender hinzugefügt") : tr("%1 Sender hinzugefügt").arg(added));
             else if (known > 0)
@@ -211,16 +205,16 @@ void Stations::insert(QVector<Station> stations, bool announce, bool playFirst)
 void Stations::add(const QString &address, const QString &name, bool playNow)
 {
     const QUrl url = QUrl::fromUserInput(address.trimmed());
-    if (!isWeb(url)) {
+    if (!Http::isWeb(url)) {
         emit message(tr("Bitte eine Internetadresse angeben (http:// oder https://)"));
         return;
     }
     QPointer<Stations> self(this);
     const QString given = name.trimmed();
-    run([self, url, given, playNow] {
+    run([self, url, given, playNow, quitting = cancelled()] {
         // What answers there: the stream, or a list of streams?
-        const Http::Headers headers{{"User-Agent", UserAgent}, {"Icy-MetaData", "1"}};
-        Http::Probe p = Http::probe(url, headers, 10000, 64 * 1024);
+        const Http::Headers headers{{"User-Agent", Http::userAgent()}, {"Icy-MetaData", "1"}};
+        Http::Probe p = Http::probe(url, headers, 10000, 64 * 1024, quitting);
         Station st;
         st.url = url.toString();
         st.stream = url.toString();
@@ -243,39 +237,93 @@ void Stations::add(const QString &address, const QString &name, bool playNow)
             }
             st.stream = entries.first().url.toString();
             listTitle = entries.first().title;
-            p = Http::probe(entries.first().url, headers, 10000, 4096); // the stream's own name and format
+            p = Http::probe(entries.first().url, headers, 10000, 4096, quitting); // the stream's own name and format
+        }
+        if (p.status > 0 && !isAudio(p)) { // a web page, a picture … (a link dropped from the browser)
+            QMetaObject::invokeMethod(qApp, [self] {
+                if (self)
+                    emit self->message(tr("Unter dieser Adresse ist kein Radiosender"));
+            }, Qt::QueuedConnection);
+            return;
         }
         // ICY headers: "icy-name", "icy-br", "icy-genre", "icy-url"
         const QString icyName = QString::fromUtf8(p.header("icy-name")).trimmed();
         st.name = !given.isEmpty() ? given : !icyName.isEmpty() ? icyName : !listTitle.isEmpty() ? listTitle : hostName(QUrl(st.stream));
-        st.codec = codecOf(p.header("content-type"));
+        st.codec = StreamList::codecName(QString::fromLatin1(p.header("content-type")));
         st.bitrate = p.header("icy-br").split(',').first().trimmed().toInt();
         st.tags = QString::fromUtf8(p.header("icy-genre")).trimmed();
         const QUrl home(QString::fromUtf8(p.header("icy-url")).trimmed());
-        if (isWeb(home))
+        if (Http::isWeb(home))
             st.homepage = home.toString();
-        QMetaObject::invokeMethod(qApp, [self, st, playNow] {
-            if (self)
-                self->insert({st}, true, playNow);
+        // Old SHOUTcast servers answer "ICY 200 OK", which Qt does not take for HTTP
+        // (status 0, no headers): they play all the same, so the station is kept.
+        const bool silent = p.status == 0;
+        QMetaObject::invokeMethod(qApp, [self, st, playNow, silent] {
+            if (!self)
+                return;
+            if (silent)
+                emit self->message(tr("Der Sender antwortet gerade nicht; er kommt trotzdem in die Liste"));
+            self->insert({st}, !silent, playNow);
         }, Qt::QueuedConnection);
     });
 }
 
 void Stations::importFile(const QVariant &pathOrUrl, bool playNow)
 {
-    QFile f(Paths::localPath(pathOrUrl));
-    if (!f.open(QIODevice::ReadOnly) || f.size() > 4 * 1024 * 1024) {
-        emit message(tr("Datei kann nicht gelesen werden: %1").arg(f.fileName()));
-        return;
-    }
-    QVector<Station> stations;
-    for (const StreamList::Entry &e : StreamList::parse(f.readAll())) {
-        Station st;
-        st.url = st.stream = e.url.toString();
-        st.name = e.title.isEmpty() ? hostName(e.url) : e.title;
-        stations << st;
-    }
-    insert(stations, true, playNow);
+    readList(Paths::localPath(pathOrUrl), playNow, false);
+}
+
+void Stations::openList(const QVariant &pathOrUrl)
+{
+    readList(Paths::localPath(pathOrUrl), true, true);
+}
+
+// Off the UI thread: the file may lie on a slow or hung network drive.
+void Stations::readList(const QString &path, bool playNow, bool orPlaylist)
+{
+    QPointer<Stations> self(this);
+    run([self, path, playNow, orPlaylist] {
+        // .pls, .xspf and .asx only carry addresses; an .m3u may list files
+        const bool m3u = path.endsWith(QLatin1String(".m3u"), Qt::CaseInsensitive) || path.endsWith(QLatin1String(".m3u8"), Qt::CaseInsensitive);
+        if (orPlaylist && m3u && !isStationList(path)) {
+            QMetaObject::invokeMethod(qApp, [self, path] {
+                if (self)
+                    emit self->notStations(path); // files: a playlist
+            }, Qt::QueuedConnection);
+            return;
+        }
+        QFile f(path);
+        QVector<Station> stations;
+        const bool ok = f.open(QIODevice::ReadOnly) && f.size() <= 4 * 1024 * 1024;
+        if (ok) {
+            for (const StreamList::Entry &e : StreamList::parse(f.readAll())) {
+                Station st;
+                st.url = st.stream = e.url.toString();
+                st.name = e.title.isEmpty() ? hostName(e.url) : e.title;
+                stations << st;
+            }
+        }
+        QMetaObject::invokeMethod(qApp, [self, ok, path, stations, playNow] {
+            if (!self)
+                return;
+            if (ok)
+                self->insert(stations, true, playNow);
+            else
+                emit self->message(tr("Datei kann nicht gelesen werden: %1").arg(path));
+        }, Qt::QueuedConnection);
+    });
+}
+
+bool Stations::isAudio(const Http::Probe &p)
+{
+    const QByteArray ct = p.header("content-type").toLower();
+    if (ct.isEmpty() || ct.startsWith("audio/") || ct.startsWith("video/") || ct.startsWith("application/ogg")
+        || ct.startsWith("application/octet-stream") || ct.contains("mpegurl") || StreamList::isHls(p.head))
+        return true;
+    for (const auto &h : p.headers)
+        if (h.first.startsWith("icy-"))
+            return true;
+    return false;
 }
 
 bool Stations::isStationList(const QVariant &pathOrUrl)
@@ -380,7 +428,7 @@ void Stations::onTrackChanged()
             uuid = v.toMap().value(QStringLiteral("uuid")).toString();
     // radio-browser counts what is listened to (its way to rank stations)
     const QString click = online() && !uuid.isEmpty() ? directory() + QStringLiteral("/json/url/") + uuid : QString();
-    run([id, click] {
+    run([id, click, quitting = cancelled()] {
         try {
             DbConnection db = Database::open(1024);
             Stmt u(db, "UPDATE stations SET last_played = ? WHERE id = ?");
@@ -391,7 +439,7 @@ void Stations::onTrackChanged()
         }
         if (!click.isEmpty()) {
             int status = 0;
-            Http::get(QUrl(click), {{"User-Agent", UserAgent}}, 10000, &status);
+            Http::get(QUrl(click), {{"User-Agent", Http::userAgent()}}, 10000, &status, quitting);
         }
     });
 }
@@ -426,8 +474,8 @@ void Stations::search(const QString &text)
             query.addQueryItem(QStringLiteral("reverse"), QStringLiteral("true"));
             QUrl url(base + QStringLiteral("/json/stations/search"));
             url.setQuery(query);
-            const QByteArray data = Http::get(url, {{"User-Agent", UserAgent}}, 15000, &lastStatus, [self, gen] {
-                return !self || self->m_searchGen.load() != gen;
+            const QByteArray data = Http::get(url, {{"User-Agent", Http::userAgent()}}, 15000, &lastStatus, [self, gen] {
+                return self->m_searchGen.load() != gen; // ~Stations bumps it as well
             });
             for (const QJsonValue &v : QJsonDocument::fromJson(data).array()) {
                 const QJsonObject o = v.toObject();
@@ -435,9 +483,10 @@ void Stations::search(const QString &text)
                 QString stream = o.value(QLatin1String("url_resolved")).toString();
                 if (stream.isEmpty())
                     stream = o.value(QLatin1String("url")).toString();
-                if (stream.isEmpty() || seen.contains(uuid))
+                const QString key = uuid.isEmpty() ? stream : uuid;
+                if (!Http::isWeb(QUrl(stream)) || seen.contains(key))
                     continue;
-                seen.insert(uuid);
+                seen.insert(key);
                 const int bitrate = o.value(QLatin1String("bitrate")).toInt();
                 const QString codec = o.value(QLatin1String("codec")).toString().toUpper();
                 found << QVariantMap{
@@ -501,12 +550,12 @@ void Stations::clearResults()
 void Stations::fetchLogo(qint64 id, const QString &address)
 {
     const QUrl url(address);
-    if (!isWeb(url))
+    if (!Http::isWeb(url))
         return;
     QPointer<Stations> self(this);
-    run([self, id, url] {
+    run([self, id, url, quitting = cancelled()] {
         int status = 0;
-        const QByteArray data = Http::get(url, {{"User-Agent", UserAgent}}, 15000, &status);
+        const QByteArray data = Http::get(url, {{"User-Agent", Http::userAgent()}}, 15000, &status, quitting);
         if (data.isEmpty() || data.size() > 2 * 1024 * 1024)
             return;
         const QString file = External::stationLogoFile(id);

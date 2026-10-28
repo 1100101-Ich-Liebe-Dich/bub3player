@@ -24,15 +24,17 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <fcntl.h>
 #include <gst/gst.h>
 #include <linux/cdrom.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace {
-
-const QByteArray UserAgent = QByteArrayLiteral("BuB3Player/" HALCYON_VERSION " (https://github.com/1100101-Ich-Liebe-Dich/bub3player)");
 
 QString cacheFile(const QString &discId, const char *ext)
 {
@@ -43,7 +45,8 @@ QString cacheFile(const QString &discId, const char *ext)
 }
 
 // A name that is safe as one file or folder name (no "/", no control characters,
-// not "." or "..", not too long).
+// not "." or "..", at most 200 bytes: file systems allow 255, with room for
+// "NN " and ".flac").
 QString fileName(QString s, const QString &fallback)
 {
     s.replace(QLatin1Char('/'), QLatin1Char('-'));
@@ -51,9 +54,137 @@ QString fileName(QString s, const QString &fallback)
     s = s.simplified();
     while (s.startsWith(QLatin1Char('.')))
         s.remove(0, 1);
-    if (s.size() > 120)
-        s = s.left(120).trimmed();
+    while (s.toUtf8().size() > 200) {
+        s.chop(s.size() > 1 && s.at(s.size() - 1).isLowSurrogate() ? 2 : 1); // never half a character
+        s = s.trimmed();
+    }
     return s.isEmpty() ? fallback : s;
+}
+
+// The elements in a row in a new pipeline; nothing (and nothing left over) if one
+// is missing or they do not link.
+GstElement *pipelineOf(std::initializer_list<GstElement *> chain)
+{
+    GstElement *pipe = gst_pipeline_new(nullptr);
+    bool complete = pipe != nullptr;
+    for (GstElement *e : chain)
+        complete = complete && e;
+    if (!complete) {
+        for (GstElement *e : chain)
+            if (e)
+                gst_object_unref(gst_object_ref_sink(e));
+        if (pipe)
+            gst_object_unref(pipe);
+        return nullptr;
+    }
+    GstElement *prev = nullptr;
+    bool linked = true;
+    for (GstElement *e : chain) {
+        gst_bin_add(GST_BIN(pipe), e);
+        linked = linked && (!prev || gst_element_link(prev, e));
+        prev = e;
+    }
+    if (!linked) {
+        gst_object_unref(pipe);
+        return nullptr;
+    }
+    return pipe;
+}
+
+// Is there anything under this name, even a link that points nowhere?
+bool taken(const QString &path)
+{
+    struct stat st;
+    return ::lstat(QFile::encodeName(path).constData(), &st) == 0;
+}
+
+// Gives the finished file `from` its name `to` without ever replacing or writing
+// through anything that is there (not even a dangling link). False: `to` was
+// taken (`*error` empty) or the file system refused (`*error` says why); `from`
+// is gone either way.
+bool place(const QString &from, const QString &to, QString *error)
+{
+    const QByteArray f = QFile::encodeName(from), t = QFile::encodeName(to);
+    const auto fail = [&](int e) {
+        ::unlink(f.constData());
+        if (e != EEXIST)
+            *error = QString::fromLocal8Bit(std::strerror(e));
+        return false;
+    };
+    if (::renameat2(AT_FDCWD, f.constData(), AT_FDCWD, t.constData(), RENAME_NOREPLACE) == 0)
+        return true;
+    if (errno != EINVAL && errno != ENOSYS && errno != EOPNOTSUPP)
+        return fail(errno);
+    // file systems without it (some network ones): a hard link never replaces either
+    if (::link(f.constData(), t.constData()) == 0) {
+        ::unlink(f.constData());
+        return true;
+    }
+    if (errno == EEXIST)
+        return fail(EEXIST);
+    // no hard links (FAT): copy into a file that has to be new
+    const int out = ::open(t.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+    if (out < 0)
+        return fail(errno);
+    QFile in(from);
+    bool ok = in.open(QIODevice::ReadOnly);
+    while (ok) {
+        const QByteArray chunk = in.read(1 << 20);
+        if (chunk.isEmpty()) {
+            ok = in.atEnd();
+            break;
+        }
+        for (qsizetype done = 0; ok && done < chunk.size();) {
+            const ssize_t n = ::write(out, chunk.constData() + done, size_t(chunk.size() - done));
+            ok = n > 0 || (n < 0 && errno == EINTR);
+            done += n > 0 ? n : 0;
+        }
+    }
+    const int writeErrno = errno;
+    ok = ::close(out) == 0 && ok;
+    if (!ok) {
+        ::unlink(t.constData()); // the file we just made, not one that was there
+        return fail(writeErrno ? writeErrno : EIO);
+    }
+    ::unlink(f.constData());
+    return true;
+}
+
+// A temporary name of our own next to the target: ".bub3player-<random><ext>.part".
+QString partName(const QString &dir, const char *ext)
+{
+    QString part;
+    do {
+        part = dir + QStringLiteral("/.bub3player-%1%2.part").arg(QRandomGenerator::global()->generate(), 8, 16, QLatin1Char('0')).arg(QLatin1String(ext));
+    } while (taken(part));
+    return part;
+}
+
+// Our own temporary files left behind by a crash (older than an hour: not those
+// of a reading that is still going on).
+void removeLeftovers(const QString &dir)
+{
+    const QDateTime old = QDateTime::currentDateTime().addSecs(-3600);
+    for (const QFileInfo &fi : QDir(dir).entryInfoList({QStringLiteral(".bub3player-*.part")}, QDir::Files | QDir::Hidden | QDir::NoSymLinks))
+        if (fi.lastModified() < old)
+            QFile::remove(fi.filePath());
+}
+
+// The names of a disc (from MusicBrainz or typed in), kept by its disc id.
+QJsonObject readNames(const QString &discId)
+{
+    QFile f(cacheFile(discId, ".json"));
+    return f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
+}
+
+void writeNames(const QString &discId, const QJsonObject &names)
+{
+    QDir().mkpath(QFileInfo(cacheFile(discId, ".json")).absolutePath());
+    QSaveFile f(cacheFile(discId, ".json"));
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(QJsonDocument(names).toJson(QJsonDocument::Compact));
+        f.commit();
+    }
 }
 
 QString joinCredit(const QJsonArray &credit)
@@ -246,14 +377,12 @@ void AudioCd::readDisc()
         // The source reads the table of contents when it starts: track count, the
         // MusicBrainz disc id and, in its full form, where each track starts.
         QString discId, full;
-        GstElement *pipe = gst_pipeline_new(nullptr);
         GstElement *src = gst_element_factory_make(element.constData(), nullptr);
-        GstElement *sink = gst_element_factory_make("fakesink", nullptr);
-        bool ok = pipe && src && sink;
-        if (ok) {
+        if (src)
             g_object_set(src, "device", dev.constData(), "track", 1, nullptr);
-            gst_bin_add_many(GST_BIN(pipe), src, sink, nullptr);
-            ok = gst_element_link(src, sink);
+        GstElement *pipe = pipelineOf({src, gst_element_factory_make("fakesink", nullptr)});
+        bool ok = pipe != nullptr;
+        if (ok) {
             gst_element_set_state(pipe, GST_STATE_PAUSED);
             GstBus *bus = gst_element_get_bus(pipe);
             const qint64 until = QDateTime::currentMSecsSinceEpoch() + 30000; // a drive takes its time to spin up
@@ -287,12 +416,6 @@ void AudioCd::readDisc()
         }
         if (pipe)
             gst_object_unref(pipe);
-        else {
-            if (src)
-                gst_object_unref(src);
-            if (sink)
-                gst_object_unref(sink);
-        }
         // "first last leadout offset1 offset2 …" in hex, in sectors of 1/75 s
         QVector<Track> tracks;
         const QStringList parts = full.split(QLatin1Char(' '), Qt::SkipEmptyParts);
@@ -328,10 +451,9 @@ void AudioCd::discRead(int gen, const QString &discId, const QVector<Track> &tra
     m_coverFile.clear();
     m_status = audio ? 3 : 4;
     // names found or typed in before for this disc
-    QFile f(cacheFile(m_discId, ".json"));
+    const QJsonObject o = audio && !m_discId.isEmpty() ? readNames(m_discId) : QJsonObject();
     bool known = false;
-    if (audio && !m_discId.isEmpty() && f.open(QIODevice::ReadOnly)) {
-        const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+    if (!o.isEmpty()) {
         m_album = o.value(QLatin1String("album")).toString();
         m_artist = o.value(QLatin1String("artist")).toString();
         m_year = o.value(QLatin1String("year")).toInt();
@@ -403,7 +525,7 @@ void AudioCd::lookUp(const QString &discId)
         const auto stale = [self, gen] { return !self || self->m_gen.load() != gen; };
         int status = 0;
         const QUrl url(mb + QStringLiteral("/ws/2/discid/%1?inc=recordings+artist-credits&fmt=json").arg(discId));
-        const QByteArray data = Http::get(url, {{"User-Agent", UserAgent}, {"Accept", "application/json"}}, 15000, &status, stale);
+        const QByteArray data = Http::get(url, {{"User-Agent", Http::userAgent()}, {"Accept", "application/json"}}, 15000, &status, stale);
         if (stale())
             return;
         // the release that has this very disc
@@ -440,23 +562,21 @@ void AudioCd::lookUp(const QString &discId)
         while (tracks.size() > count && count > 0)
             tracks.removeLast();
         out.insert(QStringLiteral("tracks"), tracks);
-        QDir().mkpath(QFileInfo(cacheFile(discId, ".json")).absolutePath());
-        QSaveFile f(cacheFile(discId, ".json"));
-        if (f.open(QIODevice::WriteOnly)) {
-            f.write(QJsonDocument(out).toJson(QJsonDocument::Compact));
-            f.commit();
-        }
         // the front cover from the Cover Art Archive
         const QByteArray cover = Http::get(QUrl(art + QStringLiteral("/release/%1/front-500").arg(out.value(QLatin1String("release")).toString())),
-                                           {{"User-Agent", UserAgent}}, 20000, &status, stale);
+                                           {{"User-Agent", Http::userAgent()}}, 20000, &status, stale);
         if (!cover.isEmpty() && cover.size() < 8 * 1024 * 1024) {
+            QDir().mkpath(QFileInfo(cacheFile(discId, ".jpg")).absolutePath());
             QSaveFile c(cacheFile(discId, ".jpg"));
             if (c.open(QIODevice::WriteOnly)) {
                 c.write(cover);
                 c.commit();
             }
         }
-        QMetaObject::invokeMethod(qApp, [self, gen] {
+        QMetaObject::invokeMethod(qApp, [self, gen, discId, out] {
+            // names typed in meanwhile win (written here, on the same thread as setNames)
+            if (!readNames(discId).value(QLatin1String("edited")).toBool())
+                writeNames(discId, out);
             if (self && self->m_gen.load() == gen && self->m_status == 3)
                 self->discRead(gen, self->m_discId, self->m_tracks, true); // with the names now
         }, Qt::QueuedConnection);
@@ -476,10 +596,7 @@ void AudioCd::setNames(const QString &album, const QString &artist, int year, co
         m_tracks[i].title = t == tr("Titel %1").arg(m_tracks[i].number) ? QString() : t;
     }
     if (!m_discId.isEmpty()) {
-        QJsonObject out;
-        QFile in(cacheFile(m_discId, ".json"));
-        if (in.open(QIODevice::ReadOnly))
-            out = QJsonDocument::fromJson(in.readAll()).object();
+        QJsonObject out = readNames(m_discId);
         out.insert(QStringLiteral("album"), m_album);
         out.insert(QStringLiteral("artist"), m_artist);
         out.insert(QStringLiteral("year"), m_year);
@@ -488,12 +605,7 @@ void AudioCd::setNames(const QString &album, const QString &artist, int year, co
             tracks.append(QJsonObject{{QStringLiteral("title"), t.title}, {QStringLiteral("artist"), t.artist}});
         out.insert(QStringLiteral("tracks"), tracks);
         out.insert(QStringLiteral("edited"), true);
-        QDir().mkpath(QFileInfo(cacheFile(m_discId, ".json")).absolutePath());
-        QSaveFile f(cacheFile(m_discId, ".json"));
-        if (f.open(QIODevice::WriteOnly)) {
-            f.write(QJsonDocument(out).toJson(QJsonDocument::Compact));
-            f.commit();
-        }
+        writeNames(m_discId, out);
     }
     publish();
 }
@@ -504,10 +616,6 @@ void AudioCd::play(int index)
 {
     if (m_status != 3 || m_tracks.isEmpty())
         return;
-    if (m_ripping) {
-        emit message(tr("Während des Einlesens kann die CD nicht spielen"));
-        return;
-    }
     QVector<qint64> items;
     for (const Track &t : std::as_const(m_tracks))
         items << External::cdItem(t.number);
@@ -591,6 +699,7 @@ void AudioCd::rip()
     if (External::isCd(m_player->currentId()))
         m_player->stop(); // one drive cannot play and be read at once
     m_ripping = true;
+    External::setCdBusy(true);
     m_ripCancel = false;
     m_ripProgress = 0;
     m_ripText = tr("Wird eingelesen …");
@@ -609,6 +718,7 @@ void AudioCd::rip()
         int written = 0, skipped = 0;
         QString error;
         QDir().mkpath(dir);
+        removeLeftovers(dir);
         const int count = int(tracks.size());
         for (int i = 0; i < count && error.isEmpty(); ++i) {
             if (!self || self->m_ripCancel.load())
@@ -616,50 +726,50 @@ void AudioCd::rip()
             const Track &t = tracks[i];
             const QString title = t.title.isEmpty() ? tr("Titel %1").arg(t.number) : t.title;
             const QString target = dir + QStringLiteral("/%1 %2.flac").arg(t.number, 2, 10, QLatin1Char('0')).arg(fileName(title, tr("Titel")));
-            if (QFileInfo::exists(target)) {
+            if (taken(target)) {
                 ++skipped; // never overwritten
                 continue;
             }
-            // a temporary name of our own; renamed only when the file is complete
-            QString part;
-            do {
-                part = dir + QStringLiteral("/.bub3player-%1.flac.part").arg(QRandomGenerator::global()->generate(), 8, 16, QLatin1Char('0'));
-            } while (QFileInfo::exists(part));
+            // written under a name of our own; it gets its real one only when complete
+            const QString part = partName(dir, ".flac");
 
-            GstElement *pipe = gst_pipeline_new(nullptr);
             GstElement *src = gst_element_factory_make(element.constData(), nullptr);
-            GstElement *conv = gst_element_factory_make("audioconvert", nullptr);
             GstElement *enc = gst_element_factory_make("flacenc", nullptr);
             GstElement *sink = gst_element_factory_make("filesink", nullptr);
-            if (!pipe || !src || !conv || !enc || !sink) {
+            if (src) {
+                g_object_set(src, "device", dev.constData(), "track", guint(t.number), nullptr);
+                if (element == "cdparanoiasrc")
+                    g_object_set(src, "paranoia-mode", 0xff, nullptr); // full error correction
+            }
+            if (sink)
+                g_object_set(sink, "location", QFile::encodeName(part).constData(), nullptr);
+            if (enc) {
+                GstTagList *tags = gst_tag_list_new_empty();
+                gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, title.toUtf8().constData(), GST_TAG_TRACK_NUMBER,
+                                 guint(t.number), GST_TAG_TRACK_COUNT, guint(count), nullptr);
+                const QString trackArtist = t.artist.isEmpty() ? albumArtist : t.artist;
+                if (!trackArtist.isEmpty())
+                    gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ARTIST, trackArtist.toUtf8().constData(), nullptr);
+                if (!albumArtist.isEmpty())
+                    gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM_ARTIST, albumArtist.toUtf8().constData(), nullptr);
+                if (!albumName.isEmpty())
+                    gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM, albumName.toUtf8().constData(), nullptr);
+                if (year > 0) {
+                    GstDateTime *dt = gst_date_time_new_y(year);
+                    gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_DATE_TIME, dt, nullptr);
+                    gst_date_time_unref(dt);
+                }
+                gst_tag_setter_merge_tags(GST_TAG_SETTER(enc), tags, GST_TAG_MERGE_REPLACE);
+                gst_tag_list_unref(tags);
+            }
+            GstElement *pipe = pipelineOf({src, gst_element_factory_make("audioconvert", nullptr), enc, sink});
+            if (!pipe) {
                 error = tr("GStreamer-Elemente fehlen");
                 break;
             }
-            g_object_set(src, "device", dev.constData(), "track", guint(t.number), nullptr);
-            g_object_set(sink, "location", QFile::encodeName(part).constData(), nullptr);
-            GstTagList *tags = gst_tag_list_new_empty();
-            gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, title.toUtf8().constData(), GST_TAG_TRACK_NUMBER,
-                             guint(t.number), GST_TAG_TRACK_COUNT, guint(count), nullptr);
-            const QString trackArtist = t.artist.isEmpty() ? albumArtist : t.artist;
-            if (!trackArtist.isEmpty())
-                gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ARTIST, trackArtist.toUtf8().constData(), nullptr);
-            if (!albumArtist.isEmpty())
-                gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM_ARTIST, albumArtist.toUtf8().constData(), nullptr);
-            if (!albumName.isEmpty())
-                gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_ALBUM, albumName.toUtf8().constData(), nullptr);
-            if (year > 0) {
-                GstDateTime *dt = gst_date_time_new_y(year);
-                gst_tag_list_add(tags, GST_TAG_MERGE_REPLACE, GST_TAG_DATE_TIME, dt, nullptr);
-                gst_date_time_unref(dt);
-            }
-            gst_tag_setter_merge_tags(GST_TAG_SETTER(enc), tags, GST_TAG_MERGE_REPLACE);
-            gst_tag_list_unref(tags);
-            gst_bin_add_many(GST_BIN(pipe), src, conv, enc, sink, nullptr);
-            bool ok = gst_element_link_many(src, conv, enc, sink, nullptr);
-            if (ok)
-                gst_element_set_state(pipe, GST_STATE_PLAYING);
+            gst_element_set_state(pipe, GST_STATE_PLAYING);
             GstBus *bus = gst_element_get_bus(pipe);
-            bool done = false;
+            bool ok = true, done = false;
             qint64 lastReport = 0;
             while (ok && !done) {
                 if (!self || self->m_ripCancel.load()) {
@@ -671,7 +781,7 @@ void AudioCd::rip()
                     if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
                         GError *err = nullptr;
                         gst_message_parse_error(msg, &err, nullptr);
-                        error = QString::fromUtf8(err ? err->message : "");
+                        error = err && err->message && *err->message ? QString::fromUtf8(err->message) : tr("Lesefehler");
                         g_clear_error(&err);
                         ok = false;
                     } else {
@@ -698,25 +808,33 @@ void AudioCd::rip()
             gst_object_unref(bus);
             gst_element_set_state(pipe, GST_STATE_NULL);
             gst_object_unref(pipe);
-            if (!ok || !done) {
+            if (!ok) {
                 QFile::remove(part); // only our own unfinished file
                 break;
             }
-            // QFile::rename never replaces an existing file
-            if (QFile::rename(part, target)) {
+            QString placeError;
+            if (place(part, target, &placeError))
                 ++written;
-            } else {
-                QFile::remove(part);
-                ++skipped;
-            }
+            else if (placeError.isEmpty())
+                ++skipped; // appeared meanwhile: left as it is
+            else
+                error = tr("%1 lässt sich nicht anlegen (%2)").arg(QFileInfo(target).fileName(), placeError);
         }
-        if (!cover.isEmpty() && written > 0 && !QFileInfo::exists(dir + QStringLiteral("/cover.jpg")))
-            QFile::copy(cover, dir + QStringLiteral("/cover.jpg"));
+        const QString coverTarget = dir + QStringLiteral("/cover.jpg");
+        if (!cover.isEmpty() && written > 0 && !taken(coverTarget)) {
+            const QString part = partName(dir, ".jpg");
+            QString ignored;
+            if (QFile::copy(cover, part))
+                place(part, coverTarget, &ignored);
+            else
+                QFile::remove(part);
+        }
         const bool cancelled = !self || self->m_ripCancel.load();
         QMetaObject::invokeMethod(qApp, [self, written, skipped, error, cancelled, dir] {
             if (!self)
                 return;
             self->m_ripping = false;
+            External::setCdBusy(false);
             self->m_ripProgress = error.isEmpty() && !cancelled ? 1 : 0;
             QString text = written == 1 ? tr("1 Titel eingelesen") : tr("%1 Titel eingelesen").arg(written);
             if (skipped > 0)

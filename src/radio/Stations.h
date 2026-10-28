@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "core/Http.h"
+
 #include <QObject>
 #include <QThreadPool>
 #include <QVariantList>
@@ -43,8 +45,12 @@ public:
     // `playNow`: play it right away (opened from the file manager or dropped on the window)
     Q_INVOKABLE void add(const QString &address, const QString &name = {}, bool playNow = false);
     Q_INVOKABLE void importFile(const QVariant &pathOrUrl, bool playNow = false);
+    // A file from outside (opened, dropped): stations are added and the first plays;
+    // an .m3u with anything but internet addresses is a playlist and comes back
+    // through notStations().
+    Q_INVOKABLE void openList(const QVariant &pathOrUrl);
     // A .m3u with only internet addresses is a list of stations, not a playlist.
-    Q_INVOKABLE static bool isStationList(const QVariant &pathOrUrl);
+    static bool isStationList(const QVariant &pathOrUrl);
     Q_INVOKABLE void rename(qint64 id, const QString &name);
     Q_INVOKABLE void remove(qint64 id);
     Q_INVOKABLE void play(qint64 id);
@@ -58,6 +64,7 @@ signals:
     void busyChanged();
     void resultsChanged();
     void message(const QString &text);
+    void notStations(const QString &path);
 
 private:
     struct Station
@@ -66,16 +73,20 @@ private:
         int bitrate = 0;
     };
     void reload();
+    void readList(const QString &path, bool playNow, bool orPlaylist);
+    static bool isAudio(const Http::Probe &p); // a stream, not a web page or a picture
     void insert(QVector<Station> stations, bool announce, bool playFirst = false);
     void fetchLogo(qint64 id, const QString &address);
     void onTrackChanged();
     void run(std::function<void()> work); // network and database writes, one after the other
     QString directory() const;            // radio-browser.info, or a stand-in for tests
+    std::function<bool()> cancelled() const; // for requests: true once the player quits
 
     Player *m_player;
     PlayQueue *m_queue;
     QThreadPool m_pool;
     std::atomic<int> m_searchGen{0};
+    std::atomic<bool> m_closing{false}; // quitting: requests end at once
     QVariantList m_list, m_results;
     QString m_resultsText;
     int m_busy = 0;

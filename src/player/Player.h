@@ -61,7 +61,7 @@ class Player : public QObject
     Q_PROPERTY(bool hasTrack READ hasTrack NOTIFY trackChanged) // anything loaded (a library track: currentId > 0)
     Q_PROPERTY(QString albumArtist READ albumArtist NOTIFY trackChanged)
     Q_PROPERTY(int year READ year NOTIFY trackChanged)
-    Q_PROPERTY(QString format READ format NOTIFY trackChanged)
+    Q_PROPERTY(QString format READ format NOTIFY metaChanged)
     Q_PROPERTY(QColor coverColor READ coverColor NOTIFY coverColorChanged)
     Q_PROPERTY(int replayGain READ replayGain WRITE setReplayGain NOTIFY settingsChanged) // 0 off, 1 track, 2 album
     Q_PROPERTY(double preamp READ preamp WRITE setPreamp NOTIFY settingsChanged)        // dB
@@ -189,6 +189,7 @@ signals:
     void volumeChanged();
     void trackChanged();
     void metaChanged();
+    void streamTitleChanged(); // a radio station names the next song (not with a new track)
     void coverColorChanged();
     void settingsChanged();
     void spectrumEnabledChanged();
@@ -283,6 +284,7 @@ private:
     void updatePosition();         // position + listening time
     void pollPosition();           // ... plus transitions (timer)
     void finishTrack(bool skipped);
+    bool reconnect();
     QByteArray uriFor(qint64 id) const;
     double fallbackGain(qint64 id);
 
@@ -347,7 +349,6 @@ private:
     qint64 m_playingId = 0;
     QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error, m_key;
     QString m_streamTitle;         // what the station says is playing (ICY)
-    bool m_reconnected = false;    // a station that ended was started once more
     int m_year = 0;
     double m_bpm = 0;
     QColor m_coverColor;

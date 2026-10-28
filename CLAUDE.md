@@ -146,8 +146,10 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
   (`window.durationText`), ICY-Titel über `GST_MESSAGE_TAG`, kein lückenloses Vorladen. Ins Netz
   (radio-browser.info, MusicBrainz) nur, wenn eingeschaltet; Senderadressen nur `http(s)`.
 - CD einlesen: nie etwas überschreiben – jeder Titel entsteht als `.bub3player-….flac.part` im
-  Zielordner und wird mit `QFile::rename` (ersetzt nichts) umbenannt; vorhandene Dateien werden
-  übersprungen, `cover.jpg` nur, wenn es keines gibt.
+  Zielordner und bekommt seinen Namen über `place()` in `AudioCd.cpp` (`renameat2` mit
+  `RENAME_NOREPLACE`, sonst harter Link, sonst Kopie mit `O_EXCL`; nie `QFile::rename`, das bei
+  einem toten Link hindurch schreibt). Vorhanden ist, was `lstat` findet; `cover.jpg` nur, wenn es
+  keines gibt. Während des Einlesens spielt die CD nicht (`External::cdBusy`).
 - Liedtexte: gesucht nur, solange eine Großansicht offen ist (`Lyrics.active`); ins Netz (LRCLIB)
   nur, wenn eingeschaltet und Liedtexte gezeigt werden sollen. Nie etwas neben die Musik schreiben.
   Jede Großansicht zeigt `LyricsView` statt des Covers, wenn `window.lyricsOn`; Schalter ruft
@@ -205,7 +207,8 @@ Ton prüfen ohne Soundkarte:
   `pcm` im Format von `/proc/asound`.
 - Suche testen: `--ui-test "search=wort"`.
 - Internetradio: `--ui-test "funkadd=URL funkon=N funksuche=WORT"` (Sender hinzufügen, den N-ten
-  spielen, im Verzeichnis suchen) mit `tools/mock-radio.py`.
+  spielen, im Verzeichnis suchen) mit `tools/mock-radio.py`; `--cut SEK` lässt dessen Ströme
+  abbrechen (neu verbinden), `/seite` ist eine Webseite statt eines Senders.
 - Audio-CD ohne Laufwerk: `HALCYON_TEST_CDROM=DATEI.cue` (Abbild aus .cue und .bin, gelesen mit
   `cdiocddasrc`, cdparanoia wird dafür abgeschaltet), `--view cd --ui-test "scheibe=N scheibelesen"`
   (N-ten Titel ab 0 spielen, einlesen). Ein Abbild: 16-Bit-PCM (Little Endian, 44,1 kHz, Stereo) als
@@ -247,7 +250,7 @@ Typischer Ablauf vor einem PR:
 - **TagLib öffnet Dateien sonst zum Schreiben** → inotify meldet `CLOSE_WRITE` → Endlosschleife
   aus Scan und Neuladen. Tags und Cover immer über `TagLib::FileStream(…, readOnly = true)`.
 - `Transaction` in `Sql.h` committet im Destruktor; für Schreibvorgänge, die bei Fehlern ganz
-  zurückgerollt werden müssen, `WriteTx` (PlaylistStore) verwenden.
+  zurückgerollt werden müssen, `WriteTx` (auch in `Sql.h`) verwenden.
 - `NOT IN (SELECT … )` mit NULL-Werten liefert nichts – fehlende Playlist-Einträge sind NULL.
 - Pfadbereiche immer als `path = p OR (path >= p||'/' AND path < p||'0')` (sonst passt
   „/musik“ auch auf „/musik2“).

@@ -53,7 +53,7 @@ MprisPlayer::MprisPlayer(QObject *parent, Player *player, PlayQueue *queue)
         notify({{QStringLiteral("Shuffle"), shuffle()}, {QStringLiteral("LoopStatus"), loopStatus()}});
     });
     // a station names the next song
-    connect(player, &Player::metaChanged, this, [this] { notify({{QStringLiteral("Metadata"), metadata()}}); });
+    connect(player, &Player::streamTitleChanged, this, [this] { notify({{QStringLiteral("Metadata"), metadata()}}); });
     connect(player, &Player::trackChanged, this, [this] {
         notify({{QStringLiteral("CanSeek"), canSeek()}});
         m_artUrl.clear();
