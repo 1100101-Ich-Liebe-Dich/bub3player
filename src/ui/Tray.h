@@ -128,7 +128,7 @@ private:
     TrayPixmaps m_icon;
     uint m_revision = 1;
     uint m_notificationId = 0;
-    qint64 m_lastNotified = 0;
+    QString m_lastNotified; // track id and title (a station changes the title only)
     QElapsedTimer m_deactivated; // when the window lost the focus last
 };
 

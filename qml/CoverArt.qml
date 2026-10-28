@@ -13,7 +13,8 @@ import Halcyon
 // its image after a few seconds.
 Item {
     id: c
-    property var coverId: 0
+    property var coverId: 0            // a track (radio and CD: negative, see External)
+    property var version: ""           // changes when the picture behind the same id does (station logos)
     property string artist: ""         // set: the artist's picture (album art of coverId if there is none)
     property real radius: 6
     property int requestSize: 256
@@ -65,8 +66,9 @@ Item {
     Image {
         id: img
         anchors.fill: parent
-        source: c.coverId > 0 && c.shown && c.shownPx > 0
-                ? (c.artist !== "" ? "image://cover/artist/" + c.coverId + "/" + encodeURIComponent(c.artist) : "image://cover/" + c.coverId)
+        source: c.coverId !== 0 && c.shown && c.shownPx > 0
+                ? (c.artist !== "" ? "image://cover/artist/" + c.coverId + "/" + encodeURIComponent(c.artist)
+                                   : "image://cover/" + c.coverId + (c.version !== "" ? "?v=" + c.version : ""))
                 : ""
         sourceSize: Qt.size(c.decodeSize, c.decodeSize)
         asynchronous: true

@@ -97,7 +97,7 @@ Item {
         Rectangle { anchors.fill: parent; color: skin.cols.b1 }
         Image {
             anchors.fill: parent
-            source: Player.currentId > 0 ? "image://cover/" + Player.currentId : ""
+            source: Player.hasTrack ? "image://cover/" + Player.currentId : ""
             sourceSize: Qt.size(64, 64)
             asynchronous: true
             fillMode: Image.PreserveAspectCrop
@@ -304,11 +304,11 @@ Item {
                             requestSize: 512
                             coverId: Player.currentId
                             label: Player.album || Player.title
-                            showInitial: Player.currentId > 0
+                            showInitial: Player.hasTrack
                             MouseArea {
                                 anchors.fill: parent
-                                cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true
+                                cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: if (Player.hasTrack) window.nowPlayingOpen = true
                             }
                         }
                         // little glass chip with the format, overlapping the cover
@@ -330,7 +330,7 @@ Item {
                             spacing: 3
                             Text {
                                 width: parent.width
-                                text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
+                                text: Player.hasTrack ? Player.title : qsTr("Bereit")
                                 elide: Text.ElideRight
                                 font.family: Theme.displayFont
                                 font.pixelSize: 21
@@ -339,7 +339,7 @@ Item {
                             }
                             Text {
                                 width: parent.width
-                                text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
+                                text: Player.hasTrack ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: 14
@@ -384,7 +384,7 @@ Item {
                             value: Player.volume
                             onMoved: Player.volume = value
                         }
-                        GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 30; quiet: true; iconName: "expand"; enabled: Player.currentId > 0; onClicked: window.nowPlayingOpen = true }
+                        GlassButton { anchors.verticalCenter: parent.verticalCenter; size: 30; quiet: true; iconName: "expand"; enabled: Player.hasTrack; onClicked: window.nowPlayingOpen = true }
                     }
                 }
             }
@@ -662,7 +662,7 @@ Item {
                     }
                     GlassButton { id: bigRepeat; anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; size: 46; quiet: true; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
                     GlassButton { id: bigLyrics; anchors.verticalCenter: parent.verticalCenter; anchors.right: bigRepeat.left; anchors.rightMargin: 8; size: 46; quiet: true; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
-                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.left: bigShuffle.right; anchors.leftMargin: 8; size: 46; quiet: true; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
+                    GlassButton { anchors.verticalCenter: parent.verticalCenter; anchors.left: bigShuffle.right; anchors.leftMargin: 8; size: 46; quiet: true; visible: Player.currentId > 0; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
                 }
             }
         }
@@ -894,7 +894,7 @@ Item {
             }
             Text {
                 anchors.right: parent.right
-                text: "-" + window.fmtTime(Math.max(0, Player.duration - (gs.dragFrac >= 0 ? gs.dragFrac * Player.duration : Player.position)))
+                text: Player.live ? window.durationText : "-" + window.fmtTime(Math.max(0, Player.duration - (gs.dragFrac >= 0 ? gs.dragFrac * Player.duration : Player.position)))
                 font.family: Theme.uiFont
                 font.pixelSize: gs.big ? 13 : 12
                 font.weight: Font.Bold

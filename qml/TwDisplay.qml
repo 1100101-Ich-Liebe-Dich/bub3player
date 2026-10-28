@@ -35,7 +35,7 @@ Rectangle {
         return s.replace(/[^A-Z0-9 \-\.\'\/\*\+\(\)=<>_,]/g, "-")
     }
     readonly property string message: {
-        if (Player.currentId <= 0) return "NO DISC  *  BUB3PLAYER  *  "
+        if (!Player.hasTrack) return "NO DISC  *  BUB3PLAYER  *  "
         var t = Player.title + "  -  " + Player.artist
         if (vfd.demo) t += "  *  BUB3PLAYER  *  PROJEKT PRAESENTIERT VON WWW.BAUENUNDBOOTEN.DE"
         return vfd.seg14(t) + "    "
@@ -121,7 +121,7 @@ Rectangle {
             spacing: 7 * content.u
             Repeater {
                 model: [
-                    ["CD", Player.currentId > 0], ["TAPE", false], ["TUNER", false],
+                    ["CD", Player.hasTrack], ["TAPE", false], ["TUNER", false],
                     ["▶", Player.state === 1], ["❚❚", Player.state === 2 && vfd.blink],
                     ["RPT", Queue.repeat > 0], ["1", Queue.repeat === 2], ["SHUF", Queue.shuffle], ["PGM", window.queueOpen],
                     ["DSP", vfd.demo && (vfd.beat > 0.4 || vfd.blink)], ["X-BASS", vfd.demo ? vfd.beat > 0.25 : Player.playing], ["NR", false]
@@ -185,7 +185,7 @@ Rectangle {
                         width: 14 * content.u; height: 14 * content.u; radius: 7 * content.u
                         color: "transparent"
                         border.width: 1.5
-                        readonly property bool on: Player.currentId > 0 && (Math.max(0, Queue.currentRow) % 3) === index
+                        readonly property bool on: Player.hasTrack && (Math.max(0, Queue.currentRow) % 3) === index
                         border.color: on ? vfd.ink : vfd.ghost
                         Text {
                             anchors.centerIn: parent

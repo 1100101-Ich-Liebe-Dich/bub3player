@@ -280,12 +280,12 @@ Item {
                     requestSize: 128
                     coverId: Player.currentId
                     label: Player.album || Player.title
-                    showInitial: Player.currentId > 0
+                    showInitial: Player.hasTrack
                 }
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true
+                    cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: if (Player.hasTrack) window.nowPlayingOpen = true
                 }
             }
             Column {
@@ -293,7 +293,7 @@ Item {
                 spacing: 3
                 Text {
                     width: parent.width
-                    text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
+                    text: Player.hasTrack ? Player.title : qsTr("Bereit")
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 15
@@ -302,7 +302,7 @@ Item {
                 }
                 Text {
                     width: parent.width
-                    text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
+                    text: Player.hasTrack ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 13
@@ -351,7 +351,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 40
                     horizontalAlignment: Text.AlignRight
-                    text: window.fmtTime(Player.duration)
+                    text: window.durationText
                     font.family: Theme.uiFont
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -383,7 +383,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     iconName: "expand"
                     tip: qsTr("Großansicht")
-                    enabled: Player.currentId > 0
+                    enabled: Player.hasTrack
                     onClicked: window.nowPlayingOpen = true
                 }
             }
@@ -621,7 +621,7 @@ Item {
                     width: parent.width
                     height: 18
                     Text { text: window.fmtTime(Player.position); font.family: Theme.uiFont; font.pixelSize: 13; font.weight: Font.DemiBold; color: Theme.textDim }
-                    Text { anchors.right: parent.right; text: window.fmtTime(Player.duration); font.family: Theme.uiFont; font.pixelSize: 13; font.weight: Font.DemiBold; color: Theme.textDim }
+                    Text { anchors.right: parent.right; text: window.durationText; font.family: Theme.uiFont; font.pixelSize: 13; font.weight: Font.DemiBold; color: Theme.textDim }
                 }
                 Item {
                     width: parent.width
@@ -635,7 +635,7 @@ Item {
                         IconButton { anchors.verticalCenter: parent.verticalCenter; width: 48; height: 48; iconName: "next"; iconSize: 28; iconColor: Theme.text; onClicked: Player.next() }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
                         IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
-                        HeartButton { anchors.verticalCenter: parent.verticalCenter; size: 36; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
+                        HeartButton { visible: Player.currentId > 0; anchors.verticalCenter: parent.verticalCenter; size: 36; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                     }
                 }
                 Row {

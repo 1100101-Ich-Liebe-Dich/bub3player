@@ -34,28 +34,6 @@ namespace {
 
 const QChar Sep(0x1f); // hint fields: path, title, artist, album, length (ms)
 
-// A write that is rolled back unless it is committed (also when it throws).
-struct WriteTx
-{
-    DbConnection &db;
-    bool done = false;
-    explicit WriteTx(DbConnection &d, const char *begin = "BEGIN IMMEDIATE") : db(d) { db.exec(begin); }
-    void commit()
-    {
-        db.exec("COMMIT");
-        done = true;
-    }
-    ~WriteTx()
-    {
-        if (!done) {
-            try {
-                db.exec("ROLLBACK");
-            } catch (...) {
-            }
-        }
-    }
-};
-
 // The list changed between showing and editing it (another edit was faster).
 struct StaleEdit : std::runtime_error
 {
@@ -382,6 +360,7 @@ QString PlaylistStore::hintFor(DbConnection &db, qint64 trackId)
 
 void PlaylistStore::append(qint64 id, QVector<qint64> trackIds, bool announce, QVariantMap spec)
 {
+    trackIds.removeIf([](qint64 t) { return t <= 0; }); // radio and CD (from the queue) are no titles of a playlist
     const QVariantMap p = get(id);
     if (p.isEmpty() || p.value(QStringLiteral("smart")).toBool() || (trackIds.isEmpty() && spec.isEmpty()))
         return;

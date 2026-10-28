@@ -58,7 +58,7 @@ class MprisPlayer : public QDBusAbstractAdaptor
     Q_PROPERTY(bool CanGoPrevious READ canControl)
     Q_PROPERTY(bool CanPlay READ canControl)
     Q_PROPERTY(bool CanPause READ canControl)
-    Q_PROPERTY(bool CanSeek READ canControl)
+    Q_PROPERTY(bool CanSeek READ canSeek)
     Q_PROPERTY(bool CanControl READ canControl)
 
 public:
@@ -76,6 +76,7 @@ public:
     void setVolume(double v);
     qlonglong position() const;
     bool canControl() const { return true; }
+    bool canSeek() const;
 
 public slots:
     void Next();

@@ -188,6 +188,7 @@ Tray::Tray(Player *player, Library *library, QObject *parent)
     m_notify = s.value(QStringLiteral("tray/notify"), true).toBool();
 
     connect(player, &Player::trackChanged, this, &Tray::onTrackChanged);
+    connect(player, &Player::streamTitleChanged, this, &Tray::onTrackChanged); // the next song of a station
     connect(player, &Player::stateChanged, this, &Tray::stateChanged);
     connect(library, &Library::currentFavoriteChanged, this, [this] { emit layoutUpdated(++m_revision, 0); });
     // Quitting (menu, Ctrl+Q) first closes all windows: that close must not end in the tray.
@@ -346,7 +347,7 @@ TrayToolTip Tray::toolTip() const
 {
     TrayToolTip t;
     t.title = QStringLiteral("BuB3Player");
-    if (m_player->currentId() > 0)
+    if (m_player->currentId() != 0)
         t.text = escapeMarkup(m_player->title() + QStringLiteral(" – ") + m_player->artist())
                  + (m_player->playing() ? QString() : tr(" (Pause)"));
     return t;
@@ -354,7 +355,7 @@ TrayToolTip Tray::toolTip() const
 
 TrayMenuLayout Tray::layout() const
 {
-    const bool has = m_player->currentId() > 0;
+    const bool has = m_player->currentId() != 0;
     const bool shown = m_window && m_window->isVisible() && m_window->visibility() != QWindow::Minimized;
     auto node = [](int id, const QVariantMap &props) {
         TrayMenuLayout l;
@@ -375,7 +376,8 @@ TrayMenuLayout Tray::layout() const
         node(Next, item(tr("Nächster Titel"), has)),
         node(Previous, item(tr("Vorheriger Titel"), has)),
         node(Sep2, separator()),
-        node(Favorite, item(m_library->currentFavorite() ? tr("Aus den Favoriten entfernen") : tr("Zu den Favoriten"), has)),
+        node(Favorite, item(m_library->currentFavorite() ? tr("Aus den Favoriten entfernen") : tr("Zu den Favoriten"),
+                            m_player->currentId() > 0)), // not for radio and CD
         node(Sep3, separator()),
         node(ShowWindow, item(shown ? tr("Fenster verstecken") : tr("Fenster zeigen"))),
         node(Quit, item(tr("Beenden"))),
@@ -446,11 +448,13 @@ void Tray::onTrackChanged()
 void Tray::maybeNotify()
 {
     const qint64 id = m_player->currentId();
-    // Once per new track and only when it really plays (not for the restored track at
-    // start), and only when the listener does not see the window anyway.
-    if (!m_notify || id <= 0 || id == m_lastNotified || !m_player->playing())
+    // Once per new track (a station: per song it names) and only when it really plays
+    // (not for the restored track at start), and only when the listener does not see
+    // the window anyway.
+    const QString key = QString::number(id) + QLatin1Char('\n') + m_player->title();
+    if (!m_notify || id == 0 || key == m_lastNotified || !m_player->playing())
         return;
-    m_lastNotified = id;
+    m_lastNotified = key;
     if (QGuiApplication::applicationState() == Qt::ApplicationActive)
         return;
     QPointer<Tray> self(this);

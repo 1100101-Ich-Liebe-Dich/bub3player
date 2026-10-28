@@ -11,11 +11,11 @@ Item {
     property var coverId: 0
     property real strength: 0.5
     readonly property bool canShade: GraphicsInfo.api !== GraphicsInfo.Software
-    visible: strength > 0.01 && coverId > 0
+    visible: strength > 0.01 && coverId !== 0
 
     Image {
         id: src
-        source: amb.coverId > 0 ? "image://cover/" + amb.coverId : ""
+        source: amb.coverId !== 0 ? "image://cover/" + amb.coverId : ""
         sourceSize: Qt.size(64, 64)
         asynchronous: true
         visible: false

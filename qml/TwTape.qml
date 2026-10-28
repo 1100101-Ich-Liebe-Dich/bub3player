@@ -59,8 +59,8 @@ Item {
             Cassette {
                 anchors.fill: parent
                 anchors.margins: 8
-                labelText: Player.currentId > 0 ? Player.title : "Mixtape"
-                subText: Player.currentId > 0 ? Player.artist : "BuB3Player"
+                labelText: Player.hasTrack ? Player.title : "Mixtape"
+                subText: Player.hasTrack ? Player.artist : "BuB3Player"
                 side: "A"
                 stripe: tape.ink
                 prog: tape.progress
@@ -136,7 +136,7 @@ Item {
             }
             Row {
                 spacing: 4
-                Rectangle { width: 5; height: 5; radius: 2.5; y: 2; color: Player.currentId > 0 ? "#4dff6a" : "#123a18" }
+                Rectangle { width: 5; height: 5; radius: 2.5; y: 2; color: Player.hasTrack ? "#4dff6a" : "#123a18" }
                 Text { text: "NR B"; font.family: "Barlow Condensed"; font.pixelSize: 8; font.weight: Font.Bold; color: "#8c949d" }
                 Rectangle { width: 5; height: 5; radius: 2.5; y: 2; color: "#123a18" }
                 Text { text: "C"; font.family: "Barlow Condensed"; font.pixelSize: 8; font.weight: Font.Bold; color: "#8c949d" }

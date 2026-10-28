@@ -10,11 +10,13 @@ struct TrackRow
 {
     qint64 id = 0, folderId = 0, added = 0, mtime = 0, lastPlayed = 0, sourceId = 1;
     QString remoteId;              // Jellyfin item id (source_id > 1)
+    QString url;                   // not in the library (id < 0, see External): what to play
     QString title, artist, album, aa, genre, codec, filename;
     int year = 0, trackNo = 0, discNo = 0, durationMs = 0, bitrate = 0, sampleRate = 0, bits = 0, playCount = 0;
     int rating = 0;                // 0..5; the heart (favourite) is 5
     bool valid = false;
-    bool isRemote() const { return sourceId != 1 && !remoteId.isEmpty(); }
+    bool isRemote() const { return sourceId > 1 && !remoteId.isEmpty(); }
+    bool isExternal() const { return id < 0; }
     bool favorite() const { return rating >= FavoriteRating; }
     static constexpr int FavoriteRating = 5;
 

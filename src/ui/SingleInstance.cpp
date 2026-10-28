@@ -2,6 +2,7 @@
 #include "ui/SingleInstance.h"
 
 #include "core/Database.h"
+#include "core/Http.h"
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -79,8 +80,9 @@ SingleInstance::Forward SingleInstance::forward(const QStringList &paths)
 
     QStringList uris;
     for (const QString &p : paths) {
-        const QUrl url = p.startsWith(QLatin1String("file:")) ? QUrl(p) : QUrl::fromLocalFile(QFileInfo(p).absoluteFilePath());
-        if (url.isLocalFile())
+        // an internet address is a radio station (or its list), anything else a file
+        const QUrl url = Http::isWeb(QUrl(p)) || p.startsWith(QLatin1String("file:")) ? QUrl(p) : QUrl::fromLocalFile(QFileInfo(p).absoluteFilePath());
+        if (url.isLocalFile() || Http::isWeb(url))
             uris << url.toString(QUrl::FullyEncoded);
     }
     QDBusMessage call = uris.isEmpty() ? QDBusMessage::createMethodCall(Service, ObjectPath, AppInterface, QStringLiteral("Activate"))
@@ -135,6 +137,8 @@ void SingleInstance::open(const QStringList &uris, const QVariantMap &platformDa
         const QUrl url(u);
         if (url.isLocalFile())
             paths << url.toLocalFile();
+        else if (Http::isWeb(url))
+            paths << u; // a radio station
     }
     activate(platformData);
     if (paths.isEmpty())

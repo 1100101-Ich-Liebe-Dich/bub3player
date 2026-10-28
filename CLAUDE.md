@@ -79,6 +79,10 @@ src/analysis    AudioAnalyzer (ein Durchgang: Lautheit, Tempo, Tonart, Wellenfor
                 AnalysisService (Vorrang- und Hintergrund-Warteschlange)
 src/recommend   Recommender (Lernen aus dem Hörverlauf, Radio, Autoplay, „Für dich“)
 src/jellyfin    Anmeldung, Abgleich in dieselbe Datenbank, Streaming, Rückmeldung
+src/radio       Stations (QML „Stations“: Senderliste in der Tabelle `stations`, Hinzufügen per
+                Adresse/Liste, radio-browser.info), StreamList (Parser für .pls/.m3u/.xspf/.asx)
+src/cd          AudioCd (QML „AudioCd“: Laufwerk, Inhalt über die GStreamer-CD-Quelle, MusicBrainz,
+                Einlesen als FLAC)
 src/ui          Theme-System, Memory (Aufräumen, malloc-Arenen), SystemDialogs (QML
                 „SystemDialogs“: Datei-/Ordnerwahl über XDG-Portal, sonst kdialog/zenity),
                 Tray (QML „Tray“: Symbol im Infobereich als StatusNotifierItem + dbusmenu,
@@ -95,8 +99,9 @@ tools/          Test- und Hilfswerkzeuge (siehe unten)
 ```
 
 Daten: `~/.local/share/halcyon/library.db` (SQLite, Schema-Version in `PRAGMA user_version`,
-derzeit 4), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
-`~/.cache/halcyon/` (Cover, Wellenformen, `lyrics/` mit Antworten von LRCLIB).
+derzeit 5), `~/.config/halcyon/halcyon.conf` (QSettings) und `views.json`,
+`~/.cache/halcyon/` (Cover, Wellenformen, `lyrics/` mit Antworten von LRCLIB, `stations/` mit
+Senderlogos, `cd/` mit Namen und Covern von CDs je MusicBrainz-Kennung).
 Desktop-ID: `de.bauenundbooten.BuB3Player`.
 
 ### Grundsätze im Code
@@ -130,7 +135,21 @@ Desktop-ID: `de.bauenundbooten.BuB3Player`.
   das Symbol angenommen hat (`Tray.available`), sonst wäre das Fenster nicht mehr erreichbar.
 - Dateien von außen (Ziehen und Ablegen, „Öffnen mit“, Kommandozeile) laufen über
   `window.openPaths` → `Library.openPaths`: gespielt wird nur, was in der Bibliothek ist;
-  außerhalb fragt der Player, ob der Ordner dazukommen soll.
+  außerhalb fragt der Player, ob der Ordner dazukommen soll. Senderlisten (`.pls`, M3U nur mit
+  Internetadressen) und `http(s)`-Adressen gehen an `Stations` und spielen gleich.
+- **Sender und CD-Titel haben negative IDs** (`library/External.h`): Sender n ist `-n` (bleibt über
+  einen Neustart in der Warteschlange), CD-Titel n ist `-(10^12 + n)` (fällt beim Neustart aus der
+  Warteschlange). `TrackCache` baut ihre Zeilen über `External::row`, `Player`, Warteschlange, MPRIS
+  und Infobereich behandeln sie wie Titel. Alles, was nur für die Bibliothek ist (Herz, Zähler,
+  Analyse, Liedtexte, Playlists, Empfehlungen), prüft `id > 0`; Anzeigen fragen `Player.hasTrack`
+  statt `Player.currentId > 0`. `Player.live` ist ein Sender: kein Spulen, „Live“ statt Länge
+  (`window.durationText`), ICY-Titel über `GST_MESSAGE_TAG`, kein lückenloses Vorladen. Ins Netz
+  (radio-browser.info, MusicBrainz) nur, wenn eingeschaltet; Senderadressen nur `http(s)`.
+- CD einlesen: nie etwas überschreiben – jeder Titel entsteht als `.bub3player-….flac.part` im
+  Zielordner und bekommt seinen Namen über `place()` in `AudioCd.cpp` (`renameat2` mit
+  `RENAME_NOREPLACE`, sonst harter Link, sonst Kopie mit `O_EXCL`; nie `QFile::rename`, das bei
+  einem toten Link hindurch schreibt). Vorhanden ist, was `lstat` findet; `cover.jpg` nur, wenn es
+  keines gibt. Während des Einlesens spielt die CD nicht (`External::cdBusy`).
 - Liedtexte: gesucht nur, solange eine Großansicht offen ist (`Lyrics.active`); ins Netz (LRCLIB)
   nur, wenn eingeschaltet und Liedtexte gezeigt werden sollen. Nie etwas neben die Musik schreiben.
   Jede Großansicht zeigt `LyricsView` statt des Covers, wenn `window.lyricsOn`; Schalter ruft
@@ -164,6 +183,7 @@ Werkzeuge in `tools/`:
 | `tools/mock-jellyfin.py --audio ORDNER` | kleiner Jellyfin-Server (Benutzer/Passwort `demo`), auch mit Liedtexten |
 | `tools/mock-portal.py --answer PFAD` | Ersatz für den Dateidialog des XDG-Portals (`pip install dbus-next`), in `dbus-run-session` zusammen mit dem Player starten; zeigt die Aufrufe |
 | `tools/mock-tray.py` | Ersatz für Infobereich (StatusNotifierWatcher) und Benachrichtigungen; Befehle auf stdin (`menu`, `click ID`, `activate` …), zusammen mit dem Player in `dbus-run-session` |
+| `tools/mock-radio.py --audio ORDNER` | Radiosender (`/stream/N`, `/list/N.pls`) mit wechselnden ICY-Titeln, radio-browser.info, MusicBrainz und Cover Art Archive auf Port 8099; Player mit `HALCYON_RADIOBROWSER_URL`, `HALCYON_MUSICBRAINZ_URL`, `HALCYON_COVERART_URL=http://127.0.0.1:8099` starten |
 | `tools/mock-lrclib.py` | Ersatz für LRCLIB; Player mit `HALCYON_LRCLIB_URL=http://127.0.0.1:8098` starten, `/mock/requests` zeigt die Anfragen |
 | `dist/appimage/build-appimage.sh` | AppImage lokal bauen |
 | `dist/appimage/smoke-test.sh DATEI` | AppImage ausprobieren (Analyse, Start, alle Themes, QML-Meldungen) |
@@ -186,6 +206,13 @@ Ton prüfen ohne Soundkarte:
 - Soundkarten für Bit-Perfect ohne Hardware: `HALCYON_TEST_ASOUND=DIR` mit Dateien `cards` und
   `pcm` im Format von `/proc/asound`.
 - Suche testen: `--ui-test "search=wort"`.
+- Internetradio: `--ui-test "funkadd=URL funkon=N funksuche=WORT"` (Sender hinzufügen, den N-ten
+  spielen, im Verzeichnis suchen) mit `tools/mock-radio.py`; `--cut SEK` lässt dessen Ströme
+  abbrechen (neu verbinden), `/seite` ist eine Webseite statt eines Senders.
+- Audio-CD ohne Laufwerk: `HALCYON_TEST_CDROM=DATEI.cue` (Abbild aus .cue und .bin, gelesen mit
+  `cdiocddasrc`, cdparanoia wird dafür abgeschaltet), `--view cd --ui-test "scheibe=N scheibelesen"`
+  (N-ten Titel ab 0 spielen, einlesen). Ein Abbild: 16-Bit-PCM (Little Endian, 44,1 kHz, Stereo) als
+  `.bin`, dazu eine `.cue` mit `TRACK nn AUDIO` und `INDEX 01 mm:ss:ff`.
 - Liedtexte: `.lrc`-Dateien neben die Vorführ-Bibliothek legen (Kopie mit `cp -al`), dann
   `--ui-test "playall now-playing lyrics seek=30000"` (`lyrics-off` schaltet sie aus). Echte
   USLT-/SYLT-Tags mit `mutagen` schreiben: `ffmpeg -metadata lyrics=…` legt bei MP3 nur ein
@@ -223,7 +250,7 @@ Typischer Ablauf vor einem PR:
 - **TagLib öffnet Dateien sonst zum Schreiben** → inotify meldet `CLOSE_WRITE` → Endlosschleife
   aus Scan und Neuladen. Tags und Cover immer über `TagLib::FileStream(…, readOnly = true)`.
 - `Transaction` in `Sql.h` committet im Destruktor; für Schreibvorgänge, die bei Fehlern ganz
-  zurückgerollt werden müssen, `WriteTx` (PlaylistStore) verwenden.
+  zurückgerollt werden müssen, `WriteTx` (auch in `Sql.h`) verwenden.
 - `NOT IN (SELECT … )` mit NULL-Werten liefert nichts – fehlende Playlist-Einträge sind NULL.
 - Pfadbereiche immer als `path = p OR (path >= p||'/' AND path < p||'0')` (sonst passt
   „/musik“ auch auf „/musik2“).
@@ -263,11 +290,13 @@ Typischer Ablauf vor einem PR:
   Datei- und Ordnerwahl über den Dialog des Desktops.
 - **1.4.0** „Alltag“: Favoriten (Herz, auch zu Jellyfin), Symbol im Infobereich und
   Benachrichtigung, Ziehen und Ablegen und „Öffnen mit“ (ein Player).
-- **Als Nächstes**: 1.5.0 Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
-  radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
-  vorhandene Dateien anfassen, auf Wunsch MusicBrainz); 1.6.0 Statistik/„Dein Jahr in Musik“
-  (Tabelle `plays`); 2.0.0 englische Oberfläche (Deutsch bleibt Standard) und englische README.
-  ReplayGain bleibt titelweise (Wunsch des Inhabers: alle Titel gleich laut), nichts in die Dateien.
+- **Als Nächstes** (Wunsch des Inhabers: weiter als 1.4.x, nur bis Paket 3):
+  - **1.4.1**: Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
+    radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
+    vorhandene Dateien anfassen, auf Wunsch MusicBrainz). Gebaut, PR offen.
+  - **1.4.2**: Statistik/„Dein Jahr in Musik“ (Tabelle `plays`).
+  - Englische Oberfläche (Paket 4) vorerst nicht. ReplayGain bleibt titelweise (Wunsch des
+    Inhabers: alle Titel gleich laut), nichts in die Dateien.
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.

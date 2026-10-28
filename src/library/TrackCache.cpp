@@ -2,6 +2,7 @@
 #include "library/TrackCache.h"
 
 #include "core/Database.h"
+#include "library/External.h"
 #include <QStringList>
 
 #include <algorithm>
@@ -90,7 +91,8 @@ QVector<TrackRow> TrackCache::fetch(const QVector<qint64> &ids)
     QStringList parts;
     parts.reserve(ids.size());
     for (qint64 id : ids)
-        parts << QString::number(id);
+        if (id > 0)
+            parts << QString::number(id);
     const QString sql = QStringLiteral("SELECT %1 FROM tracks t WHERE t.id IN (%2)")
                             .arg(QLatin1String(Columns), parts.join(QLatin1Char(',')));
     QHash<qint64, TrackRow> found;
@@ -106,7 +108,7 @@ QVector<TrackRow> TrackCache::fetch(const QVector<qint64> &ids)
         return out;
     }
     for (int i = 0; i < ids.size(); ++i)
-        out[i] = found.value(ids[i]);
+        out[i] = ids[i] < 0 ? External::row(ids[i]) : found.value(ids[i]);
     return out;
 }
 
@@ -117,6 +119,11 @@ TrackRow TrackCache::get(qint64 id)
         return *it;
     if (m_rows.size() > 20000)
         m_rows.clear();
+    if (id < 0) {
+        const TrackRow r = External::row(id);
+        m_rows.insert(id, r);
+        return r;
+    }
     TrackRow r;
     try {
         Stmt s(db(), QStringLiteral("SELECT %1 FROM tracks t WHERE t.id = ?").arg(QLatin1String(Columns)));

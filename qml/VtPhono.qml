@@ -18,7 +18,7 @@ Item {
     signal speedRequested(string rpm)
     readonly property bool spinning: Player.playing && window.animationsActive && visible
     readonly property bool canShade: GraphicsInfo.api !== GraphicsInfo.Software
-    readonly property bool hasRecord: Player.currentId > 0
+    readonly property bool hasRecord: Player.hasTrack
     readonly property bool darkPlate: plate === "blackmetal"
     readonly property color engrave: darkPlate ? "#d8d2c4" : "#2a241d"
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.21)
-project(Halcyon VERSION 1.4.0 LANGUAGES CXX)
+project(Halcyon VERSION 1.4.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,6 +28,7 @@ add_executable(halcyon
   src/library/Library.h        src/library/Library.cpp
   src/library/PlaylistStore.h  src/library/PlaylistStore.cpp
   src/library/TrackCache.h     src/library/TrackCache.cpp
+  src/library/External.h       src/library/External.cpp
   src/library/QueryBuilder.h   src/library/QueryBuilder.cpp
   src/library/TrackListModel.h src/library/TrackListModel.cpp
   src/library/GroupModel.h     src/library/GroupModel.cpp
@@ -49,6 +50,9 @@ add_executable(halcyon
   src/ui/Theme.h               src/ui/Theme.cpp
   src/ui/SystemDialogs.h       src/ui/SystemDialogs.cpp
   src/ui/SingleInstance.h      src/ui/SingleInstance.cpp
+  src/radio/StreamList.h       src/radio/StreamList.cpp
+  src/radio/Stations.h         src/radio/Stations.cpp
+  src/cd/AudioCd.h             src/cd/AudioCd.cpp
   src/ui/Tray.h                src/ui/Tray.cpp
   src/core/Paths.h
   src/core/Http.h              src/core/Http.cpp

@@ -19,6 +19,8 @@
 #include "player/PlayQueue.h"
 #include "ui/Memory.h"
 #include "player/Player.h"
+#include "radio/Stations.h"
+#include "cd/AudioCd.h"
 #include "recommend/Recommender.h"
 #include "ui/SystemDialogs.h"
 #include "ui/SingleInstance.h"
@@ -295,6 +297,11 @@ int main(int argc, char *argv[])
     Recommender recommender(&player, &queue, &library);
     Jellyfin jellyfin(&player, &library);
     Tray tray(&player, &library);
+    Stations stations(&player, &queue);
+    QObject::connect(&stations, &Stations::message, &library, &Library::message);
+    AudioCd cd(&player, &queue);
+    QObject::connect(&cd, &AudioCd::message, &library, &Library::message);
+    QObject::connect(&cd, &AudioCd::driveChanged, &library, &Library::reloadViews); // a USB drive comes or goes
     QObject::connect(&jellyfin, &Jellyfin::message, &library, &Library::message);
     QObject::connect(library.scanner(), &Scanner::finished, &jellyfin, &Jellyfin::localLibraryChanged);
     if (parser.isSet(QStringLiteral("skin")))
@@ -335,6 +342,8 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Lyrics", &lyrics);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "SystemDialogs", &dialogs);
     qmlRegisterSingletonInstance("Halcyon", 1, 0, "Tray", &tray);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "Stations", &stations);
+    qmlRegisterSingletonInstance("Halcyon", 1, 0, "AudioCd", &cd);
     qmlRegisterType<TrackListModel>("Halcyon", 1, 0, "TrackListModel");
     qmlRegisterType<GroupModel>("Halcyon", 1, 0, "GroupModel");
     qmlRegisterType<FolderModel>("Halcyon", 1, 0, "FolderModel");

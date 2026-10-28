@@ -5,6 +5,7 @@
 #include "core/Paths.h"
 #include "core/TagReader.h"
 #include "jellyfin/JellyfinAccess.h"
+#include "library/External.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -252,6 +253,18 @@ bool resolveArtist(qint64 trackId, const QString &artist, Source &src)
 
 bool resolve(qint64 trackId, Source &src)
 {
+    if (trackId < 0) {
+        // radio: the station's logo; CD: the cover found for the disc
+        const QString file = External::isStation(trackId) ? External::stationLogoFile(External::stationOf(trackId))
+                                                          : External::disc().coverFile;
+        const QFileInfo fi(file);
+        if (file.isEmpty() || !fi.isFile())
+            return false;
+        src = {};
+        src.key = QStringLiteral("x%1_%2").arg(hashOf(file)).arg(fi.lastModified().toSecsSinceEpoch());
+        src.file = file;
+        return true;
+    }
     DbConnection &db = coverDb();
     thread_local std::unique_ptr<Stmt> q;
     if (!q)
@@ -482,7 +495,7 @@ QQuickImageResponse *CoverProvider::requestImageResponse(const QString &id, cons
 
 QImage CoverProvider::load(qint64 trackId, int size)
 {
-    if (trackId <= 0)
+    if (trackId == 0)
         return {};
     try {
         Source src;
@@ -510,7 +523,7 @@ QImage CoverProvider::loadArtist(qint64 trackId, const QString &artist, int size
 
 QString CoverProvider::cachedFile(qint64 trackId, int size)
 {
-    if (trackId <= 0)
+    if (trackId == 0)
         return {};
     try {
         Source src;

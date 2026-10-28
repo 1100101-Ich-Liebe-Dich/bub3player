@@ -200,8 +200,7 @@ LyricsText fromLrclib(const TrackInfo &info, const Stale &stale)
     if (QDateTime::currentMSecsSinceEpoch() < g_lrclibRetryAt.load())
         return {};
 
-    const Http::Headers headers = {
-        {"User-Agent", QByteArrayLiteral("BuB3Player/" HALCYON_VERSION " (https://github.com/1100101-Ich-Liebe-Dich/bub3player)")}};
+    const Http::Headers headers = {{"User-Agent", Http::userAgent()}};
     QString text;
     int status = 0;
     // exact match by name, album and length first

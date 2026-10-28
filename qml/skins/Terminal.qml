@@ -165,7 +165,7 @@ Item {
                 x: 10; y: 12
                 height: parent.height - 22
                 width: Math.round(height * 1.1)
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (Player.hasTrack) window.nowPlayingOpen = true }
             }
             Column {
                 anchors.left: smallArt.right
@@ -177,14 +177,14 @@ Item {
                 Text {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: "> " + (Player.currentId > 0 ? Player.title : "keine Wiedergabe") + (skin.blink ? "█" : " ")
+                    text: "> " + (Player.hasTrack ? Player.title : "keine Wiedergabe") + (skin.blink ? "█" : " ")
                     font.family: skin.mono; font.pixelSize: 17; font.weight: Font.Bold
                     color: Theme.accent
                 }
                 Text {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: Player.currentId > 0 ? "  " + Player.artist + " ─ " + Player.album + (Player.year > 0 ? " (" + Player.year + ")" : "") + "   " + Player.format : "  Wähle Musik aus der Bibliothek."
+                    text: Player.hasTrack ? "  " + Player.artist + " ─ " + Player.album + (Player.year > 0 ? " (" + Player.year + ")" : "") + "   " + Player.format : "  Wähle Musik aus der Bibliothek."
                     font.family: skin.mono; font.pixelSize: skin.fs
                     color: Theme.textDim
                 }
@@ -310,7 +310,7 @@ Item {
                     TButton { text: "[>|]"; onClicked: Player.next() }
                     TButton { text: "[zufall]"; on: Queue.shuffle; onClicked: Queue.shuffle = !Queue.shuffle }
                     TButton { text: "[wdh]"; on: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
-                    TButton { text: "[fav]"; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
+                    TButton { visible: Player.currentId > 0; text: "[fav]"; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                     TButton { text: "[text]"; on: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; onClicked: window.toggleLyrics() }
                     TButton { text: "[esc]"; onClicked: window.nowPlayingOpen = false }
                 }
@@ -430,7 +430,7 @@ Item {
     component TextBar: Item {
         id: bar
         height: barT.implicitHeight
-        readonly property string times: " " + window.fmtTime(dragFrac >= 0 ? dragFrac * Player.duration : Player.position) + " / " + window.fmtTime(Player.duration)
+        readonly property string times: " " + window.fmtTime(dragFrac >= 0 ? dragFrac * Player.duration : Player.position) + " / " + window.durationText
         readonly property int n: Math.max(5, Math.floor(width / skin.cw) - times.length - 2)
         property real dragFrac: -1
         readonly property real frac: Player.duration > 0 ? (dragFrac >= 0 ? dragFrac : Player.position / Player.duration) : 0
@@ -488,7 +488,7 @@ Item {
         readonly property real cell: Theme.opt.cell !== undefined ? Theme.opt.cell : 7
         Image {
             id: src
-            source: Player.currentId > 0 ? "image://cover/" + Player.currentId : ""
+            source: Player.hasTrack ? "image://cover/" + Player.currentId : ""
             sourceSize: Qt.size(art.big ? 256 : 128, art.big ? 256 : 128)
             asynchronous: true
             visible: false

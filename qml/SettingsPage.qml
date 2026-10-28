@@ -309,6 +309,34 @@ Item {
                 }
 
                 Section {
+                    title: qsTr("Internetradio und Audio-CD")
+                    text: (AudioCd.available ? qsTr("Beides findest du in der Seitenleiste unter „Hören“.")
+                                             : qsTr("Das Internetradio findest du in der Seitenleiste unter „Hören“, die Audio-CD dort, wenn der Rechner ein CD-Laufwerk hat und GStreamer CDs lesen kann (cdparanoia aus gst-plugins-base)."))
+                          + " " + qsTr("Ins Netz geht der Player dafür nur, wenn du es hier oder auf der Seite einschaltest.")
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Senderverzeichnis radio-browser.info verwenden (Suche, Senderlogos)")
+                        checked: Stations.online
+                        onToggled: Stations.online = checked
+                    }
+                    HToggle {
+                        width: col.width
+                        label: qsTr("Namen und Cover von CDs bei MusicBrainz nachschlagen")
+                        checked: AudioCd.online
+                        onToggled: AudioCd.online = checked
+                    }
+                    Text {
+                        width: col.width
+                        wrapMode: Text.Wrap
+                        text: qsTr("Eingelesene CDs kommen als FLAC nach: %1").arg(AudioCd.folder)
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
+                        color: Theme.textDim
+                    }
+                    CdFolderButton { compact: true }
+                }
+
+                Section {
                     title: qsTr("Infobereich und Benachrichtigungen")
                     text: qsTr("Das Symbol in der Leiste zeigt, was läuft. Ein Klick holt das Fenster hervor oder versteckt es, die mittlere Maustaste hält an, das Mausrad ändert die Lautstärke, ein Rechtsklick öffnet das Menü.")
                     HToggle {

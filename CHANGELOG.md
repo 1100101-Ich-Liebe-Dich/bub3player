@@ -1,3 +1,40 @@
+## 1.4.1 - 2026-10-28
+
+Internetradio und Audio-CD.
+
+### Hinzugefügt
+- **Internetradio** („Hören → Internetradio“ in der Seitenleiste): Sender mit ihrer Internetadresse
+  hinzufügen, auch über Senderlisten (`.pls`, `.m3u`, `.xspf`, `.asx`), die der Player öffnet und
+  deren ersten Datenstrom er nimmt. Name, Format, Bitrate, Richtung und Webseite meldet der Sender
+  selbst. Sender als Kacheln, ein Klick spielt; Rechtsklick: Abspielen, Umbenennen, Webseite öffnen,
+  Entfernen. Weiter und Zurück wechseln den Sender.
+- Was gerade läuft, kommt aus dem Datenstrom des Senders (ICY): Titel und Künstler in der Leiste, in
+  der Großansicht aller acht Themes, im Infobereich, in der Benachrichtigung und bei MPRIS. Statt der
+  Länge steht „Live“; Spulen, Herz, Liedtext und Wiedergabezähler gibt es für Sender nicht. Bricht
+  die Verbindung ab, verbindet der Player neu; einen Sender, der nicht antwortet, versucht er nicht
+  endlos und wechselt auch nicht von selbst zum nächsten.
+- **Senderverzeichnis radio-browser.info**, nur wenn eingeschaltet (auf der Seite oder unter
+  Einstellungen → Allgemein): Suche nach Name oder Richtung, Hinzufügen mit einem Klick, Senderlogos.
+- Senderlisten und Senderadressen lassen sich auch aus dem Dateimanager öffnen („Öffnen mit“, auch
+  in einem schon laufenden Player), aufs Fenster ziehen oder auf der Seite importieren; der Sender
+  spielt dann gleich. Eine M3U mit lauter Internetadressen gilt als Senderliste, nicht als Playlist.
+- **Audio-CD** („Hören → Audio-CD“, nur mit CD-Laufwerk): eine eingelegte CD erscheint von selbst,
+  spielt lückenlos durch die Warteschlange und lässt sich auswerfen.
+- **CD einlesen als FLAC** in einen wählbaren Ordner (`Albumkünstler/Album/01 Titel.flac`, mit Tags
+  und Cover), mit Fortschritt und Abbrechen. Vorhandene Dateien bleiben unberührt: Jeder Titel
+  entsteht unter einem eigenen vorläufigen Namen und wird nur umbenannt, wenn der Platz frei ist.
+  Liegt der Ordner außerhalb der Bibliothek, kann er mit einem Klick dazukommen.
+- Namen für CDs von Hand (Album, Albumkünstler, Jahr, jeder Titel) oder, nur wenn eingeschaltet, von
+  **MusicBrainz** mit dem Cover aus dem Cover Art Archive. Der Player merkt sich die Namen je CD.
+- Testwerkzeug `tools/mock-radio.py`: Radiosender mit wechselnden Titeln, radio-browser.info,
+  MusicBrainz und Cover Art Archive zum Ausprobieren ohne Netz.
+
+### Geändert
+- Datenbank-Schema 5 (neue Tabelle `stations`), die Umstellung geschieht beim ersten Start von selbst.
+- Das AppImage bringt die GStreamer-Plugins für CDs (cdparanoia) und für HLS-Radiosender mit.
+- Im Rechtsklick-Menü der Warteschlange sind „Zum Album“, „Zum Künstler“ und das Herz für Sender und
+  CD-Titel ausgegraut.
+
 ## 1.4.0 - 2026-10-27
 
 Favoriten, Symbol im Infobereich, Musik aus dem Dateimanager.
