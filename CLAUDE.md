@@ -263,11 +263,13 @@ Typischer Ablauf vor einem PR:
   Datei- und Ordnerwahl über den Dialog des Desktops.
 - **1.4.0** „Alltag“: Favoriten (Herz, auch zu Jellyfin), Symbol im Infobereich und
   Benachrichtigung, Ziehen und Ablegen und „Öffnen mit“ (ein Player).
-- **Als Nächstes**: 1.5.0 Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
-  radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
-  vorhandene Dateien anfassen, auf Wunsch MusicBrainz); 1.6.0 Statistik/„Dein Jahr in Musik“
-  (Tabelle `plays`); 2.0.0 englische Oberfläche (Deutsch bleibt Standard) und englische README.
-  ReplayGain bleibt titelweise (Wunsch des Inhabers: alle Titel gleich laut), nichts in die Dateien.
+- **Als Nächstes** (Wunsch des Inhabers: weiter als 1.4.x, nur bis Paket 3):
+  - **1.4.1**: Internetradio (Sender per Adresse, .pls/.m3u, ICY-Titel, auf Wunsch
+    radio-browser.info) und Audio-CD (abspielen, als FLAC in einen gewählten Ordner einlesen, nie
+    vorhandene Dateien anfassen, auf Wunsch MusicBrainz).
+  - **1.4.2**: Statistik/„Dein Jahr in Musik“ (Tabelle `plays`).
+  - Englische Oberfläche (Paket 4) vorerst nicht. ReplayGain bleibt titelweise (Wunsch des
+    Inhabers: alle Titel gleich laut), nichts in die Dateien.
 - **Ideen 1.x** (README „Ausblick“): Scrobbeln (ListenBrainz/Last.fm), Tag-Editor, Mini-Player,
   Schlaf-Timer, Fernbedienung übers Handy/Browser, fehlende Cover aus dem Netz, englische
   Oberfläche, weitere Themes.
