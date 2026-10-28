@@ -287,6 +287,9 @@ ApplicationWindow {
         sourceComponent: Component { YearReview {} }
     }
     property bool reviewLive: false
+    // gone before the window goes: torn down with it, a hovered MouseArea in it
+    // asks the half-destroyed window for the mouse (crash in Qt)
+    Connections { target: Qt.application; function onAboutToQuit() { window.reviewLive = false } }
     onReviewOpenChanged: if (reviewOpen) reviewLive = true; else reviewGone.restart()
     Timer { // after it faded out, and once a picture being saved is written
         id: reviewGone
