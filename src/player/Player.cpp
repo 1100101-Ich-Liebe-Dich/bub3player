@@ -68,7 +68,7 @@ int recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
         (void)QtConcurrent::run([station = External::stationOf(id), name, listenedMs] {
             try {
                 DbConnection db = Database::open(1024);
-                Transaction tx(db);
+                WriteTx tx(db); // all pieces or none
                 Stmt p(db, "INSERT INTO station_plays(station_id, name, played_at, listened_ms) VALUES (?, ?, ?, ?)");
                 const qint64 end = QDateTime::currentMSecsSinceEpoch();
                 for (qint64 from = end - listenedMs; from < end;) {

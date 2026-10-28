@@ -59,8 +59,6 @@ Item {
     function pct(f) { return Math.round((f || 0) * 100) }
     function dur(ms) { return Library.formatDuration(ms || 0, true) }
     function one(d, a, b) { return d === 1 ? a : b.arg(fc(d)) }
-    // a decade by name: "80er", but "2000er" and "1910er" in full
-    function decade(x) { return x >= 2000 || x < 1920 ? String(x) : String(x).slice(2) }
 
     function build(d) {
         if (d && d.error)
@@ -80,7 +78,7 @@ Item {
         if (d.previousMs > 0) {
             var change = Math.round((d.listenedMs - d.previousMs) / d.previousMs * 100)
             // this year so far: against the same span of the year before
-            lines.push(sofar ? (change >= 0 ? qsTr("%1 % mehr als %2 bis zu diesem Tag.") : qsTr("%1 % weniger als %2 bis zu diesem Tag.")).arg(Math.abs(change)).arg(d.year - 1)
+            lines.push(sofar ? (change >= 0 ? qsTr("%1 % mehr als bis zum selben Tag %2.") : qsTr("%1 % weniger als bis zum selben Tag %2.")).arg(Math.abs(change)).arg(d.year - 1)
                              : (change >= 0 ? qsTr("%1 % mehr als %2.") : qsTr("%1 % weniger als %2.")).arg(Math.abs(change)).arg(d.year - 1))
         }
         if (d.streak && d.streak.activeDays > 0)
@@ -156,9 +154,9 @@ Item {
         if (dec.length > 1) {
             var best = 0
             for (var i = 1; i < dec.length; ++i) if (dec[i].plays > dec[best].plays) best = i
-            s.push({ kind: "bars", kicker: qsTr("Aus welcher Zeit"), title: qsTr("Am meisten aus den %1ern").arg(decade(dec[best].decade)),
+            s.push({ kind: "bars", kicker: qsTr("Aus welcher Zeit"), title: qsTr("Am meisten aus den %1n").arg(window.look.decade(dec[best].decade)),
                      lines: d.oldest ? [qsTr("Der älteste Titel: „%1“ von %2, aus dem Jahr %3.").arg(d.oldest.name).arg(d.oldest.artist).arg(d.oldest.year)] : [],
-                     bars: dec.map(function (x) { return x.plays }), labels: dec.map(function (x) { return decade(x.decade) + "er" }),
+                     bars: dec.map(function (x) { return x.plays }), labels: dec.map(function (x) { return window.look.decade(x.decade) }),
                      highlight: best, tip: function (v) { return one(v, qsTr("1 Wiedergabe"), qsTr("%1 Wiedergaben")) } })
         }
 
@@ -368,11 +366,17 @@ Item {
     }
 
     property Item pendingCard: null
+    // a picture on its way: the review stays (Main waits) until it is written or
+    // the dialog is gone – the desktop's dialog is not modal everywhere
+    property bool saving: false
+    property bool grabbing: false
     function saveImage() {
+        saving = true
         var name = qsTr("Mein Jahr in Musik %1.png").arg(year)
         SystemDialogs.saveFile(qsTr("Bild speichern"), Stats.picturesFolder(), name,
                                [{ name: qsTr("PNG-Bild"), patterns: ["*.png"] }],
                                function (path, confirmed) {
+                                   rv.saving = path === null || (path !== "" && confirmed === false) // a dialog of ours follows
                                    if (path === null) {
                                        imageDlg.selectedFile = imageDlg.currentFolder + "/" + encodeURIComponent(name)
                                        imageDlg.open()
@@ -388,14 +392,18 @@ Item {
     }
     function writeImage(path) {
         // the card may be gone meanwhile (the dialog of the desktop is not modal)
+        grabbing = true
         var ok = pendingCard !== null && pendingCard.grabToImage(function (result) {
+            rv.grabbing = false
             if (result.saveToFile(path))
                 Library.message(qsTr("Bild gespeichert: %1").arg(path))
             else
                 Library.message(qsTr("Das Bild ließ sich nicht speichern: %1").arg(path))
         }, Qt.size(1080, 1350))
-        if (!ok)
+        if (!ok) {
+            grabbing = false
             Library.message(qsTr("Das Bild ließ sich nicht speichern – die letzte Folie ist nicht mehr offen."))
+        }
     }
     FileDialog {
         id: imageDlg
@@ -403,7 +411,8 @@ Item {
         fileMode: FileDialog.SaveFile
         currentFolder: Stats.picturesFolder()
         nameFilters: [qsTr("PNG-Bild (*.png)")]
-        onAccepted: rv.writeImage(decodeURIComponent(String(selectedFile).replace(/^file:\/\//, "")))
+        onAccepted: { rv.saving = false; rv.writeImage(decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))) }
+        onRejected: rv.saving = false
     }
     HDialog {
         id: replaceDlg
@@ -413,6 +422,7 @@ Item {
         acceptText: qsTr("Ersetzen")
         destructive: true
         onAccepted: rv.writeImage(path)
+        onClosed: rv.saving = false
     }
 
     // ---- around the slide ----

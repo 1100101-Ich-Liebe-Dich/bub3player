@@ -34,6 +34,9 @@ QtObject {
     readonly property color barBorder: skin === "glas" ? Theme.alpha("white", 0.6) : skin === "synthwave" ? Theme.alpha(Theme.accent2, 0.9) : "transparent"
     readonly property real dimBars: skin === "glas" ? 0.7 : 0.55
 
+    // a decade by name: "80er", but "2000er" and "1910er" in full
+    function decade(x) { return (x >= 2000 || x < 1920 ? String(x) : String(x).slice(2)) + "er" }
+
     // ink on Vintage's paper (cards of the review, the picture of the year)
     readonly property color paperInk: "#2B2118"
     readonly property color paperDim: "#6B5A44"

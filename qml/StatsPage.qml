@@ -15,7 +15,7 @@ Item {
     readonly property var lib: Stats.library
     readonly property bool hasData: (ov.listenedMs || 0) > 0
     // the year shown (paging back through years), else the one just past or running
-    readonly property int reviewYear: Stats.period === "year" ? new Date().getFullYear() + Stats.offset : Stats.reviewYear()
+    readonly property int reviewYear: Stats.period === "year" && Stats.offset !== 0 ? new Date().getFullYear() + Stats.offset : Stats.reviewYear()
     readonly property bool canReview: Stats.years.some(function (y) { return y.year === page.reviewYear && y.plays >= 20 })
     readonly property real contentWidth: Math.min(col.width - 2 * inset, 1180)
 
@@ -48,8 +48,8 @@ Item {
         if (ov.previousMs === undefined || !(ov.previousMs > 0)) return ""
         var d = Math.round((ov.listenedMs - ov.previousMs) / ov.previousMs * 100)
         // a period still running is compared with the same span of the one before
-        var before = (ov.current ? { week: qsTr("zum selben Zeitpunkt der Woche davor"), month: qsTr("zum selben Tag des Monats davor"),
-                                     year: qsTr("zum selben Tag des Jahres davor") }
+        var before = (ov.current ? { week: qsTr("zur Vorwoche bis heute"), month: qsTr("zum Vormonat bis heute"),
+                                     year: qsTr("zum Vorjahr bis heute") }
                                  : { week: qsTr("zur Woche davor"), month: qsTr("zum Monat davor"), year: qsTr("zum Jahr davor") })[Stats.period] || ""
         return (d > 0 ? "▲ " : d < 0 ? "▼ " : "= ") + Math.abs(d) + " % " + before
     }
@@ -354,7 +354,7 @@ Item {
                             width: parent.width
                             height: 150
                             values: (page.lib.decades || []).map(function (d) { return d.count })
-                            labels: (page.lib.decades || []).map(function (d) { return (d.decade >= 2000 || d.decade < 1920 ? String(d.decade) : String(d.decade).slice(2)) + "er" })
+                            labels: (page.lib.decades || []).map(function (d) { return window.look.decade(d.decade) })
                             tipText: function (i) { return page.count(decadeBars.values[i], qsTr("1 Titel"), qsTr("%1 Titel")) }
                         }
                     }

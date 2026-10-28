@@ -288,7 +288,16 @@ ApplicationWindow {
     }
     property bool reviewLive: false
     onReviewOpenChanged: if (reviewOpen) reviewLive = true; else reviewGone.restart()
-    Timer { id: reviewGone; interval: 600; onTriggered: if (!window.reviewOpen) window.reviewLive = false } // after it faded out
+    Timer { // after it faded out, and once a picture being saved is written
+        id: reviewGone
+        interval: 600
+        onTriggered: {
+            var rv = reviewLoader.item
+            if (window.reviewOpen) return
+            if (rv && (rv.saving || rv.grabbing)) restart()
+            else window.reviewLive = false
+        }
+    }
 
     readonly property alias playlistUi: playlistUi
     PlaylistUi { id: playlistUi }
