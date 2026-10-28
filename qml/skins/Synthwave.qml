@@ -30,6 +30,9 @@ Item {
 
     property real npMix: np ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 600; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     // Grid travel: integrates speed, faster with the music.
     property real travel: 0
@@ -97,7 +100,7 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         height: 78
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         Brand {
@@ -203,7 +206,7 @@ Item {
         anchors.leftMargin: 22
         anchors.rightMargin: 22
         anchors.bottomMargin: deck.height + 40
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         HudPanel {
@@ -265,7 +268,7 @@ Item {
         anchors.margins: 22
         anchors.bottomMargin: 18 - skin.npMix * 180
         height: 112
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
         fill: Theme.alpha(Theme.bg, 0.82)
         border: Theme.alpha(Theme.accent, 0.9)
@@ -473,7 +476,7 @@ Item {
     Item {
         id: nowPlaying
         anchors.fill: parent
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         z: 10
         MouseArea { anchors.fill: parent }

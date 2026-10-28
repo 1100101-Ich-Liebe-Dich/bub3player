@@ -26,6 +26,9 @@ Item {
 
     property real npMix: window.nowPlayingOpen ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 260 } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     // cursor blink shared by all
     property bool blink: true
@@ -36,6 +39,7 @@ Item {
     // ---------- header ----------
     Item {
         id: header
+        opacity: 1 - skin.rvMix
         x: 12; y: 6
         width: parent.width - 24
         height: 26
@@ -70,6 +74,7 @@ Item {
     // ---------- footer: key hints ----------
     Row {
         id: footer
+        opacity: 1 - skin.rvMix
         x: 12
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 6
@@ -99,7 +104,7 @@ Item {
         anchors.bottom: footer.top
         anchors.bottomMargin: 8
         width: parent.width - 24
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         TBox {
@@ -229,7 +234,7 @@ Item {
         anchors.bottom: footer.top
         anchors.bottomMargin: 8
         width: parent.width - 24
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         MouseArea { anchors.fill: parent }
         TBox {

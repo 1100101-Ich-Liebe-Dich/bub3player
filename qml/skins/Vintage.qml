@@ -37,6 +37,9 @@ Item {
 
     property real npMix: window.nowPlayingOpen ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 520; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     // ---------- the wall ----------
     Rectangle { anchors.fill: parent; color: Theme.bg }
@@ -58,6 +61,8 @@ Item {
     // ---------- upper area: library furniture ----------
     Item {
         id: upper
+        opacity: 1 - skin.rvMix
+        visible: opacity > 0.01
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -68,7 +73,7 @@ Item {
         Item {
             id: library
             anchors.fill: parent
-            opacity: 1 - skin.npMix
+            opacity: (1 - skin.npMix) * (1 - skin.rvMix)
             visible: opacity > 0.01
 
             // nav: a wooden panel with a tolex inlay
@@ -181,7 +186,7 @@ Item {
         Item {
             id: bigView
             anchors.fill: parent
-            opacity: skin.npMix
+            opacity: skin.npMix * (1 - skin.rvMix)
             visible: opacity > 0.01
             MouseArea { anchors.fill: parent }
 
@@ -349,6 +354,8 @@ Item {
     // ---------- the receiver ----------
     Item {
         id: receiver
+        opacity: 1 - skin.rvMix
+        visible: opacity > 0.01
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

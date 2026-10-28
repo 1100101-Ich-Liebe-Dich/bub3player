@@ -112,6 +112,7 @@ QVariantList builtIn()
         view("tempo", "Nach Tempo", "speed", disc, "groups", {{QStringLiteral("groupBy"), QStringLiteral("tempo")}}, "tiles"),
         view("keys", "Nach Tonart", "piano", disc, "groups", {{QStringLiteral("groupBy"), QStringLiteral("key")}}, "tiles"),
 
+        view("stats", "Statistik", "chart", hist, "stats", {}),
         view("history", "Zuletzt gespielt", "history", hist, "tracks",
              {{QStringLiteral("filters"), QVariantList{filter("lastPlayed", "gt", 0)}},
               {QStringLiteral("sort"), QStringLiteral("lastPlayed")}, {QStringLiteral("desc"), true}}),

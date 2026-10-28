@@ -24,6 +24,9 @@ Item {
 
     property real npMix: window.nowPlayingOpen ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 480; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     Rectangle { anchors.fill: parent; color: Theme.bg }
 
@@ -33,7 +36,7 @@ Item {
         anchors.fill: parent
         anchors.margins: skin.gap
         anchors.bottomMargin: dock.height + skin.gap * 2
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         NeuBox {
@@ -90,7 +93,7 @@ Item {
         height: 104
         radius: skin.corner
         mode: "raised"
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         RowLayout {
@@ -192,7 +195,7 @@ Item {
     Item {
         id: nowPlaying
         anchors.fill: parent
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         z: 10
         MouseArea { anchors.fill: parent }

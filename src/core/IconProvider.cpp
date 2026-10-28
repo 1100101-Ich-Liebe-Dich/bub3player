@@ -75,6 +75,9 @@ const QHash<QString, const char *> &paths()
         // a compact disc: ring with the hole and the hub
         {QStringLiteral("disc"), "M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6zM12 11a1 1 0 1 1 0 2a1 1 0 1 1 0-2zM12 4.5a7.5 7.5 0 0 0-7.5 7.5h1.5a6 6 0 0 1 6-6z"},
         {QStringLiteral("eject"), "M5 17h14v2H5zm7-12L5.33 15h13.34z"},
+        {QStringLiteral("chart"), "M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"},
+        {QStringLiteral("star"), "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"},
+        {QStringLiteral("image"), "M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"},
         {QStringLiteral("sparkle"), "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"},
     };
     return p;

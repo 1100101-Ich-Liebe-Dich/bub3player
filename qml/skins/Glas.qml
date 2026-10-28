@@ -32,6 +32,9 @@ Item {
 
     property real npMix: np ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 560; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     // Music, heavily smoothed: bubbles rise a little faster and breathe with
     // fuller passages. Never a sudden change.
@@ -164,7 +167,7 @@ Item {
         id: frame
         anchors.fill: parent
         anchors.margins: skin.gap
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         scale: 1 + skin.npMix * 0.03
         visible: opacity > 0.01
 
@@ -524,7 +527,7 @@ Item {
     Item {
         id: nowPlaying
         anchors.fill: parent
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         z: 10
         MouseArea { anchors.fill: parent }

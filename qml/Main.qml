@@ -120,6 +120,7 @@ ApplicationWindow {
     }
 
     // the length of what plays; a radio station has none
+    readonly property StatLook look: StatLook {} // statistics and year in review in the theme's look
     readonly property string durationText: Player.live ? qsTr("Live") : fmtTime(Player.duration)
     function fmtTime(ms) {
         if (!(ms > 0)) return "0:00"
@@ -162,12 +163,24 @@ ApplicationWindow {
         case "cd":
             stack.replace(null, cdPage, {})
             break
+        case "stats":
+            stack.replace(null, statsPage, {})
+            break
         case "playlist":
             stack.replace(null, tracksPage, { pageId: v.id, title: v.name, spec: v.spec || {}, playlistId: v.playlistId,
                                               smart: v.smart === true, subtitle: v.smart ? qsTr("Smart-Playlist") : qsTr("Playlist") })
             break
         }
     }
+    // ---------- the year in review ----------
+    property bool reviewOpen: false
+    property int reviewYear: 0
+    function openReview(year) {
+        nowPlayingOpen = false
+        reviewYear = year
+        reviewOpen = true
+    }
+
     function openSettings(tab) {
         if (tab !== undefined) settingsTab = tab
         openView({ id: "settings", kind: "settings" })
@@ -249,6 +262,7 @@ ApplicationWindow {
     Component { id: forYouPage; ForYouPage {} }
     Component { id: radioPage; RadioPage {} }
     Component { id: cdPage; CdPage {} }
+    Component { id: statsPage; StatsPage {} }
 
     // ---------- the skin ----------
     Loader {
@@ -262,6 +276,12 @@ ApplicationWindow {
             Memory.trimSoon(1500)
             secondTrim.restart()
         }
+    }
+
+    YearReview {
+        id: yearReview
+        anchors.fill: parent
+        z: 60
     }
 
     readonly property alias playlistUi: playlistUi
@@ -397,6 +417,9 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
     Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
     Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
+    Shortcut { sequence: "Escape"; enabled: window.reviewOpen; onActivated: yearReview.close() }
+    Shortcut { sequences: ["Right", "Return", "Enter"]; enabled: window.reviewOpen; onActivated: yearReview.next() }
+    Shortcut { sequence: "Left"; enabled: window.reviewOpen; onActivated: yearReview.previous() }
     Shortcut { sequence: "F11"; onActivated: window.toggleFullScreen() }
     Shortcut { sequence: StandardKey.Quit; onActivated: Qt.quit() }
     Shortcut { sequence: "Alt+Left"; enabled: !!window.stack && window.stack.depth > 1; onActivated: window.stack.pop() }
@@ -429,6 +452,29 @@ ApplicationWindow {
         interval: 250
         repeat: true
         onTriggered: if (window.stack && window.stack.currentItem && window.stack.currentItem.scrollStep) window.stack.currentItem.scrollStep()
+    }
+
+    Timer {
+        id: reviewTimer
+        property int slideNo: 0
+        interval: 1200
+        onTriggered: { window.openReview(Stats.reviewYear()); reviewSlideTimer.start() }
+    }
+    Timer {
+        id: reviewSlideTimer
+        interval: 1500 // after the numbers are there
+        onTriggered: {
+            if (reviewTimer.slideNo > 0) { yearReview.index = Math.min(reviewTimer.slideNo, yearReview.slides.length - 1); yearReview.enter() }
+            var img = uiTest.match(/bildnach=(\S+)/) // the picture of the year to a file (with rueckblick=<last>)
+            if (img) Qt.callLater(function () { yearReview.writeImage(img[1]) })
+            if (uiTest.indexOf("jahrliste") >= 0) yearReview.savePlaylist()
+        }
+    }
+    Timer {
+        id: scrollYTimer
+        property int y: 0
+        interval: 2500 // after the page has its data
+        onTriggered: if (window.stack && window.stack.currentItem && window.stack.currentItem.scrollTo) window.stack.currentItem.scrollTo(y)
     }
 
     // --ui-test cycle: switch through all skins (tests loading and teardown).
@@ -574,7 +620,14 @@ ApplicationWindow {
             var jl = a.match(/jf-login=([^ ]+)/)
             if (jl) Jellyfin.probe(jl[1])
             if (a.indexOf("cycle") >= 0) cycleTimer.start()
-            if (a.indexOf("scroll") >= 0) scrollTimer.start()
+            // statistics: statzeit=week|month|year|all, rueckblick[=N] (the year in review, at slide N)
+            var sz = a.match(/statzeit=(\w+)/)
+            if (sz) Stats.setPeriod(sz[1], 0)
+            var rb = a.match(/rueckblick(?:=(\d+))?/)
+            if (rb) reviewTimer.slideNo = rb[1] ? Number(rb[1]) : 0, reviewTimer.start()
+            var sy = a.match(/scrolly=(\d+)/) // a page scrolled to y (when it has scrollTo)
+            if (sy) scrollYTimer.y = Number(sy[1]), scrollYTimer.start()
+            else if (a.indexOf("scroll") >= 0) scrollTimer.start()
             if (a.indexOf("skip") >= 0) skipTimer.start()
             if (a.indexOf("blendloop") >= 0) blendTimer.start()
             var sw = a.match(/swap-(\w+)/)

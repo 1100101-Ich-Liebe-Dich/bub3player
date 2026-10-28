@@ -29,6 +29,9 @@ Item {
     readonly property bool np: window.nowPlayingOpen
     property real npMix: np ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 750; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
     readonly property real beat: Player.playing ? Player.beat : 0
     readonly property real energy: Player.playing ? Player.energy : 0
     readonly property bool demo: Theme.opt.demo !== false
@@ -64,7 +67,7 @@ Item {
     Item {
         id: show
         anchors.fill: parent
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         readonly property var spec: Player.spectrum
         function bandAvg(a, b) {
@@ -120,7 +123,7 @@ Item {
         anchors.fill: parent
         anchors.margins: skin.gap
         anchors.leftMargin: skin.gap * 2 + 420 * skin.libScale
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
 
         // side: menu or programme (queue)
@@ -179,7 +182,7 @@ Item {
         scale: skin.npScale
         x: tower.x - 50 * skin.npScale - width + (1 - skin.npMix) * -400
         y: skin.floorY - height
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         ink: skin.ink
         beat: skin.beat
@@ -194,7 +197,7 @@ Item {
         scale: skin.npScale
         x: tower.x + 420 * tower.scale + 50 * skin.npScale + (1 - skin.npMix) * 400
         y: skin.floorY - height
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         ink: skin.ink
         beat: skin.beat
@@ -207,6 +210,8 @@ Item {
     // ---------- the tower ----------
     Item {
         id: tower
+        opacity: 1 - skin.rvMix
+        visible: opacity > 0.01
         width: 420
         height: 860
         transformOrigin: Item.TopLeft

@@ -61,6 +61,21 @@ GstElement *make(const char *factory, const char *name)
 // Returns whether it counted as a play or a skip (else: just loaded, ignored).
 int recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
 {
+    if (External::isStation(id) && listenedMs >= 60000) {
+        // radio counts as listening time (statistics), not as plays
+        const QString name = TrackCache::instance().get(id).title;
+        (void)QtConcurrent::run([station = External::stationOf(id), name, listenedMs] {
+            try {
+                DbConnection db = Database::open(1024);
+                Stmt p(db, "INSERT INTO station_plays(station_id, name, played_at, listened_ms) VALUES (?, ?, ?, ?)");
+                p.bind(1, station).bind(2, name).bind(3, QDateTime::currentSecsSinceEpoch()).bind(4, listenedMs);
+                p.exec();
+            } catch (const std::exception &e) {
+                qWarning() << "Wiedergabestatistik nicht gespeichert:" << e.what();
+            }
+        });
+        return 0;
+    }
     if (id <= 0 || listenedMs < 1500)
         return 0; // loaded but never really played
     const bool counted = listenedMs >= std::min<qint64>(240000, std::max<qint64>(30000, durationMs / 2));
@@ -80,7 +95,9 @@ int recordPlay(qint64 id, qint64 listenedMs, qint64 durationMs, bool skipped)
                 u.bind(1, id);
                 u.exec();
             }
-            Stmt p(db, "INSERT INTO plays(track_id, played_at, listened_ms, completed) VALUES (?, ?, ?, ?)");
+            // with what was played: the history stays readable when the file is gone
+            Stmt p(db, "INSERT INTO plays(track_id, played_at, listened_ms, completed, title, artist, album, aa, genre, year) "
+                       "SELECT ?1, ?2, ?3, ?4, title, artist, album, aa, genre, year FROM tracks WHERE id = ?1");
             p.bind(1, id).bind(2, now).bind(3, listenedMs).bind(4, counted ? 1 : 0);
             p.exec();
         } catch (const std::exception &e) {

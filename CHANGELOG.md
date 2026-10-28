@@ -1,3 +1,34 @@
+## 1.4.2 - 2026-10-28
+
+Statistik und „Dein Jahr in Musik“.
+
+### Hinzugefügt
+- **Statistik** („Hörverlauf → Statistik“): Hörzeit, Wiedergaben, Titel, Künstler und Alben einer
+  Woche, eines Monats, eines Jahres oder insgesamt, mit Blättern zurück und dem Vergleich zum
+  Zeitraum davor. Dazu der Verlauf als Balken, „Wann du hörst“ (Wochentag und Stunde), die zehn
+  meistgehörten Künstler, Titel und Alben (ein Klick spielt oder öffnet sie), Genres, Sender und
+  die Bibliothek in Zahlen (Spielzeit, Platz, Formate, Jahrzehnte, Favoriten, schon gehört,
+  analysiert). Jedes Theme zeichnet die Diagramme auf seine Art: LED-Säulen im Hi-Fi Turm,
+  Blockzeichen im Terminal, Bernstein-Lampen bei Vintage, Neon bei Synthwave, eingelassene Schlitze
+  bei Soft, Milchglas bei Glas.
+- **Dein Jahr in Musik**: der Jahresrückblick als Folgen von Bildern – Hörzeit, Künstler, Lied und
+  Album des Jahres, die Top fünf, Genres, wann du hörst (Frühaufsteher oder Nachteule?), dein
+  Monat, Rekorde (Tage am Stück, Dauerschleife, längster Tag), dein Sound aus der Audioanalyse
+  (Tempo, Lieblingstonart, schnellster Titel), Jahrzehnte, neu entdeckte Künstler und
+  Internetradio. In jedem Theme eigen: Farbflächen bei Klassik, Milchglas über den Blasen,
+  Polarlicht, ein Notizzettel auf der Tapete, Neon über dem Raster, das Display der Anlage, eine
+  Eingabezeile, die tippt. Weiter mit Klick oder Pfeiltasten, Musik dazu mit „Mit deinen Liedern“.
+- Am Ende alles auf einem Bild zum Speichern (1080 × 1350, PNG) und die Lieblingstitel des Jahres
+  als Playlist „Mein Jahr …“.
+- `halcyon --stats [JAHR]` zeigt die Zahlen als JSON, `tools/make-history.py` legt einen
+  Hörverlauf zum Ausprobieren an.
+
+### Geändert
+- Der Hörverlauf merkt sich zu jeder Wiedergabe Titel, Künstler, Album, Genre und Jahr: Die
+  Statistik bleibt richtig, auch wenn eine Datei verschoben oder gelöscht wird. Zeit mit
+  Internetradio zählt mit (ab einer Minute je Sender). Datenbank-Schema 6, die Umstellung
+  übernimmt die bisherigen Wiedergaben von selbst.
+
 ## 1.4.1 - 2026-10-28
 
 Internetradio und Audio-CD.

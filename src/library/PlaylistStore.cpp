@@ -515,6 +515,14 @@ void PlaylistStore::addTrack(qint64 id, qint64 trackId)
     append(id, {trackId});
 }
 
+void PlaylistStore::addIds(qint64 id, const QVariantList &trackIds)
+{
+    QVector<qint64> ids;
+    for (const QVariant &v : trackIds)
+        ids << v.toLongLong();
+    append(id, ids);
+}
+
 void PlaylistStore::setPending(int delta)
 {
     const bool was = m_pendingWrites > 0;

@@ -35,6 +35,9 @@ Item {
     // Full-screen view blends in over ~0.7 s; the background brightens with it.
     property real npMix: np ? 1 : 0
     Behavior on npMix { NumberAnimation { duration: 650; easing.type: Easing.InOutCubic } }
+    // the year in review shows over the theme's background: the furniture steps aside
+    property real rvMix: window.reviewOpen ? 1 : 0
+    Behavior on rvMix { NumberAnimation { duration: 450; easing.type: Easing.InOutCubic } }
 
     // Time for the flowing light: integrates speed so changing it never jumps.
     property real flow: 0
@@ -155,7 +158,7 @@ Item {
         anchors.fill: parent
         anchors.margins: skin.gap
         anchors.bottomMargin: dock.height + skin.gap * 2
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         scale: 1 - skin.npMix * 0.04
         visible: opacity > 0.01
 
@@ -243,7 +246,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: skin.gap - skin.npMix * (height + 40)
-        opacity: 1 - skin.npMix
+        opacity: (1 - skin.npMix) * (1 - skin.rvMix)
         visible: opacity > 0.01
         backdrop: backdrop
         ref: skin
@@ -394,7 +397,7 @@ Item {
     Item {
         id: nowPlaying
         anchors.fill: parent
-        opacity: skin.npMix
+        opacity: skin.npMix * (1 - skin.rvMix)
         visible: opacity > 0.01
         z: 10
 
