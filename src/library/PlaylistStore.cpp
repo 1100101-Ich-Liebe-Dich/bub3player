@@ -382,6 +382,7 @@ QString PlaylistStore::hintFor(DbConnection &db, qint64 trackId)
 
 void PlaylistStore::append(qint64 id, QVector<qint64> trackIds, bool announce, QVariantMap spec)
 {
+    trackIds.removeIf([](qint64 t) { return t <= 0; }); // radio and CD (from the queue) are no titles of a playlist
     const QVariantMap p = get(id);
     if (p.isEmpty() || p.value(QStringLiteral("smart")).toBool() || (trackIds.isEmpty() && spec.isEmpty()))
         return;

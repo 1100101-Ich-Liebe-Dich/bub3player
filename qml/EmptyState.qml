@@ -8,6 +8,7 @@ Column {
     property string title
     property string text
     property string actionText
+    property string actionIcon: "add"
     signal action()
     width: Math.min(420, parent ? parent.width - 80 : 420)
     spacing: 10
@@ -43,7 +44,7 @@ Column {
         anchors.horizontalCenter: parent.horizontalCenter
         primary: true
         text: es.actionText
-        iconName: "add"
+        iconName: es.actionIcon
         onClicked: es.action()
     }
 }

@@ -30,8 +30,8 @@ Rectangle {
         width: Math.min(340, bar.width * 0.27)
         height: parent.height
         hoverEnabled: true
-        cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: if (Player.currentId > 0) bar.openNowPlaying()
+        cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: if (Player.hasTrack) bar.openNowPlaying()
         CoverArt {
             id: cover
             anchors.verticalCenter: parent.verticalCenter
@@ -40,12 +40,12 @@ Rectangle {
             requestSize: 128
             coverId: Player.currentId
             label: Player.album || Player.title
-            showInitial: Player.currentId > 0
+            showInitial: Player.hasTrack
             Rectangle {
                 anchors.fill: parent
                 radius: parent.radius
                 color: Theme.alpha("#000000", 0.45)
-                visible: nowArea.containsMouse && Player.currentId > 0
+                visible: nowArea.containsMouse && Player.hasTrack
                 Icon { anchors.centerIn: parent; name: "expand"; size: 22; color: "white" }
             }
         }
@@ -58,12 +58,12 @@ Rectangle {
             spacing: 3
             Text {
                 width: parent.width
-                text: Player.currentId > 0 ? Player.title : qsTr("Nichts in der Wiedergabe")
+                text: Player.hasTrack ? Player.title : qsTr("Nichts in der Wiedergabe")
                 elide: Text.ElideRight
                 font.family: Theme.uiFont
                 font.pixelSize: 15
                 font.weight: Font.Bold
-                color: Player.currentId > 0 ? Theme.text : Theme.textDim
+                color: Player.hasTrack ? Theme.text : Theme.textDim
             }
             Text {
                 width: parent.width
@@ -185,7 +185,7 @@ Rectangle {
                 anchors.verticalCenter: ribbon.verticalCenter
                 width: 44
                 horizontalAlignment: Text.AlignRight
-                text: bar.fmt(Player.duration)
+                text: window.durationText
                 font.family: Theme.uiFont
                 font.pixelSize: 12
                 font.weight: Font.Medium

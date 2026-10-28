@@ -40,4 +40,44 @@ QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *stat
     return data;
 }
 
+QByteArray Probe::header(const QByteArray &name) const
+{
+    for (const auto &h : headers)
+        if (h.first == name)
+            return h.second;
+    return {};
+}
+
+Probe probe(const QUrl &url, const Headers &headers, int timeoutMs, qint64 maxBytes)
+{
+    Probe p;
+    QNetworkAccessManager nam;
+    QNetworkRequest req(url);
+    for (const auto &h : headers)
+        req.setRawHeader(h.first, h.second);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply *reply = nam.get(req);
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::readyRead, &loop, [&] {
+        p.head += reply->read(maxBytes - p.head.size());
+        if (p.head.size() >= maxBytes)
+            loop.quit(); // enough: a stream would go on forever
+    });
+    timer.start(timeoutMs);
+    loop.exec();
+    p.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    p.finalUrl = reply->url();
+    for (const auto &h : reply->rawHeaderPairs())
+        p.headers.append({h.first.toLower(), h.second});
+    if (p.head.size() < maxBytes)
+        p.head += reply->read(maxBytes - p.head.size());
+    reply->abort();
+    reply->deleteLater();
+    return p;
+}
+
 } // namespace Http

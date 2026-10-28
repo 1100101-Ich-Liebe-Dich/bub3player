@@ -19,7 +19,9 @@ const QString ObjectPath = QStringLiteral("/org/mpris/MediaPlayer2");
 
 QDBusObjectPath trackPath(qint64 id)
 {
-    return QDBusObjectPath(QStringLiteral("/org/halcyon/track/%1").arg(id > 0 ? id : 0));
+    // radio and CD (negative ids): "-" is no character of an object path
+    return QDBusObjectPath(id < 0 ? QStringLiteral("/org/halcyon/track/x%1").arg(-id)
+                                  : QStringLiteral("/org/halcyon/track/%1").arg(id));
 }
 } // namespace
 
@@ -50,7 +52,10 @@ MprisPlayer::MprisPlayer(QObject *parent, Player *player, PlayQueue *queue)
     connect(queue, &PlayQueue::modeChanged, this, [this] {
         notify({{QStringLiteral("Shuffle"), shuffle()}, {QStringLiteral("LoopStatus"), loopStatus()}});
     });
+    // a station names the next song
+    connect(player, &Player::metaChanged, this, [this] { notify({{QStringLiteral("Metadata"), metadata()}}); });
     connect(player, &Player::trackChanged, this, [this] {
+        notify({{QStringLiteral("CanSeek"), canSeek()}});
         m_artUrl.clear();
         notify({{QStringLiteral("Metadata"), metadata()}});
         // Art lives in the cover cache; resolve it off the UI thread, then update.
@@ -101,10 +106,15 @@ void MprisPlayer::setShuffle(bool on)
     m_queue->setShuffle(on);
 }
 
+bool MprisPlayer::canSeek() const
+{
+    return !m_player->live();
+}
+
 QVariantMap MprisPlayer::metadata() const
 {
     const qint64 id = m_player->currentId();
-    if (id <= 0)
+    if (id == 0)
         return {{QStringLiteral("mpris:trackid"), QVariant::fromValue(trackPath(0))}};
     QVariantMap m{
         {QStringLiteral("mpris:trackid"), QVariant::fromValue(trackPath(id))},
@@ -114,6 +124,8 @@ QVariantMap MprisPlayer::metadata() const
         {QStringLiteral("xesam:album"), m_player->album()},
         {QStringLiteral("xesam:albumArtist"), QStringList{m_player->albumArtist()}},
     };
+    if (m_player->live())
+        m.remove(QStringLiteral("mpris:length")); // a station has no end
     if (!m_artUrl.isEmpty())
         m.insert(QStringLiteral("mpris:artUrl"), m_artUrl);
     return m;

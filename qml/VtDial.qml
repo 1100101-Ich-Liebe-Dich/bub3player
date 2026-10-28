@@ -143,7 +143,7 @@ Item {
             width: parent.width - 220
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
-            text: Player.currentId > 0 ? (Player.title + "  ·  " + Player.artist).toUpperCase() : "BUB3PLAYER  ·  STEREO"
+            text: Player.hasTrack ? (Player.title + "  ·  " + Player.artist).toUpperCase() : "BUB3PLAYER  ·  STEREO"
             font.family: "Barlow Condensed"
             font.pixelSize: Math.max(12, Math.round(dial.height * 0.17))
             font.weight: Font.Bold
@@ -175,7 +175,7 @@ Item {
                 font.pixelSize: Math.max(12, Math.round(dial.height * 0.16))
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Lamp { text: Player.format !== "" ? Player.format.toUpperCase() : "PHONO"; on: Player.currentId > 0; col: "#7CFF7A" }
+            Lamp { text: Player.format !== "" ? Player.format.toUpperCase() : "PHONO"; on: Player.hasTrack; col: "#7CFF7A" }
         }
 
         // pointer
@@ -225,7 +225,7 @@ Item {
         readonly property bool overHeart: heartLamp.visible && containsMouse
                                           && heartLamp.contains(heartLamp.mapFromItem(this, mouseX, mouseY))
         cursorShape: overHeart ? Qt.PointingHandCursor : Player.duration > 0 ? Qt.SizeHorCursor : Qt.ArrowCursor
-        enabled: Player.currentId > 0
+        enabled: Player.hasTrack
         function f(x) { return Math.max(0, Math.min(1, (x - dial.sx - 3) / (width - 2 * dial.sx - 6))) }
         onPressed: (m) => {
             if (heartLamp.visible && heartLamp.contains(heartLamp.mapFromItem(this, m.x, m.y)))

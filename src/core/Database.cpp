@@ -11,7 +11,7 @@ namespace {
 QString g_path;
 bool g_hasFts = false;
 
-const int SchemaVersion = 4;
+const int SchemaVersion = 5;
 
 const char *SchemaV1 = R"SQL(
 CREATE TABLE IF NOT EXISTS sources (
@@ -267,6 +267,27 @@ CREATE TRIGGER IF NOT EXISTS tracks_ad_playlist AFTER DELETE ON tracks BEGIN
 END;
 )SQL";
 
+// V5: internet radio stations (not tracks: they never reach views, statistics or
+// analysis; the player knows them by negative ids, see External).
+const char *SchemaV5 = R"SQL(
+CREATE TABLE IF NOT EXISTS stations (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL,              -- as given (may be a .pls/.m3u address)
+  stream      TEXT NOT NULL,              -- what plays
+  homepage    TEXT NOT NULL DEFAULT '',
+  logo        TEXT NOT NULL DEFAULT '',   -- address of the logo (radio-browser)
+  tags        TEXT NOT NULL DEFAULT '',
+  country     TEXT NOT NULL DEFAULT '',
+  codec       TEXT NOT NULL DEFAULT '',
+  bitrate     INTEGER NOT NULL DEFAULT 0,
+  uuid        TEXT NOT NULL DEFAULT '',   -- radio-browser station uuid
+  pos         INTEGER NOT NULL DEFAULT 0, -- order in the list
+  added       INTEGER NOT NULL DEFAULT 0,
+  last_played INTEGER NOT NULL DEFAULT 0
+);
+)SQL";
+
 void migrate()
 {
     DbConnection db = open();
@@ -279,6 +300,7 @@ void migrate()
     migrateV2(db);
     db.exec(SchemaV3);
     db.exec(SchemaV4);
+    db.exec(SchemaV5);
     {   // V4: device of each folder, to tell an unmounted drive from deleted folders
         bool hasDev = false;
         Stmt s(db, "PRAGMA table_info(folders)");

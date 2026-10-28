@@ -11,6 +11,7 @@ Item {
     property string subtitle
     property string detail
     property var coverId: 0
+    property string coverVersion: ""  // changes when the picture behind coverId does (CD cover found)
     property string artist: ""     // round artist picture instead of the album art
     property bool showBack: false
     property bool loading: false
@@ -18,7 +19,7 @@ Item {
     default property alias actions: actionRow.data
     signal back()
 
-    readonly property bool hero: coverId > 0
+    readonly property bool hero: !!coverId
     readonly property int topSpace: showBack ? 64 : 36
     implicitHeight: Math.round(Math.max(hero ? topSpace + 188 + 28 : 0, topSpace + content.implicitHeight + 24))
 
@@ -42,6 +43,7 @@ Item {
         radius: h.artist !== "" ? width / 2 : Theme.radius + 2
         requestSize: 512
         coverId: h.coverId
+        version: h.coverVersion
         artist: h.artist
         label: h.title
     }

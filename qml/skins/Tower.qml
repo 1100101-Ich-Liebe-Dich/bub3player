@@ -329,7 +329,7 @@ Item {
                         width: 62; height: 22
                         labelOnCap: true
                         label: skin.np ? "MENU" : "BIG VIEW"
-                        enabled: Player.currentId > 0 || skin.np
+                        enabled: Player.hasTrack || skin.np
                         onClicked: window.nowPlayingOpen = !window.nowPlayingOpen
                     }
                     TwButton { // the heart: favourite track

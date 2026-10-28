@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "library/ViewRegistry.h"
 
+#include "cd/AudioCd.h"
 #include "core/Paths.h"
 
 #include <QDir>
@@ -83,8 +84,9 @@ QVariantList builtIn()
 {
     const char *lib = "Bibliothek";
     const char *disc = "Entdecken";
+    const char *listen = "Hören";
     const char *hist = "Hörverlauf";
-    return {
+    QVariantList views = {
         view("tracks", "Alle Titel", "note", lib, "tracks", {{QStringLiteral("sort"), QStringLiteral("album")}}),
         view("albums", "Alben", "album", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("album")}}, "grid"),
         view("artists", "Künstler", "artist", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("albumArtist")}}, "grid"),
@@ -92,6 +94,9 @@ QVariantList builtIn()
              {{QStringLiteral("filters"), QVariantList{filter("rating", "ge", 5)}}, {QStringLiteral("sort"), QStringLiteral("artist")}}),
         view("genres", "Genres", "tag", lib, "groups", {{QStringLiteral("groupBy"), QStringLiteral("genre")}}, "tiles"),
         view("folders", "Ordner", "folder", lib, "folders", {}),
+
+        view("radio", "Internetradio", "broadcast", listen, "radio", {}),
+        view("cd", "Audio-CD", "disc", listen, "cd", {}),
 
         view("foryou", "Für dich", "radio", disc, "foryou", {}),
         view("recent", "Zuletzt hinzugefügt", "new", disc, "tracks",
@@ -120,6 +125,9 @@ QVariantList builtIn()
              {{QStringLiteral("filters"), QVariantList{filter("playCount", "eq", 0)}},
               {QStringLiteral("sort"), QStringLiteral("added")}, {QStringLiteral("desc"), true}}),
     };
+    if (!AudioCd::driveExists()) // no drive, no page for it
+        views.removeIf([](const QVariant &v) { return v.toMap().value(QStringLiteral("id")) == QLatin1String("cd"); });
+    return views;
 }
 
 QVariantList userViews(QString *error)

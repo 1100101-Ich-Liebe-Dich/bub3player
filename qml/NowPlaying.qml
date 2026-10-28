@@ -146,7 +146,7 @@ Rectangle {
                 }
                 Text {
                     anchors.right: parent.right
-                    text: window.fmtTime(Player.duration)
+                    text: window.durationText
                     font.family: Theme.uiFont
                     font.pixelSize: 13
                     color: Theme.textDim
@@ -208,6 +208,7 @@ Rectangle {
                 }
                 HeartButton {
                     anchors.verticalCenter: parent.verticalCenter
+                    visible: Player.currentId > 0 // not for radio and CD
                     size: 36
                     on: Library.currentFavorite
                     onClicked: Library.toggleCurrentFavorite()

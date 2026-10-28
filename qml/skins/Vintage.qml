@@ -145,8 +145,8 @@ Item {
                             inner: true
                             MouseArea {
                                 anchors.fill: parent
-                                cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true
+                                cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: if (Player.hasTrack) window.nowPlayingOpen = true
                             }
                         }
                         Column {
@@ -156,7 +156,7 @@ Item {
                             spacing: 2
                             Text {
                                 width: parent.width
-                                text: Player.currentId > 0 ? Player.title : qsTr("Keine Platte aufgelegt")
+                                text: Player.hasTrack ? Player.title : qsTr("Keine Platte aufgelegt")
                                 elide: Text.ElideRight
                                 font.family: Theme.displayFont
                                 font.pixelSize: 19
@@ -164,7 +164,7 @@ Item {
                             }
                             Text {
                                 width: parent.width
-                                text: Player.currentId > 0 ? Player.artist + (Player.album !== "" ? " · " + Player.album : "") : qsTr("Wähle Musik aus der Bibliothek")
+                                text: Player.hasTrack ? Player.artist + (Player.album !== "" ? " · " + Player.album : "") : qsTr("Wähle Musik aus der Bibliothek")
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: 13
@@ -291,6 +291,7 @@ Item {
                             // a heart drawn on the paper
                             HeartButton {
                                 id: notesHeart
+                                visible: Player.currentId > 0
                                 anchors.right: parent.right
                                 y: 2
                                 size: 34
@@ -333,7 +334,7 @@ Item {
                         }
                         Text {
                             width: parent.width
-                            text: window.fmtTime(Player.position) + " / " + window.fmtTime(Player.duration)
+                            text: window.fmtTime(Player.position) + " / " + window.durationText
                             font.family: "Barlow Condensed"
                             font.pixelSize: 15
                             font.weight: Font.Bold
@@ -490,7 +491,7 @@ Item {
                         VtKey { width: 42; iconName: "next"; label: ""; onClicked: Player.next() }
                         Item { width: 4; height: 1 }
                         VtKey { width: 48; label: "COVER"; latched: skin.showCover; onClicked: Theme.setOption("cover", !skin.showCover) }
-                        VtKey { width: 48; label: "PHONO"; latched: window.nowPlayingOpen; enabled: Player.currentId > 0 || window.nowPlayingOpen; onClicked: window.nowPlayingOpen = !window.nowPlayingOpen }
+                        VtKey { width: 48; label: "PHONO"; latched: window.nowPlayingOpen; enabled: Player.hasTrack || window.nowPlayingOpen; onClicked: window.nowPlayingOpen = !window.nowPlayingOpen }
                         VtKey { width: 48; label: "TEXT"; latched: Lyrics.shown; opacity: window.lyricsMissing ? 0.6 : 1; enabled: Player.currentId > 0; onClicked: window.toggleLyrics() }
                     }
                 }
@@ -527,7 +528,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -4
-                        text: window.fmtTime(tuning.preview >= 0 ? tuning.preview * Player.duration : Player.position) + "  /  " + window.fmtTime(Player.duration)
+                        text: window.fmtTime(tuning.preview >= 0 ? tuning.preview * Player.duration : Player.position) + "  /  " + window.durationText
                         font.family: "Barlow Condensed"
                         font.pixelSize: 20
                         font.weight: Font.Bold

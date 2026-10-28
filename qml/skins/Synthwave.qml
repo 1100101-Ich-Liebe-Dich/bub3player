@@ -300,8 +300,8 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true
+                    cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: if (Player.hasTrack) window.nowPlayingOpen = true
                 }
             }
             Column {
@@ -315,7 +315,7 @@ Item {
                     split: 0.0035
                     Text {
                         width: parent.width
-                        text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
+                        text: Player.hasTrack ? Player.title : qsTr("Bereit")
                         elide: Text.ElideRight
                         font.family: "Orbitron"
                         font.pixelSize: 19
@@ -327,7 +327,7 @@ Item {
                 }
                 Text {
                     width: parent.width
-                    text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
+                    text: Player.hasTrack ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 14
@@ -382,7 +382,7 @@ Item {
                     anchors.left: digits.right
                     anchors.leftMargin: 8
                     anchors.baseline: digits.baseline
-                    text: "/ " + window.fmtTime(Player.duration)
+                    text: "/ " + window.durationText
                     font.family: "Orbitron"
                     font.pixelSize: 13
                     font.letterSpacing: 1
@@ -464,7 +464,7 @@ Item {
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 18; active: Queue.repeat > 0; activeColor: Theme.accent2; onClicked: Queue.cycleRepeat() }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter; visible: deck.width > 1180 }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "queue"; active: window.queueOpen; activeColor: Theme.accent2; onClicked: window.queueOpen = !window.queueOpen }
-                IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "expand"; enabled: Player.currentId > 0; onClicked: window.nowPlayingOpen = true }
+                IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "expand"; enabled: Player.hasTrack; onClicked: window.nowPlayingOpen = true }
             }
         }
     }
@@ -658,7 +658,7 @@ Item {
                         onClicked: (m) => { if (Player.duration > 0) Player.seek(Math.round(Math.max(0, Math.min(1, (m.x - 10) / parent.width)) * Player.duration)) }
                     }
                 }
-                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: window.fmtTime(Player.duration); font.family: "Orbitron"; font.pixelSize: 16; font.weight: Font.Bold; color: Theme.textDim }
+                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: window.durationText; font.family: "Orbitron"; font.pixelSize: 16; font.weight: Font.Bold; color: Theme.textDim }
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -669,7 +669,7 @@ Item {
                 NeonButton { anchors.verticalCenter: parent.verticalCenter; iconName: "next"; onClicked: Player.next() }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; iconSize: 20; active: Queue.repeat > 0; activeColor: Theme.accent2; onClicked: Queue.cycleRepeat() }
                 IconButton { anchors.verticalCenter: parent.verticalCenter; iconName: "lyrics"; iconSize: 20; active: Lyrics.shown; activeColor: Theme.accent2; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
-                HeartButton { anchors.verticalCenter: parent.verticalCenter; size: 36; onColor: Theme.accent; offColor: Theme.accent2; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
+                HeartButton { visible: Player.currentId > 0; anchors.verticalCenter: parent.verticalCenter; size: 36; onColor: Theme.accent; offColor: Theme.accent2; on: Library.currentFavorite; onClicked: Library.toggleCurrentFavorite() }
                 Item { width: 10; height: 1 }
                 VolumeSlider { anchors.verticalCenter: parent.verticalCenter }
             }

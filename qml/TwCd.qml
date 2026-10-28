@@ -63,10 +63,10 @@ Item {
                     requestSize: 256
                     coverId: Player.currentId
                     label: Player.album || "BuB3"
-                    visible: Player.currentId > 0
+                    visible: Player.hasTrack
                 }
                 Rectangle { // a mark so the spin is visible on any cover
-                    visible: Player.currentId > 0
+                    visible: Player.hasTrack
                     x: parent.width / 2 - 1.5; y: parent.height * 0.18
                     width: 3; height: parent.height * 0.08; radius: 1.5
                     color: Qt.rgba(1, 1, 1, 0.6)
@@ -80,7 +80,7 @@ Item {
             }
             ShaderEffect {
                 anchors.fill: parent
-                visible: cd.canShade && Player.currentId > 0
+                visible: cd.canShade && Player.hasTrack
                 property real labelRadius: 0.34
                 property real lightAngle: -0.8
                 property real sparkle: 0
@@ -88,14 +88,14 @@ Item {
                 layer.enabled: true
             }
             Rectangle { // centre hole
-                visible: Player.currentId > 0
+                visible: Player.hasTrack
                 anchors.centerIn: parent
                 width: parent.width * 0.1; height: width; radius: width / 2
                 color: "#0a0b0d"
                 border.color: Qt.rgba(1, 1, 1, 0.25)
             }
             Text {
-                visible: Player.currentId <= 0
+                visible: !Player.hasTrack
                 anchors.centerIn: parent
                 text: "NO DISC"
                 font.family: "Barlow Condensed"; font.pixelSize: 13; font.weight: Font.Bold; font.letterSpacing: 2
@@ -129,7 +129,7 @@ Item {
                 model: 3
                 Column {
                     spacing: 3
-                    readonly property bool on: Player.currentId > 0 && (Math.max(0, Queue.currentRow) % 3) === index
+                    readonly property bool on: Player.hasTrack && (Math.max(0, Queue.currentRow) % 3) === index
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 7; height: 7; radius: 3.5

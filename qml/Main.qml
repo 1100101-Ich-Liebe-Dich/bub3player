@@ -14,7 +14,7 @@ ApplicationWindow {
     minimumWidth: 960
     minimumHeight: 620
     visible: true
-    title: Player.currentId > 0 ? Player.title + " – " + Player.artist + " – BuB3Player" : "BuB3Player"
+    title: Player.hasTrack ? Player.title + " – " + Player.artist + " – BuB3Player" : "BuB3Player"
     color: Theme.bg
     font.family: Theme.uiFont
 
@@ -42,8 +42,10 @@ ApplicationWindow {
     // the skins show them in place of the cover (Hi-Fi Turm: above the tower).
     Binding { target: Lyrics; property: "active"; value: window.nowPlayingOpen && Player.currentId > 0 && window.onScreen }
     readonly property bool lyricsOn: Lyrics.shown && Lyrics.available
-    readonly property bool lyricsMissing: Lyrics.status === 3 // the lyrics buttons go pale
-    readonly property string lyricsTip: (Lyrics.status === 1 ? qsTr("Liedtext wird gesucht …")
+    // the lyrics buttons go pale (none found, or a station or CD: lyrics are for the library only)
+    readonly property bool lyricsMissing: Lyrics.status === 3 || Player.currentId < 0
+    readonly property string lyricsTip: (Player.currentId < 0 ? qsTr("Liedtexte gibt es nur für Titel der Bibliothek")
+                                         : Lyrics.status === 1 ? qsTr("Liedtext wird gesucht …")
                                          : Lyrics.shown ? (Lyrics.available ? qsTr("Cover statt Liedtext zeigen") : qsTr("Kein Liedtext gefunden"))
                                          : qsTr("Liedtext zeigen")) + qsTr("  (Strg + Umschalt + L)")
     function toggleLyrics() {
@@ -117,6 +119,8 @@ ApplicationWindow {
         value: window.onScreen && !!window.skin && window.skin.wantsLevels === true
     }
 
+    // the length of what plays; a radio station has none
+    readonly property string durationText: Player.live ? qsTr("Live") : fmtTime(Player.duration)
     function fmtTime(ms) {
         if (!(ms > 0)) return "0:00"
         var s = Math.floor(ms / 1000)
@@ -151,6 +155,12 @@ ApplicationWindow {
             break
         case "foryou":
             stack.replace(null, forYouPage, { pageId: v.id })
+            break
+        case "radio":
+            stack.replace(null, radioPage, {})
+            break
+        case "cd":
+            stack.replace(null, cdPage, {})
             break
         case "playlist":
             stack.replace(null, tracksPage, { pageId: v.id, title: v.name, spec: v.spec || {}, playlistId: v.playlistId,
@@ -237,6 +247,8 @@ ApplicationWindow {
     Component { id: foldersPage; FoldersPage {} }
     Component { id: settingsPage; SettingsPage {} }
     Component { id: forYouPage; ForYouPage {} }
+    Component { id: radioPage; RadioPage {} }
+    Component { id: cdPage; CdPage {} }
 
     // ---------- the skin ----------
     Loader {
@@ -278,7 +290,13 @@ ApplicationWindow {
         var music = [], lists = 0
         for (var i = 0; i < paths.length; ++i) {
             var p = String(paths[i])
-            if (/\.m3u8?$/i.test(p)) {
+            if (/^https?:\/\//i.test(p)) {
+                Stations.add(p, "", true) // a stream or a station list on the web: play it
+                ++lists
+            } else if (/\.(pls|xspf)$/i.test(p) || (/\.m3u8?$/i.test(p) && Stations.isStationList(p))) {
+                Stations.importFile(p, true) // stations, not files
+                ++lists
+            } else if (/\.m3u8?$/i.test(p)) {
                 Playlists.importFile(p)
                 ++lists
             } else {
@@ -453,6 +471,23 @@ ApplicationWindow {
         }
     }
     Timer { id: seekTimer; property real to: 0; interval: 4000; onTriggered: Player.seek(to) }
+    Timer {
+        id: radioPlayTimer
+        property int n: 0
+        interval: 2500 // after funkadd
+        onTriggered: if (n < Stations.list.length) Stations.play(Stations.list[n].id)
+    }
+    Connections {
+        // CD (with --view cd): scheibe=N plays track N once the disc is read, scheibelesen reads it into files
+        target: AudioCd
+        enabled: typeof uiTest !== "undefined" && uiTest.indexOf("scheibe") >= 0
+        function onDiscChanged() {
+            if (AudioCd.status !== 3) return
+            var n = uiTest.match(/scheibe=(\d+)/)
+            if (n) AudioCd.play(Number(n[1]))
+            if (uiTest.indexOf("scheibelesen") >= 0 && !AudioCd.ripping && (!AudioCd.online || AudioCd.album !== "")) AudioCd.rip()
+        }
+    }
     Connections {
         target: Jellyfin
         enabled: typeof uiTest !== "undefined" && uiTest.indexOf("jf-login") >= 0
@@ -558,6 +593,13 @@ ApplicationWindow {
             if (a.indexOf("plimport") >= 0) playlistUi.importFile()
             if (a.indexOf("plexport") >= 0 && Playlists.playlists.length > 0) playlistUi.exportFile(Playlists.playlists[0].id)
             if (a.indexOf("autoplay") >= 0) { Queue.autoplay = true; Queue.jumpTo(Queue.count - 1); window.queueOpen = true }
+            // radio: funkadd=URL (add a station), funkon=N (play the n-th), funksuche=WORT (directory)
+            var ra = a.match(/funkadd=(\S+)/)
+            if (ra) Stations.add(ra[1])
+            var rp = a.match(/funkon=(\d+)/)
+            if (rp) radioPlayTimer.start(), radioPlayTimer.n = Number(rp[1])
+            var rs = a.match(/funksuche=(\S+)/)
+            if (rs) { Stations.online = true; Stations.search(rs[1]) }
             if (a.indexOf("search") >= 0) { // "search" or "search=wort"
                 var sq = a.match(/search=(\S+)/)
                 var term = sq ? sq[1] : "nord"

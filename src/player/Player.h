@@ -53,9 +53,12 @@ class Player : public QObject
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY volumeChanged)
     Q_PROPERTY(qint64 currentId READ currentId NOTIFY trackChanged)
-    Q_PROPERTY(QString title READ title NOTIFY trackChanged)
-    Q_PROPERTY(QString artist READ artist NOTIFY trackChanged)
-    Q_PROPERTY(QString album READ album NOTIFY trackChanged)
+    // metaChanged: with every new track, and when a radio station names the next song
+    Q_PROPERTY(QString title READ title NOTIFY metaChanged)
+    Q_PROPERTY(QString artist READ artist NOTIFY metaChanged)
+    Q_PROPERTY(QString album READ album NOTIFY metaChanged)
+    Q_PROPERTY(bool live READ live NOTIFY trackChanged)   // a radio station: no end, no seeking
+    Q_PROPERTY(bool hasTrack READ hasTrack NOTIFY trackChanged) // anything loaded (a library track: currentId > 0)
     Q_PROPERTY(QString albumArtist READ albumArtist NOTIFY trackChanged)
     Q_PROPERTY(int year READ year NOTIFY trackChanged)
     Q_PROPERTY(QString format READ format NOTIFY trackChanged)
@@ -109,6 +112,8 @@ public:
     bool muted() const { return m_muted; }
     void setMuted(bool m);
     qint64 currentId() const { return m_playingId; }
+    bool live() const;
+    bool hasTrack() const { return m_playingId != 0; }
     QString title() const { return m_title; }
     QString artist() const { return m_artist; }
     QString album() const { return m_album; }
@@ -183,6 +188,7 @@ signals:
     void durationChanged();
     void volumeChanged();
     void trackChanged();
+    void metaChanged();
     void coverColorChanged();
     void settingsChanged();
     void spectrumEnabledChanged();
@@ -244,6 +250,7 @@ private:
 
     void handleMessage(int deck, GstMessage *msg);
     void handleSpectrum(const QVector<float> &mags);
+    void handleStreamTags(const QString &title, const QString &codec, int bitrate);
     void handleLevels(const QVector<double> &rms, const QVector<double> &peak);
     void resetLevels();
 
@@ -339,6 +346,8 @@ private:
 
     qint64 m_playingId = 0;
     QString m_title, m_artist, m_album, m_albumArtist, m_format, m_error, m_key;
+    QString m_streamTitle;         // what the station says is playing (ICY)
+    bool m_reconnected = false;    // a station that ended was started once more
     int m_year = 0;
     double m_bpm = 0;
     QColor m_coverColor;

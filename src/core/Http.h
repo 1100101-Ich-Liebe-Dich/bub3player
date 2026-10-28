@@ -19,4 +19,16 @@ using Headers = QList<QPair<QByteArray, QByteArray>>;
 QByteArray get(const QUrl &url, const Headers &headers, int timeoutMs, int *status,
                const std::function<bool()> &cancel = {});
 
+// The start of an answer that may never end (a radio stream): status, headers
+// (lower-case names) and at most `maxBytes` of the body, then the request stops.
+struct Probe
+{
+    int status = 0;
+    QList<QPair<QByteArray, QByteArray>> headers;
+    QByteArray head;
+    QUrl finalUrl;
+    QByteArray header(const QByteArray &name) const;
+};
+Probe probe(const QUrl &url, const Headers &headers, int timeoutMs, qint64 maxBytes);
+
 } // namespace Http

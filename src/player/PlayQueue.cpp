@@ -4,6 +4,7 @@
 #include <QSettings>
 
 #include "core/Paths.h"
+#include "library/External.h"
 #include "library/TrackCache.h"
 
 #include <QDataStream>
@@ -358,6 +359,33 @@ void PlayQueue::restore()
     for (int o : order)
         if (o < 0 || o >= ids.size())
             return;
+    // tracks of an audio CD are gone with the disc (a new start reads it anew)
+    if (std::any_of(ids.cbegin(), ids.cend(), External::isCd)) {
+        QVector<int> newIndex(ids.size(), -1);
+        QVector<qint64> keptIds;
+        QVector<bool> keptAutos;
+        for (int i = 0; i < ids.size(); ++i)
+            if (!External::isCd(ids[i])) {
+                newIndex[i] = int(keptIds.size());
+                keptIds << ids[i];
+                keptAutos << autos[i];
+            }
+        QVector<int> keptOrder;
+        int keptPos = -1;
+        for (int row = 0; row < order.size(); ++row) {
+            if (newIndex[order[row]] < 0)
+                continue;
+            if (row <= pos)
+                keptPos = int(keptOrder.size()); // the last kept one up to the current
+            keptOrder << newIndex[order[row]];
+        }
+        if (keptPos < 0 && !keptOrder.isEmpty())
+            keptPos = 0;
+        ids = keptIds;
+        autos = keptAutos;
+        order = keptOrder;
+        pos = keptPos;
+    }
     beginResetModel();
     m_ids = ids;
     m_auto = autos;

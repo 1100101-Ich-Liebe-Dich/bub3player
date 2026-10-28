@@ -369,6 +369,36 @@ Wiedergabetasten (Hi-Fi Turm und Vintage: Taste „TEXT“) oder `Strg + Umschal
 </tr>
 </table>
 
+### 📻 Internetradio
+
+Unter „Hören → Internetradio“ in der Seitenleiste.
+
+- **Sender hinzufügen** mit ihrer Internetadresse – auch die Senderlisten (`.pls`, `.m3u`, `.xspf`),
+  die Radio-Webseiten anbieten. Name, Format und Bitrate meldet der Sender selbst. Listen lassen
+  sich importieren, aus dem Dateimanager öffnen oder aufs Fenster ziehen.
+- **Was gerade läuft**: Titel und Künstler aus dem Datenstrom des Senders, in der Leiste, in der
+  Großansicht jedes Themes, im Infobereich und bei MPRIS. Statt der Länge steht dort „Live“.
+- **Weiter und Zurück wechseln den Sender**, alle Sender stehen dafür in der Warteschlange.
+- **Senderverzeichnis, nur wenn du willst**: Eingeschaltet sucht der Player im freien Verzeichnis
+  [radio-browser.info](https://www.radio-browser.info) nach Name oder Richtung und holt die
+  Senderlogos. Dabei gehen deine Suchwörter und die Sender, die du hörst, an das Verzeichnis. Ab
+  Werk ist das aus.
+
+### 💿 Audio-CD
+
+Mit einem CD-Laufwerk erscheint „Hören → Audio-CD“ in der Seitenleiste; eine eingelegte CD zeigt
+sich dort von selbst.
+
+- **Abspielen** lückenlos wie im CD-Spieler, Weiter und Zurück gehen durch die Titel. Auswerfen per
+  Knopf.
+- **Einlesen als FLAC** (verlustfrei, mit Tags) in einen Ordner deiner Wahl, als
+  `Albumkünstler/Album/01 Titel.flac`. Vorhandene Dateien rührt der Player nicht an: Er schreibt
+  jeden Titel erst unter einem eigenen Namen und benennt ihn nur um, wenn der Platz noch frei ist. Liegt der Ordner außerhalb der Bibliothek, kann er mit einem Klick dazukommen.
+- **Namen**: von Hand für Album, Künstler, Jahr und jeden Titel, oder – nur wenn eingeschaltet – von
+  [MusicBrainz](https://musicbrainz.org) mit dem Cover aus dem Cover Art Archive. Dabei geht nur die
+  Kennung der CD (aus der Länge ihrer Titel berechnet) an den Dienst. Der Player merkt sich die
+  Namen für jede CD.
+
 ### ☁️ Jellyfin
 
 - **Anmelden** mit Benutzer und Passwort oder per **Quick Connect**. Gespeichert wird nur der
@@ -416,7 +446,8 @@ Warteschlange, Titel und Position.
 - **Aus dem Dateimanager**: Dateien und Ordner aufs Fenster ziehen oder „Öffnen mit BuB3Player“ –
   gespielt wird sofort, ein schon laufender Player übernimmt (ein zweiter startet nicht).
   Liegt die Musik außerhalb der Bibliothek, fragt der Player, ob der Ordner dazukommen soll.
-  M3U-Listen werden als Playlist übernommen.
+  M3U-Listen werden als Playlist übernommen, Senderlisten (`.pls`, M3U mit Internetadressen) und
+  Adressen von Radiosendern kommen in die Senderliste und spielen gleich.
 - **Symbol im Infobereich** (KDE, Xfce, LXQt, Cinnamon, GNOME mit der Erweiterung „AppIndicator“):
   Ein Klick holt das Fenster hervor oder versteckt es, die mittlere Maustaste hält an, das Mausrad
   ändert die Lautstärke, der Rechtsklick zeigt Titel, Wiedergabe, Herz und Beenden. Auf Wunsch
@@ -482,6 +513,8 @@ sudo cmake --install build
 ```
 
 `gst-libav` wird für AAC/ALAC, WMA und APE gebraucht. MP3, FLAC, Ogg, Opus und WAV laufen ohne.
+Audio-CDs liest das cdparanoia-Plugin aus `gst-plugins-base`. Radiosender im HLS-Format (`.m3u8`)
+brauchen `gst-plugins-bad` (ab GStreamer 1.22 reicht `gst-plugins-good`).
 
 </details>
 
@@ -640,6 +673,8 @@ src/player    GStreamer-Player (zwei Decks, Überblenden), Warteschlange, MPRIS,
 src/analysis  Audioanalyse (Tempo, Tonart, Lautheit, Übergänge, Wellenform), Hintergrund-Warteschlange
 src/recommend Empfehlungen: Lernen aus dem Hörverlauf, Auswahl, Autoplay, Radio, „Für dich“
 src/jellyfin  Anmeldung, Abgleich, Streaming-Adressen, Rückmeldung an den Server
+src/radio     Internetradio: Senderliste, Senderlisten-Dateien (.pls, .m3u …), radio-browser.info
+src/cd        Audio-CD: Laufwerk, Inhalt, MusicBrainz, Einlesen als FLAC
 src/ui        Theme-System, Dateidialoge des Desktops (XDG-Portal, kdialog, zenity)
 qml/          gemeinsame Seiten und Bausteine
 qml/skins/    die acht Themes
@@ -648,13 +683,14 @@ themes/       Farbschemata für Klassik
 shaders/      Aurora-Licht, Milchglas, Neumorphism, Synthwave-Szene, Vinyl, CD, Bildröhre …
 tools/        Testwerkzeuge: Vorführ- und Riesen-Bibliothek erzeugen, Klick- und
               Speichertests, mock-jellyfin.py (kleiner Server mit der Jellyfin-API),
-              mock-lrclib.py (Ersatz für LRCLIB), mock-portal.py (Ersatz für den Dateidialog)
+              mock-lrclib.py (Ersatz für LRCLIB), mock-portal.py (Ersatz für den Dateidialog),
+              mock-radio.py (Radiosender, radio-browser.info und MusicBrainz zum Ausprobieren)
 dist/         Desktop-Eintrag, AppStream, Symbol, AppImage-Skripte
 ```
 
 Daten: `~/.local/share/halcyon/` (Datenbank, Warteschlange, eigene Themes),
 `~/.config/halcyon/` (Einstellungen, eigene Ansichten), `~/.cache/halcyon/` (Cover, Wellenformen,
-Liedtexte von LRCLIB).
+Liedtexte von LRCLIB, Senderlogos, Namen und Cover von CDs).
 
 **Grundsätze:** Alles, was dauert, läuft außerhalb des UI-Threads. Jede optionale
 GStreamer-Komponente wird vorher geprüft; fehlt sie, fällt nur die Funktion weg, nie die Wiedergabe.

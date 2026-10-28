@@ -119,12 +119,12 @@ Item {
                     requestSize: 128
                     coverId: Player.currentId
                     label: Player.album || Player.title
-                    showInitial: Player.currentId > 0
+                    showInitial: Player.hasTrack
                 }
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Player.currentId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: if (Player.currentId > 0) window.nowPlayingOpen = true
+                    cursorShape: Player.hasTrack ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: if (Player.hasTrack) window.nowPlayingOpen = true
                 }
             }
             Column {
@@ -132,7 +132,7 @@ Item {
                 spacing: 3
                 Text {
                     width: parent.width
-                    text: Player.currentId > 0 ? Player.title : qsTr("Bereit")
+                    text: Player.hasTrack ? Player.title : qsTr("Bereit")
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 16
@@ -141,7 +141,7 @@ Item {
                 }
                 Text {
                     width: parent.width
-                    text: Player.currentId > 0 ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
+                    text: Player.hasTrack ? Player.artist : qsTr("Wähle Musik aus der Bibliothek")
                     elide: Text.ElideRight
                     font.family: Theme.uiFont
                     font.pixelSize: 13
@@ -183,7 +183,7 @@ Item {
                     onMoved: Player.volume = value
                 }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 40; iconName: "queue"; active: window.queueOpen; onClicked: window.queueOpen = !window.queueOpen }
-                SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 40; iconName: "expand"; enabled: Player.currentId > 0; onClicked: window.nowPlayingOpen = true }
+                SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 40; iconName: "expand"; enabled: Player.hasTrack; onClicked: window.nowPlayingOpen = true }
             }
         }
     }
@@ -399,7 +399,7 @@ Item {
                 }
                 Text {
                     anchors.baseline: parent.children[0].baseline
-                    text: "/ " + window.fmtTime(Player.duration)
+                    text: "/ " + window.durationText
                     font.family: Theme.uiFont
                     font.pixelSize: 18
                     font.weight: Font.Bold
@@ -443,7 +443,7 @@ Item {
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 58; iconName: "next"; onClicked: Player.next() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Queue.repeat === 2 ? "repeat-one" : "repeat"; active: Queue.repeat > 0; onClicked: Queue.cycleRepeat() }
                 SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: "lyrics"; active: Lyrics.shown; opacity: window.lyricsMissing ? 0.5 : 1; tip: window.lyricsTip; onClicked: window.toggleLyrics() }
-                SoftButton { anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
+                SoftButton { visible: Player.currentId > 0; anchors.verticalCenter: parent.verticalCenter; size: 48; iconName: Library.currentFavorite ? "heart" : "heart-outline"; active: Library.currentFavorite; tip: Library.currentFavorite ? qsTr("Aus den Favoriten entfernen") : qsTr("Zu den Favoriten"); onClicked: Library.toggleCurrentFavorite() }
             }
             Row {
                 spacing: 14
@@ -573,7 +573,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: 42
             horizontalAlignment: Text.AlignRight
-            text: window.fmtTime(Player.duration)
+            text: window.durationText
             font.family: Theme.uiFont
             font.pixelSize: 13
             font.weight: Font.Bold

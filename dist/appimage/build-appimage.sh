@@ -38,10 +38,11 @@ export APPIMAGE_EXTRACT_AND_RUN=1 # no FUSE needed (containers, CI)
 
 echo "== GStreamer: nur was der Player braucht"
 # playback, decoding, the effects of the filter chain, outputs, HTTP for Jellyfin
+# and internet radio (icydemux, HLS), audio CDs (cdparanoia; flac also encodes)
 plugins="coreelements playback typefindfunctions audioconvert audioresample volume app pbtypes
          ogg vorbis opus alsa gio
          level spectrum replaygain equalizer autodetect pulseaudio flac wavparse audioparsers id3demux
-         apetag isomp4 mpg123 wavpack soup icydemux matroska
+         apetag isomp4 mpg123 wavpack soup icydemux matroska hls adaptivedemux2 cdparanoia
          aiff libav"
 dest=AppDir/usr/lib/gstreamer-1.0
 mkdir -p "$dest"

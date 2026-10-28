@@ -5,6 +5,7 @@
 #include "core/CoverProvider.h"
 #include "core/Database.h"
 #include "jellyfin/JellyfinAccess.h"
+#include "library/External.h"
 #include "library/TrackCache.h"
 #include "player/AudioOutput.h"
 #include "player/PlayQueue.h"
@@ -401,9 +402,16 @@ Player::~Player()
     freeDeck(m_deck[1]);
 }
 
+bool Player::live() const
+{
+    return External::isStation(m_playingId);
+}
+
 QByteArray Player::uriFor(qint64 id) const
 {
     const TrackRow r = TrackCache::instance().get(id);
+    if (r.isExternal())
+        return r.valid ? QUrl(r.url).toEncoded() : QByteArray();
     if (r.isRemote())
         return JellyfinAccess::streamUrl(r.sourceId, r.remoteId);
     const QString path = TrackCache::instance().pathOf(id);
@@ -412,6 +420,8 @@ QByteArray Player::uriFor(qint64 id) const
 
 bool Player::canSeek(qint64 id) const
 {
+    if (External::isStation(id))
+        return false;
     const TrackRow r = TrackCache::instance().get(id);
     if (!r.isRemote())
         return true;
@@ -508,6 +518,30 @@ G_GNUC_END_IGNORE_DEPRECATIONS
             const QVector<double> rms = values("rms"), peak = values("peak");
             QMetaObject::invokeMethod(self, [self, rms, peak] { self->handleLevels(rms, peak); }, Qt::QueuedConnection);
         }
+        break;
+    }
+    case GST_MESSAGE_TAG: {
+        // A radio station names the song (ICY), and what it sends.
+        if (!isActive)
+            break;
+        GstTagList *tags = nullptr;
+        gst_message_parse_tag(msg, &tags);
+        gchar *title = nullptr, *codec = nullptr;
+        guint bitrate = 0;
+        gst_tag_list_get_string(tags, GST_TAG_TITLE, &title);
+        gst_tag_list_get_string(tags, GST_TAG_AUDIO_CODEC, &codec);
+        if (!gst_tag_list_get_uint(tags, GST_TAG_NOMINAL_BITRATE, &bitrate))
+            gst_tag_list_get_uint(tags, GST_TAG_BITRATE, &bitrate);
+        gst_tag_list_unref(tags);
+        const QString t = QString::fromUtf8(title), c = QString::fromUtf8(codec);
+        g_free(title);
+        g_free(codec);
+        const int gen = d->gen.load();
+        const int index = d->index;
+        QMetaObject::invokeMethod(self, [self, t, c, bitrate, gen, index] {
+            if (gen == self->m_deck[index].gen.load())
+                self->handleStreamTags(t, c, int(bitrate / 1000));
+        }, Qt::QueuedConnection);
         break;
     }
     case GST_MESSAGE_EOS:
@@ -659,9 +693,23 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
     case GST_MESSAGE_EOS: {
         finishTrack(false);
         cancelPrepared();
+        if (live()) {
+            // A station does not end: the connection broke. Once more, then give up
+            // (never on to the next station by itself).
+            if (!m_reconnected && m_listenedMs > 10000) {
+                m_reconnected = true;
+                load(m_playingId, true, 0, true);
+                break;
+            }
+            m_error = tr("Die Verbindung zum Sender ist abgebrochen.");
+            emit errorChanged();
+            gst_element_set_state(d.playbin, GST_STATE_READY);
+            setState(0);
+            break;
+        }
         // No gapless hand-over armed (transitions on, or the blend could not
         // start in time): continue with the next track the plain way.
-        if (m_queue->nextId() > 0 && m_queue->advance()) {
+        if (m_queue->nextId() != 0 && m_queue->advance()) {
             load(m_queue->currentId(), true);
             break;
         }
@@ -681,7 +729,12 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
             g_free(dbg);
             break;
         }
-        if (TrackCache::instance().get(m_playingId).isRemote())
+        const bool station = live();
+        if (station)
+            m_error = tr("Der Sender ist gerade nicht erreichbar.");
+        else if (External::isCd(m_playingId))
+            m_error = tr("Die CD lässt sich nicht lesen.");
+        else if (TrackCache::instance().get(m_playingId).isRemote())
             m_error = tr("Titel vom Jellyfin-Server konnte nicht geladen werden. Ist der Server erreichbar?");
         else
             m_error = tr("Wiedergabefehler: %1").arg(QString::fromUtf8(err ? err->message : "unbekannt"));
@@ -691,8 +744,9 @@ void Player::handleMessage(int deckIndex, GstMessage *msg)
         g_free(dbg);
         emit errorChanged();
         gst_element_set_state(d.playbin, GST_STATE_READY);
-        // Skip unreadable files, but never spin through a whole broken queue.
-        if (++m_consecutiveErrors < 5 && m_queue->advance()) {
+        // Skip unreadable files, but never spin through a whole broken queue
+        // (and never from a station that is away to the next one).
+        if (!station && ++m_consecutiveErrors < 5 && m_queue->advance()) {
             if (m_suspectId == m_playingId) {
                 // It failed on the system default too: the decoder was missing, not
                 // the device. The next track goes to the chosen output again.
@@ -835,6 +889,8 @@ void Player::updateMeta(qint64 id)
     m_prepareFailedId = 0;
     m_listenedMs = 0;
     m_lastPollPos = 0;
+    m_streamTitle.clear();
+    m_reconnected = false;
     const TrackRow r = TrackCache::instance().get(id);
     m_title = r.title;
     m_artist = r.artist;
@@ -844,13 +900,14 @@ void Player::updateMeta(qint64 id)
     m_format = r.formatLabel();
     m_duration = r.durationMs;
     emit trackChanged();
+    emit metaChanged();
     emit durationChanged();
 
     if (!m_waveform.isEmpty()) {
         m_waveform.clear();
         emit waveformChanged();
     }
-    if (AnalysisService *a = AnalysisService::instance()) {
+    if (AnalysisService *a = AnalysisService::instance(); a && id > 0) {
         // The next one first: requests are served newest first, so the playing track wins.
         const qint64 next = m_queue->nextId();
         if (next > 0 && next != id)
@@ -873,6 +930,52 @@ void Player::updateMeta(qint64 id)
         }, Qt::QueuedConnection);
     });
     armNext();
+}
+
+// "Artist - Title" from a station (ICY); also what it sends, when the station list
+// does not know. Tags of other tracks are what the database already has.
+void Player::handleStreamTags(const QString &text, const QString &codec, int kbps)
+{
+    if (!live())
+        return;
+    bool changed = false;
+    if (m_format.isEmpty() || !codec.isEmpty() || kbps > 0) {
+        QString c = m_format.section(QLatin1Char(' '), 0, 0);
+        const QString lc = codec.toLower();
+        if (lc.contains(QLatin1String("mp3")) || lc.contains(QLatin1String("layer 3")))
+            c = QStringLiteral("MP3");
+        else if (lc.contains(QLatin1String("aac")))
+            c = QStringLiteral("AAC");
+        else if (lc.contains(QLatin1String("vorbis")))
+            c = QStringLiteral("OGG");
+        else if (lc.contains(QLatin1String("opus")))
+            c = QStringLiteral("OPUS");
+        else if (lc.contains(QLatin1String("flac")))
+            c = QStringLiteral("FLAC");
+        const QString f = kbps > 0 && !c.isEmpty() ? QStringLiteral("%1 %2").arg(c).arg(kbps) : c;
+        if (!f.isEmpty() && f != m_format) {
+            m_format = f;
+            emit trackInfoChanged();
+        }
+    }
+    const QString t = text.trimmed();
+    if (!t.isEmpty() && t != m_streamTitle) {
+        m_streamTitle = t;
+        const TrackRow r = TrackCache::instance().get(m_playingId);
+        // "Artist - Title" is the usual form; anything else is the title alone
+        const int dash = int(t.indexOf(QLatin1String(" - ")));
+        if (dash > 0) {
+            m_artist = t.left(dash).trimmed();
+            m_title = t.mid(dash + 3).trimmed();
+        } else {
+            m_artist = r.title; // the station
+            m_title = t;
+        }
+        m_album = r.title;
+        changed = true;
+    }
+    if (changed)
+        emit metaChanged();
 }
 
 void Player::updateTrackInfo()
@@ -925,7 +1028,11 @@ void Player::armNext()
     plan();
     const qint64 next = m_queue->nextId();
     // Gapless hand-over on the playing deck (also used for album runs when blending is on).
-    const bool gapless = next > 0 && (transitionMode() == 0 || (m_plan.valid && m_plan.gapless));
+    // A CD always runs on without a gap; a station never ends by itself and is
+    // never taken on the fly.
+    const bool stations = External::isStation(m_playingId) || External::isStation(next);
+    const bool cd = External::isCd(m_playingId) || External::isCd(next);
+    const bool gapless = next != 0 && !stations && (cd || transitionMode() == 0 || (m_plan.valid && m_plan.gapless));
     const QByteArray uri = gapless ? uriFor(next) : QByteArray();
     active().gainNext = fallbackGain(next);
     QMutexLocker lock(&m_mutex);
@@ -1183,7 +1290,7 @@ void Player::setCurve(Deck &d, const QVector<QPair<qint64, double>> &points)
 bool Player::load(qint64 id, bool startPlaying, qint64 seekMs, bool sameTrack)
 {
     Deck &d = active();
-    if (!d.playbin || id <= 0)
+    if (!d.playbin || id == 0)
         return false;
     const QByteArray uri = uriFor(id);
     if (uri.isEmpty())
@@ -1259,7 +1366,7 @@ void Player::play()
         if (m_tail >= 0)
             gst_element_set_state(m_deck[m_tail].playbin, GST_STATE_PLAYING);
     } else if (m_state == 0) {
-        if (m_queue->currentId() > 0) {
+        if (m_queue->currentId() != 0) {
             retryOutput(Resume::None);
             load(m_queue->currentId(), true);
         }
@@ -1318,10 +1425,10 @@ void Player::previous()
 
 void Player::seek(qint64 ms)
 {
-    if (!active().playbin)
+    if (!active().playbin || live())
         return;
     if (m_state == 0) {
-        if (m_queue->currentId() > 0)
+        if (m_queue->currentId() != 0)
             load(m_queue->currentId(), true, ms);
         return;
     }
@@ -1668,9 +1775,9 @@ void Player::restoreSession()
     QSettings s;
     const qint64 pos = s.value(QStringLiteral("player/position"), 0).toLongLong();
     const qint64 id = m_queue->currentId();
-    if (id > 0 && s.value(QStringLiteral("player/trackId")).toLongLong() == id)
-        load(id, false, pos);
-    else if (id > 0)
+    if (id != 0 && s.value(QStringLiteral("player/trackId")).toLongLong() == id)
+        load(id, false, External::isStation(id) ? 0 : pos);
+    else if (id != 0)
         updateMeta(id);
 }
 
