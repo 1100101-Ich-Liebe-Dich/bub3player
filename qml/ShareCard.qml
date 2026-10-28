@@ -14,9 +14,9 @@ Item {
     readonly property bool terminal: skin === "terminal"
     readonly property bool tower: skin === "tower"
     readonly property bool paper: skin === "vintage"
-    readonly property color ink: paper ? "#2B2118" : skin === "klassik" ? "#FFFFFF" : Theme.text
-    readonly property color dim: paper ? "#6B5A44" : skin === "klassik" ? Qt.rgba(1, 1, 1, 0.75) : Theme.textDim
-    readonly property color hi: paper ? "#B4471C" : skin === "klassik" ? "#FFFFFF" : Theme.accent
+    readonly property color ink: paper ? window.look.paperInk : skin === "klassik" ? "#FFFFFF" : Theme.text
+    readonly property color dim: paper ? window.look.paperDim : skin === "klassik" ? Qt.rgba(1, 1, 1, 0.75) : Theme.textDim
+    readonly property color hi: paper ? window.look.paperHi : skin === "klassik" ? "#FFFFFF" : Theme.accent
     readonly property string head: tower ? "Barlow Condensed" : terminal ? Theme.monoFont : Theme.displayFont
     readonly property var artist: (review.topArtists || [])[0] || null
     width: 540
@@ -53,23 +53,32 @@ Item {
                 color: Theme.alpha([Theme.accent, Theme.accent2, Qt.lighter(Theme.accent, 1.4)][index], 0.4)
             }
         }
-        // Synthwave: the sun and the grid
-        Rectangle {
+        // Synthwave: a striped sun beside the year, a strip of grid at the foot
+        Item {
             visible: sc.skin === "synthwave"
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 330
-            width: 260
-            height: 260
-            radius: 130
-            gradient: Gradient {
-                GradientStop { position: 0; color: "#FFD23F" }
-                GradientStop { position: 1; color: "#FF3F8E" }
+            x: sc.width - 250
+            y: 34
+            width: 210
+            height: 150 // the horizon cuts the sun
+            clip: true
+            opacity: 0.55
+            Rectangle {
+                width: 210
+                height: 210
+                radius: 105
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "#FFD23F" }
+                    GradientStop { position: 0.7; color: "#FF3F8E" }
+                }
             }
-            opacity: 0.2
+            Repeater { // the stripes, wider towards the horizon
+                model: 5
+                Rectangle { y: 72 + index * 16 + index * index; width: 210; height: 2 + index * 1.6; color: "#1E0736" }
+            }
         }
         Repeater {
-            model: sc.skin === "synthwave" ? 9 : 0
-            Rectangle { y: 470 + index * index * 3.2; width: sc.width; height: 1; color: Theme.alpha(Theme.accent2, 0.3) }
+            model: sc.skin === "synthwave" ? 5 : 0
+            Rectangle { y: 622 + index * index * 2.4; width: sc.width; height: 1; color: Theme.alpha(Theme.accent2, 0.35) }
         }
         // Vintage: stripes of the seventies down the right edge
         Repeater {
@@ -235,7 +244,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 22
-        text: "BuB3Player · www.BAUENUNDBOOTEN.de"
+        text: qsTr("BuB3Player · Projekt präsentiert von www.BAUENUNDBOOTEN.de")
         font.family: Theme.uiFont
         font.pixelSize: 12
         color: sc.dim

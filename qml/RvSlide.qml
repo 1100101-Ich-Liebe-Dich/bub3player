@@ -16,9 +16,9 @@ Item {
     // colours on the card (or on Klassik's colour field)
     // the intro stands on the background itself, the other slides on a card
     readonly property bool onCard: !bare && slide.kind !== "intro"
-    readonly property color ink: bare ? "#FFFFFF" : paper && onCard ? "#2B2118" : Theme.text
-    readonly property color dim: bare ? Qt.rgba(1, 1, 1, 0.72) : paper && onCard ? "#6B5A44" : Theme.textDim
-    readonly property color hi: bare ? "#FFFFFF" : paper && onCard ? "#B4471C" : Theme.accent
+    readonly property color ink: bare ? "#FFFFFF" : paper && onCard ? window.look.paperInk : Theme.text
+    readonly property color dim: bare ? Qt.rgba(1, 1, 1, 0.72) : paper && onCard ? window.look.paperDim : Theme.textDim
+    readonly property color hi: bare ? "#FFFFFF" : paper && onCard ? window.look.paperHi : Theme.accent
     readonly property string headFont: tower ? "Barlow Condensed" : Theme.displayFont
     readonly property bool upper: window.look.upper
     // the terminal's frame says which year; the kicker inside says what
@@ -84,6 +84,7 @@ Item {
                 Body {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
+                    visible: sl.slide.hint !== false // not on a slide alone
                     full: qsTr("Weiter mit → oder einem Klick")
                     delay: 1100
                     font.pixelSize: 15

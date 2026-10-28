@@ -11,7 +11,7 @@ Statistik und „Dein Jahr in Musik“.
   analysiert). Jedes Theme zeichnet die Diagramme auf seine Art: LED-Säulen im Hi-Fi Turm,
   Blockzeichen im Terminal, Bernstein-Lampen bei Vintage, Neon bei Synthwave, eingelassene Schlitze
   bei Soft, Milchglas bei Glas.
-- **Dein Jahr in Musik**: der Jahresrückblick als Folgen von Bildern – Hörzeit, Künstler, Lied und
+- **Dein Jahr in Musik**: der Jahresrückblick als Folge von Bildern – Hörzeit, Künstler, Lied und
   Album des Jahres, die Top fünf, Genres, wann du hörst (Frühaufsteher oder Nachteule?), dein
   Monat, Rekorde (Tage am Stück, Dauerschleife, längster Tag), dein Sound aus der Audioanalyse
   (Tempo, Lieblingstonart, schnellster Titel), Jahrzehnte, neu entdeckte Künstler und

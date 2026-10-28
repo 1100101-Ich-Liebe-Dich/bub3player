@@ -14,7 +14,8 @@ Item {
     readonly property var ov: Stats.overview
     readonly property var lib: Stats.library
     readonly property bool hasData: (ov.listenedMs || 0) > 0
-    readonly property int reviewYear: Stats.reviewYear()
+    // the year shown (paging back through years), else the one just past or running
+    readonly property int reviewYear: Stats.period === "year" ? new Date().getFullYear() + Stats.offset : Stats.reviewYear()
     readonly property bool canReview: Stats.years.some(function (y) { return y.year === page.reviewYear && y.plays >= 20 })
     readonly property real contentWidth: Math.min(col.width - 2 * inset, 1180)
 
@@ -27,6 +28,11 @@ Item {
     function scrollTo(y) { flick.contentY = Math.max(0, Math.min(y, flick.contentHeight - flick.height)) }
 
     function dur(ms) { return Library.formatDuration(ms || 0, true) }
+    // under an hour in minutes, else hours: [value, unit]
+    function time(ms, longUnit) {
+        return (ms || 0) < 3600000 ? [Library.formatCount(Math.round((ms || 0) / 60000)), qsTr("Min.")]
+                                   : [hours(ms), longUnit ? qsTr("Stunden") : qsTr("Std.")]
+    }
     function hours(ms) {
         var h = (ms || 0) / 3600000
         return h >= 10 ? Library.formatCount(Math.round(h)) : Number(h).toLocaleString(Qt.locale("de_DE"), "f", 1)
@@ -41,7 +47,10 @@ Item {
     function delta() {
         if (ov.previousMs === undefined || !(ov.previousMs > 0)) return ""
         var d = Math.round((ov.listenedMs - ov.previousMs) / ov.previousMs * 100)
-        var before = ({ week: qsTr("zur Woche davor"), month: qsTr("zum Monat davor"), year: qsTr("zum Jahr davor") })[Stats.period] || ""
+        // a period still running is compared with the same span of the one before
+        var before = (ov.current ? { week: qsTr("zum selben Zeitpunkt der Woche davor"), month: qsTr("zum selben Tag des Monats davor"),
+                                     year: qsTr("zum selben Tag des Jahres davor") }
+                                 : { week: qsTr("zur Woche davor"), month: qsTr("zum Monat davor"), year: qsTr("zum Jahr davor") })[Stats.period] || ""
         return (d > 0 ? "▲ " : d < 0 ? "▼ " : "= ") + Math.abs(d) + " % " + before
     }
     // the bar of today (this day, this month, this year)
@@ -128,19 +137,19 @@ Item {
                 StatTile {
                     width: 260
                     big: true
-                    value: page.hours(page.ov.listenedMs)
-                    unit: qsTr("Stunden")
+                    value: page.time(page.ov.listenedMs, true)[0]
+                    unit: page.time(page.ov.listenedMs, true)[1]
                     label: qsTr("Hörzeit")
                     sub: page.delta()
                 }
                 StatTile { value: Library.formatCount(page.ov.plays || 0); label: page.ov.plays === 1 ? qsTr("Wiedergabe") : qsTr("Wiedergaben") }
                 StatTile { value: Library.formatCount(page.ov.tracks || 0); label: qsTr("verschiedene Titel") }
-                StatTile { value: Library.formatCount(page.ov.artists || 0); label: page.ov.artists === 1 ? qsTr("Künstler") : qsTr("Künstler") }
+                StatTile { value: Library.formatCount(page.ov.artists || 0); label: qsTr("Künstler") }
                 StatTile { value: Library.formatCount(page.ov.albums || 0); label: page.ov.albums === 1 ? qsTr("Album") : qsTr("Alben") }
                 StatTile {
                     visible: (page.ov.radioMs || 0) > 0
-                    value: page.hours(page.ov.radioMs)
-                    unit: qsTr("Std.")
+                    value: page.time(page.ov.radioMs)[0]
+                    unit: page.time(page.ov.radioMs)[1]
                     label: qsTr("Internetradio")
                 }
             }
@@ -199,7 +208,8 @@ Item {
                     title: qsTr("Künstler")
                     items: page.ov.topArtists || []
                     round: true
-                    onActivated: (item) => window.openArtist(item.name, item.trackId)
+                    // counted by the artist of each title, so their titles (an album artist would miss guests)
+                    onActivated: (item) => window.openTracks(item.name, qsTr("Künstler"), { filters: [{ field: "artist", op: "eq", value: item.name }], sort: "album" }, item.trackId)
                 }
                 TopList {
                     width: parent.half
@@ -265,6 +275,16 @@ Item {
                 StatTile {
                     value: (page.lib.tracks || 0) > 0 ? Math.round(Math.min(1, (page.lib.analysed || 0) / page.lib.tracks) * 100) + " %" : "–"
                     label: qsTr("analysiert")
+                }
+                StatTile {
+                    visible: (page.lib.hires || 0) > 0
+                    value: Library.formatCount(page.lib.hires || 0)
+                    label: qsTr("in Hi-Res")
+                }
+                StatTile {
+                    visible: (page.lib.oldestYear || 0) > 0 && page.lib.newestYear > page.lib.oldestYear
+                    value: page.lib.oldestYear + "–" + page.lib.newestYear
+                    label: qsTr("aus den Jahren")
                 }
                 StatTile {
                     visible: (page.lib.remote || 0) > 0
@@ -334,7 +354,7 @@ Item {
                             width: parent.width
                             height: 150
                             values: (page.lib.decades || []).map(function (d) { return d.count })
-                            labels: (page.lib.decades || []).map(function (d) { return "'" + String(d.decade).slice(2) })
+                            labels: (page.lib.decades || []).map(function (d) { return (d.decade >= 2000 || d.decade < 1920 ? String(d.decade) : String(d.decade).slice(2)) + "er" })
                             tipText: function (i) { return page.count(decadeBars.values[i], qsTr("1 Titel"), qsTr("%1 Titel")) }
                         }
                     }
@@ -360,12 +380,13 @@ Item {
         property string label
         property string sub
         property bool big: false
-        width: 170
+        width: Math.max(170, valueRow.implicitWidth + 2 * padding) // a long value (years) widens it
         padding: 16
         Column {
             width: parent.width
             spacing: 2
             Row {
+                id: valueRow
                 spacing: 6
                 Text {
                     text: tile.value

@@ -175,16 +175,15 @@ static bool hasColumn(DbConnection &db, const char *table, const char *col)
 // a flag for remote copies of local tracks, and a unique key for upserts.
 void migrateV2(DbConnection &db)
 {
-    const auto hasColumn = [&db](const char *table, const char *col) { return Database::hasColumn(db, table, col); };
-    if (!hasColumn("sources", "config"))
+    if (!hasColumn(db, "sources", "config"))
         db.exec("ALTER TABLE sources ADD COLUMN config TEXT NOT NULL DEFAULT '{}'");
-    if (!hasColumn("tracks", "remote_path"))
+    if (!hasColumn(db, "tracks", "remote_path"))
         db.exec("ALTER TABLE tracks ADD COLUMN remote_path TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "image_ref"))
+    if (!hasColumn(db, "tracks", "image_ref"))
         db.exec("ALTER TABLE tracks ADD COLUMN image_ref TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "remote_lib"))
+    if (!hasColumn(db, "tracks", "remote_lib"))
         db.exec("ALTER TABLE tracks ADD COLUMN remote_lib TEXT NOT NULL DEFAULT ''");
-    if (!hasColumn("tracks", "dup"))
+    if (!hasColumn(db, "tracks", "dup"))
         db.exec("ALTER TABLE tracks ADD COLUMN dup INTEGER NOT NULL DEFAULT 0");
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_remote_u ON tracks(source_id, remote_id) WHERE remote_id IS NOT NULL");
 }
@@ -314,7 +313,7 @@ static void migrateV6(DbConnection &db, qint64 version)
         db.exec("ALTER TABLE plays ADD COLUMN year INTEGER NOT NULL DEFAULT 0");
     if (version < 6) // what is still known of the plays so far
         db.exec("UPDATE plays SET title = t.title, artist = t.artist, album = t.album, aa = t.aa, genre = t.genre, year = t.year "
-                "FROM tracks t WHERE t.id = plays.track_id");
+                "FROM tracks t WHERE t.id = plays.track_id AND plays.title = '' AND plays.artist = ''"); // never what is there
 }
 
 void migrate()

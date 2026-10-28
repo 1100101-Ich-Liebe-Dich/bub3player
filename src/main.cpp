@@ -217,7 +217,13 @@ int runHeadlessStats(int argc, char *argv[])
     t.start();
     QJsonObject out;
     if (!p.positionalArguments().isEmpty()) {
-        out.insert(QStringLiteral("review"), QJsonObject::fromVariantMap(Stats::reviewOf(p.positionalArguments().first().toInt())));
+        bool ok = false;
+        const int year = p.positionalArguments().first().toInt(&ok);
+        if (!ok || year < 1970 || year > 9999) {
+            std::fprintf(stderr, "Kein gültiges Jahr: %s\n", qPrintable(p.positionalArguments().first()));
+            return 1;
+        }
+        out.insert(QStringLiteral("review"), QJsonObject::fromVariantMap(Stats::reviewOf(year)));
         out.insert(QStringLiteral("reviewMs"), t.restart());
     } else {
         out.insert(QStringLiteral("overview"), QJsonObject::fromVariantMap(Stats::overviewOf(QStringLiteral("all"), 0)));

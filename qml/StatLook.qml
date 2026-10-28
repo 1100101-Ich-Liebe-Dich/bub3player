@@ -33,4 +33,9 @@ QtObject {
                                      : skin === "aurora" ? Theme.accent2 : Theme.accent
     readonly property color barBorder: skin === "glas" ? Theme.alpha("white", 0.6) : skin === "synthwave" ? Theme.alpha(Theme.accent2, 0.9) : "transparent"
     readonly property real dimBars: skin === "glas" ? 0.7 : 0.55
+
+    // ink on Vintage's paper (cards of the review, the picture of the year)
+    readonly property color paperInk: "#2B2118"
+    readonly property color paperDim: "#6B5A44"
+    readonly property color paperHi: "#B4471C"
 }

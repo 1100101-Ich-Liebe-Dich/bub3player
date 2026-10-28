@@ -19,14 +19,17 @@ Item {
     readonly property var slide: slides[index] || ({})
     readonly property bool klassik: window.look.card === "none"
     readonly property real accentHue: Theme.accent.hslHue < 0 ? 0.6 : Theme.accent.hslHue
+    // made when it opens (a Loader in Main): fades in, and out again before it goes
+    property bool shown: false
     visible: opacity > 0
-    opacity: open ? 1 : 0
+    opacity: open && shown ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: window.animationsActive ? 450 : 0; easing.type: Easing.InOutCubic } }
 
-    onOpenChanged: {
-        if (!open)
-            return
+    Component.onCompleted: { shown = true; start() }
+    onOpenChanged: if (open) start() // opened again while it fades out
+    function start() {
         index = 0
+        savedPlaylist = false
         slides = []
         if (Stats.review.year === year)
             slides = build(Stats.review)
@@ -47,19 +50,23 @@ Item {
     function close() { window.reviewOpen = false }
 
     // ---- what is on the slides ----
-    readonly property var personas: [qsTr("Frühaufsteher"), qsTr("Mittagshörer"), qsTr("Nachmittagsmensch"), qsTr("Feierabend-Hörer"), qsTr("Nachteule")]
+    readonly property var personas: [qsTr("Frühaufsteher"), qsTr("Mittagshörer"), qsTr("Nachmittagsmensch"), qsTr("Feierabendhörer"), qsTr("Nachteule")]
     readonly property var personaTitles: [qsTr("Du bist ein Frühaufsteher"), qsTr("Du bist ein Mittagshörer"), qsTr("Du bist ein Nachmittagsmensch"),
-                                          qsTr("Du bist ein Feierabend-Hörer"), qsTr("Du bist eine Nachteule")]
+                                          qsTr("Du bist ein Feierabendhörer"), qsTr("Du bist eine Nachteule")]
     readonly property var dayparts: [qsTr("morgens zwischen 5 und 11 Uhr"), qsTr("mittags zwischen 11 und 14 Uhr"), qsTr("nachmittags zwischen 14 und 18 Uhr"),
                                      qsTr("abends zwischen 18 und 22 Uhr"), qsTr("nachts zwischen 22 und 5 Uhr")]
     function fc(n) { return Library.formatCount(n || 0) }
     function pct(f) { return Math.round((f || 0) * 100) }
     function dur(ms) { return Library.formatDuration(ms || 0, true) }
     function one(d, a, b) { return d === 1 ? a : b.arg(fc(d)) }
+    // a decade by name: "80er", but "2000er" and "1910er" in full
+    function decade(x) { return x >= 2000 || x < 1920 ? String(x) : String(x).slice(2) }
 
     function build(d) {
+        if (d && d.error)
+            return [{ kind: "intro", kicker: qsTr("Dein Jahr in Musik"), text: qsTr("Der Rückblick ließ sich gerade nicht berechnen. Versuch es gleich noch einmal."), hint: false }]
         if (!d || !(d.plays > 0))
-            return [{ kind: "intro", kicker: qsTr("Dein Jahr in Musik"), text: qsTr("In diesem Jahr lief noch nichts. Hör ein bisschen – dann gibt es hier etwas zu sehen.") }]
+            return [{ kind: "intro", kicker: qsTr("Dein Jahr in Musik"), text: qsTr("In diesem Jahr lief noch nichts. Hör ein bisschen – dann gibt es hier etwas zu sehen."), hint: false }]
         var s = []
         var minutes = Math.round(d.listenedMs / 60000)
         var sofar = d.year === new Date().getFullYear() // the year is not over yet
@@ -72,7 +79,9 @@ Item {
                              : qsTr("Das sind %1 Musik am Stück.").arg(dur(d.listenedMs)))
         if (d.previousMs > 0) {
             var change = Math.round((d.listenedMs - d.previousMs) / d.previousMs * 100)
-            lines.push(change >= 0 ? qsTr("%1 % mehr als %2.").arg(change).arg(d.year - 1) : qsTr("%1 % weniger als %2.").arg(-change).arg(d.year - 1))
+            // this year so far: against the same span of the year before
+            lines.push(sofar ? (change >= 0 ? qsTr("%1 % mehr als %2 bis zu diesem Tag.") : qsTr("%1 % weniger als %2 bis zu diesem Tag.")).arg(Math.abs(change)).arg(d.year - 1)
+                             : (change >= 0 ? qsTr("%1 % mehr als %2.") : qsTr("%1 % weniger als %2.")).arg(Math.abs(change)).arg(d.year - 1))
         }
         if (d.streak && d.streak.activeDays > 0)
             lines.push(one(d.streak.activeDays, qsTr("An einem Tag lief Musik."), qsTr("An %1 Tagen lief Musik.")))
@@ -112,7 +121,7 @@ Item {
                  bars: d.hours || [], labels: hourLabels, highlight: d.topHour, tip: dur })
         var months = d.months || []
         s.push({ kind: "bars", kicker: qsTr("Dein Jahr im Verlauf"), title: qsTr("Dein Monat: %1").arg(d.topMonthName),
-                 lines: [qsTr("Im %1 lief am meisten: %2.").arg(d.topMonthName).arg(dur((months[d.topMonth] || {}).ms))],
+                 lines: [qsTr("%1 Musik im %2 – mehr als in jedem anderen Monat.").arg(dur((months[d.topMonth] || {}).ms)).arg(d.topMonthName)],
                  bars: months.map(function (m) { return m.ms }), labels: months.map(function (m) { return m.label }),
                  highlight: d.topMonth, tip: dur })
 
@@ -122,20 +131,24 @@ Item {
         if (d.repeat)
             f.push({ value: d.repeat.count, suffix: "×", unit: qsTr("an einem Tag"), text: qsTr("„%1“ von %2, am %3.").arg(d.repeat.name).arg(d.repeat.artist).arg(d.repeat.date) })
         if (d.busiestDay)
-            f.push({ value: Math.round(d.busiestDay.ms / 60000), unit: qsTr("Minuten an einem Tag"), text: qsTr("Dein längster Tag: %1.").arg(d.busiestDay.date) })
+            f.push({ value: Math.round(d.busiestDay.ms / 60000), text: qsTr("Dein längster Tag: %1.").arg(d.busiestDay.date),
+                     unit: Math.round(d.busiestDay.ms / 60000) === 1 ? qsTr("Minute an einem Tag") : qsTr("Minuten an einem Tag") })
         if (f.length > 0)
             s.push({ kind: "facts", kicker: qsTr("Rekorde"), title: qsTr("Du bist drangeblieben"), facts: f })
 
-        if (d.bpm) {
-            var sound = [{ value: d.bpm, unit: qsTr("BPM im Schnitt"),
-                           text: d.bpm < 90 ? qsTr("Gemächlich – Musik zum Zurücklehnen.") : d.bpm < 115 ? qsTr("Entspannt, aber nicht schläfrig.")
-                               : d.bpm < 135 ? qsTr("Tanzbar – genau im Takt der Clubs.") : qsTr("Schnell! Dein Puls hat mitgehalten.") }]
+        if (d.bpm || d.keyName) { // as far as the analysis has got
+            var sound = []
+            if (d.bpm)
+                sound.push({ value: d.bpm, unit: qsTr("BPM im Schnitt"),
+                             text: d.bpm < 90 ? qsTr("Gemächlich – Musik zum Zurücklehnen.") : d.bpm < 115 ? qsTr("Entspannt, aber nicht schläfrig.")
+                                 : d.bpm < 135 ? qsTr("Tanzbar – genau im Takt der Clubs.") : qsTr("Schnell! Dein Puls hat mitgehalten.") })
             if (d.keyName)
                 sound.push({ big: d.keyCode, unit: qsTr("Lieblingstonart: %1").arg(d.keyName),
                              text: d.keyMinor ? qsTr("Moll – eher nachdenklich.") : qsTr("Dur – eher hell und froh.") })
             if (d.fastest)
                 sound.push({ value: d.fastest.bpm, unit: qsTr("BPM: dein schnellster Titel"), text: qsTr("„%1“ von %2.").arg(d.fastest.name).arg(d.fastest.artist) })
-            s.push({ kind: "facts", kicker: qsTr("Dein Sound"), title: d.energy > 0.55 ? qsTr("Voller Energie") : d.energy > 0.3 ? qsTr("Schön ausgewogen") : qsTr("Eher ruhig"),
+            s.push({ kind: "facts", kicker: qsTr("Dein Sound"), title: d.energy === undefined ? qsTr("So klingt dein Jahr")
+                          : d.energy > 0.55 ? qsTr("Voller Energie") : d.energy > 0.3 ? qsTr("Schön ausgewogen") : qsTr("Eher ruhig"),
                      facts: sound })
         }
 
@@ -143,10 +156,9 @@ Item {
         if (dec.length > 1) {
             var best = 0
             for (var i = 1; i < dec.length; ++i) if (dec[i].plays > dec[best].plays) best = i
-            var name = function (x) { return x >= 2000 ? String(x) : "'" + String(x).slice(2) }
-            s.push({ kind: "bars", kicker: qsTr("Aus welcher Zeit"), title: qsTr("Am meisten aus den %1ern").arg(name(dec[best].decade)),
+            s.push({ kind: "bars", kicker: qsTr("Aus welcher Zeit"), title: qsTr("Am meisten aus den %1ern").arg(decade(dec[best].decade)),
                      lines: d.oldest ? [qsTr("Der älteste Titel: „%1“ von %2, aus dem Jahr %3.").arg(d.oldest.name).arg(d.oldest.artist).arg(d.oldest.year)] : [],
-                     bars: dec.map(function (x) { return x.plays }), labels: dec.map(function (x) { return name(x.decade) + "er" }),
+                     bars: dec.map(function (x) { return x.plays }), labels: dec.map(function (x) { return decade(x.decade) + "er" }),
                      highlight: best, tip: function (v) { return one(v, qsTr("1 Wiedergabe"), qsTr("%1 Wiedergaben")) } })
         }
 
@@ -155,9 +167,12 @@ Item {
                      title: one(d.newArtists, qsTr("Ein Künstler zum ersten Mal"), qsTr("%1 Künstler zum ersten Mal")) })
 
         var st = d.topStations || []
-        if (d.radioMs >= 30 * 60000 && st.length > 0)
-            s.push({ kind: "number", kicker: qsTr("Internetradio"), value: Math.round(d.radioMs / 3600000), unit: qsTr("Stunden"),
+        if (d.radioMs >= 30 * 60000 && st.length > 0) {
+            var inHours = d.radioMs >= 2 * 3600000 // hours from two on, minutes below
+            s.push({ kind: "number", kicker: qsTr("Internetradio"), value: Math.round(d.radioMs / (inHours ? 3600000 : 60000)),
+                     unit: inHours ? qsTr("Stunden") : qsTr("Minuten"),
                      lines: [qsTr("Am liebsten: %1, %2 lang.").arg(st[0].name).arg(dur(st[0].ms))] })
+        }
 
         s.push({ kind: "summary" })
         return s
@@ -328,9 +343,9 @@ Item {
                         onClicked: rv.saveImage()
                     }
                     PillButton {
-                        text: qsTr("Als Playlist speichern")
+                        text: rv.savedPlaylist ? qsTr("Als Playlist gespeichert") : qsTr("Als Playlist speichern")
                         iconName: "playlist-add"
-                        enabled: (rv.info.playlistIds || []).length > 0
+                        enabled: !rv.savedPlaylist && (rv.info.playlistIds || []).length > 0
                         onClicked: rv.savePlaylist()
                     }
                     PillButton {
@@ -343,10 +358,13 @@ Item {
         }
     }
 
+    property bool savedPlaylist: false // once per opening
     function savePlaylist() {
         var id = Playlists.create(Playlists.uniqueName(qsTr("Mein Jahr %1").arg(year)))
-        if (id > 0)
+        if (id > 0) {
             Playlists.addIds(id, info.playlistIds || [])
+            savedPlaylist = true
+        }
     }
 
     property Item pendingCard: null
@@ -369,14 +387,15 @@ Item {
                                })
     }
     function writeImage(path) {
-        if (!pendingCard)
-            return
-        pendingCard.grabToImage(function (result) {
+        // the card may be gone meanwhile (the dialog of the desktop is not modal)
+        var ok = pendingCard !== null && pendingCard.grabToImage(function (result) {
             if (result.saveToFile(path))
                 Library.message(qsTr("Bild gespeichert: %1").arg(path))
             else
                 Library.message(qsTr("Das Bild ließ sich nicht speichern: %1").arg(path))
         }, Qt.size(1080, 1350))
+        if (!ok)
+            Library.message(qsTr("Das Bild ließ sich nicht speichern – die letzte Folie ist nicht mehr offen."))
     }
     FileDialog {
         id: imageDlg
@@ -422,7 +441,7 @@ Item {
         y: 28
         text: window.look.skin === "terminal"
               ? "[" + "■".repeat(rv.index + 1) + "·".repeat(Math.max(0, rv.slides.length - rv.index - 1)) + "] " + (rv.index + 1) + "/" + rv.slides.length
-              : "TRACK " + String(rv.index + 1).padStart(2, "0") + " / " + String(rv.slides.length).padStart(2, "0")
+              : "TITEL " + String(rv.index + 1).padStart(2, "0") + " / " + String(rv.slides.length).padStart(2, "0")
         font.family: window.look.skin === "terminal" ? Theme.monoFont : "DSEG14 Classic"
         font.pixelSize: window.look.skin === "terminal" ? 15 : 18
         color: Theme.accent

@@ -278,11 +278,17 @@ ApplicationWindow {
         }
     }
 
-    YearReview {
-        id: yearReview
+    // made only while it is open (and while it fades out)
+    Loader {
+        id: reviewLoader
         anchors.fill: parent
         z: 60
+        active: window.reviewLive
+        sourceComponent: Component { YearReview {} }
     }
+    property bool reviewLive: false
+    onReviewOpenChanged: if (reviewOpen) reviewLive = true; else reviewGone.restart()
+    Timer { id: reviewGone; interval: 600; onTriggered: if (!window.reviewOpen) window.reviewLive = false } // after it faded out
 
     readonly property alias playlistUi: playlistUi
     PlaylistUi { id: playlistUi }
@@ -404,7 +410,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Down"; onActivated: Player.volume = Math.max(0, Player.volume - 0.05) }
     Shortcut { sequence: "Ctrl+F"; onActivated: { window.nowPlayingOpen = false; if (window.skin && window.skin.focusSearch) window.skin.focusSearch() } }
     Shortcut { sequence: "Ctrl+J"; onActivated: window.queueOpen = !window.queueOpen }
-    Shortcut { sequence: "Ctrl+L"; onActivated: window.nowPlayingOpen = !window.nowPlayingOpen }
+    Shortcut { sequence: "Ctrl+L"; enabled: !window.reviewOpen; onActivated: window.nowPlayingOpen = !window.nowPlayingOpen }
     Shortcut { sequence: "Ctrl+Shift+L"; onActivated: window.toggleLyrics() }
     Shortcut {
         sequence: "Ctrl+H"
@@ -416,10 +422,10 @@ ApplicationWindow {
     }
     Shortcut { sequence: "Ctrl+T"; onActivated: window.openSettings(1) }
     Shortcut { sequence: "Ctrl+E"; onActivated: window.openSettings(3) }
-    Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen; onActivated: window.nowPlayingOpen = false }
-    Shortcut { sequence: "Escape"; enabled: window.reviewOpen; onActivated: yearReview.close() }
-    Shortcut { sequences: ["Right", "Return", "Enter"]; enabled: window.reviewOpen; onActivated: yearReview.next() }
-    Shortcut { sequence: "Left"; enabled: window.reviewOpen; onActivated: yearReview.previous() }
+    Shortcut { sequence: "Escape"; enabled: window.nowPlayingOpen && !window.reviewOpen; onActivated: window.nowPlayingOpen = false }
+    Shortcut { sequence: "Escape"; enabled: window.reviewOpen; onActivated: window.reviewOpen = false }
+    Shortcut { sequences: ["Right", "Return", "Enter"]; enabled: window.reviewOpen && reviewLoader.item !== null; onActivated: reviewLoader.item.next() }
+    Shortcut { sequence: "Left"; enabled: window.reviewOpen && reviewLoader.item !== null; onActivated: reviewLoader.item.previous() }
     Shortcut { sequence: "F11"; onActivated: window.toggleFullScreen() }
     Shortcut { sequence: StandardKey.Quit; onActivated: Qt.quit() }
     Shortcut { sequence: "Alt+Left"; enabled: !!window.stack && window.stack.depth > 1; onActivated: window.stack.pop() }
@@ -464,10 +470,12 @@ ApplicationWindow {
         id: reviewSlideTimer
         interval: 1500 // after the numbers are there
         onTriggered: {
-            if (reviewTimer.slideNo > 0) { yearReview.index = Math.min(reviewTimer.slideNo, yearReview.slides.length - 1); yearReview.enter() }
+            var rv = reviewLoader.item
+            if (!rv) return
+            if (reviewTimer.slideNo > 0) { rv.index = Math.min(reviewTimer.slideNo, rv.slides.length - 1); rv.enter() }
             var img = uiTest.match(/bildnach=(\S+)/) // the picture of the year to a file (with rueckblick=<last>)
-            if (img) Qt.callLater(function () { yearReview.writeImage(img[1]) })
-            if (uiTest.indexOf("jahrliste") >= 0) yearReview.savePlaylist()
+            if (img) Qt.callLater(function () { rv.writeImage(img[1]) })
+            if (uiTest.indexOf("jahrliste") >= 0) rv.savePlaylist()
         }
     }
     Timer {

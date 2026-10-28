@@ -55,12 +55,14 @@ Stmt ranged(DbConnection &db, const QString &sql, const Stats::Range &r)
 }
 
 // A title that is still in the library for a play of the past (cover, playing):
-// the same id, or the same names.
+// the same id if it still has the same names (ids of deleted titles are given
+// out again), else one with the same names.
 qint64 resolve(DbConnection &db, qint64 id, const QString &artist, const QString &title, const QString &album = {})
 {
     if (id > 0) {
-        Stmt s(db, "SELECT 1 FROM tracks WHERE id = ?");
-        s.bind(1, id);
+        Stmt s(db, "SELECT 1 FROM tracks WHERE id = ?1 AND (artist = ?2 COLLATE NOCASE OR aa = ?2 COLLATE NOCASE) "
+                   "AND (?3 = '' OR title = ?3 COLLATE NOCASE) AND (?4 = '' OR album = ?4 COLLATE NOCASE)");
+        s.bind(1, id).bind(2, artist).bind(3, title).bind(4, album);
         if (s.step())
             return id;
     }
@@ -139,25 +141,24 @@ QVariantList top(DbConnection &db, const Stats::Range &r, Top kind, int limit, q
 
 struct Totals
 {
-    qint64 plays = 0, skips = 0, musicMs = 0, radioMs = 0, tracks = 0, artists = 0, albums = 0;
+    qint64 plays = 0, musicMs = 0, radioMs = 0, tracks = 0, artists = 0, albums = 0;
 };
 
 Totals totals(DbConnection &db, const Stats::Range &r)
 {
     Totals t;
     Stmt s = ranged(db, QStringLiteral(
-        "SELECT COUNT(*) FILTER (WHERE completed = 1), COUNT(*) FILTER (WHERE completed = 0), COALESCE(SUM(listened_ms), 0), "
-        "COUNT(DISTINCT CASE WHEN completed = 1 THEN lower(artist) || char(31) || lower(title) END), "
+        "SELECT COUNT(*) FILTER (WHERE completed = 1), COALESCE(SUM(listened_ms), 0), "
+        "COUNT(DISTINCT CASE WHEN completed = 1 AND title <> '' THEN lower(artist) || char(31) || lower(title) END), "
         "COUNT(DISTINCT CASE WHEN completed = 1 AND artist <> '' THEN lower(artist) END), "
         "COUNT(DISTINCT CASE WHEN completed = 1 AND album <> '' THEN lower(aa) || char(31) || lower(album) END) "
         "FROM plays WHERE %1").arg(QLatin1String(InRange)), r);
     if (s.step()) {
         t.plays = s.i64(0);
-        t.skips = s.i64(1);
-        t.musicMs = s.i64(2);
-        t.tracks = s.i64(3);
-        t.artists = s.i64(4);
-        t.albums = s.i64(5);
+        t.musicMs = s.i64(1);
+        t.tracks = s.i64(2);
+        t.artists = s.i64(3);
+        t.albums = s.i64(4);
     }
     Stmt radio = ranged(db, QStringLiteral("SELECT COALESCE(SUM(listened_ms), 0) FROM station_plays WHERE %1").arg(QLatin1String(InRange)), r);
     if (radio.step())
@@ -168,13 +169,32 @@ Totals totals(DbConnection &db, const Stats::Range &r)
 void putTotals(QVariantMap &m, const Totals &t)
 {
     m.insert(QStringLiteral("plays"), t.plays);
-    m.insert(QStringLiteral("skips"), t.skips);
-    m.insert(QStringLiteral("musicMs"), t.musicMs);
     m.insert(QStringLiteral("radioMs"), t.radioMs);
     m.insert(QStringLiteral("listenedMs"), t.musicMs + t.radioMs);
     m.insert(QStringLiteral("tracks"), t.tracks);
     m.insert(QStringLiteral("artists"), t.artists);
     m.insert(QStringLiteral("albums"), t.albums);
+}
+
+// Listening time (music and radio) of the range before `r`, as far into it as `r`
+// has got: a month that has just begun is compared with the same days of the last.
+qint64 listenedBefore(DbConnection &db, const Stats::Range &r, const Stats::Range &before)
+{
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    const Stats::Range span{before.from, r.to > now ? std::min(before.to, before.from + (now - r.from)) : before.to};
+    const Totals t = totals(db, span);
+    return t.musicMs + t.radioMs;
+}
+
+// The stations listened to longest: [{name, ms}]
+QVariantList topStations(DbConnection &db, const Stats::Range &r, int limit)
+{
+    QVariantList out;
+    Stmt s = ranged(db, QStringLiteral("SELECT name, SUM(listened_ms) ms FROM station_plays WHERE %1 GROUP BY station_id "
+                                       "ORDER BY ms DESC LIMIT %2").arg(QLatin1String(InRange)).arg(limit), r);
+    while (s.step())
+        out << QVariantMap{{QStringLiteral("name"), s.str(0)}, {QStringLiteral("ms"), s.i64(1)}};
+    return out;
 }
 
 // Listening time by weekday (Monday first) and hour, music and radio.
@@ -207,6 +227,17 @@ QVariantList series(DbConnection &db, const Stats::Range &r, const char *format,
     for (int i = 0; i < keys.size(); ++i)
         out << QVariantMap{{QStringLiteral("label"), labels.value(i)}, {QStringLiteral("ms"), ms.value(keys[i])}};
     return out;
+}
+
+// The twelve months of a year.
+QVariantList months(DbConnection &db, const Stats::Range &r, int year)
+{
+    QStringList keys, labels;
+    for (int i = 1; i <= 12; ++i) {
+        keys << QStringLiteral("%1-%2").arg(year).arg(i, 2, 10, QLatin1Char('0'));
+        labels << german().standaloneMonthName(i, QLocale::ShortFormat);
+    }
+    return series(db, r, "%Y-%m", keys, labels);
 }
 
 QVariantList toList(const QVector<qint64> &v)
@@ -259,13 +290,9 @@ QVariantMap computeOverview(const QString &period, int offset)
         m.insert(QStringLiteral("detail"), offset == 0 ? QObject::tr("Dieser Monat") : QString());
         m.insert(QStringLiteral("chart"), series(db, r, "%Y-%m-%d", keys, labels));
     } else if (period == QLatin1String("year")) {
-        for (int i = 1; i <= 12; ++i) {
-            keys << QStringLiteral("%1-%2").arg(first.year()).arg(i, 2, 10, QLatin1Char('0'));
-            labels << german().standaloneMonthName(i, QLocale::ShortFormat);
-        }
         label = QString::number(first.year());
         m.insert(QStringLiteral("detail"), offset == 0 ? QObject::tr("Dieses Jahr") : QString());
-        m.insert(QStringLiteral("chart"), series(db, r, "%Y-%m", keys, labels));
+        m.insert(QStringLiteral("chart"), months(db, r, first.year()));
     } else {
         int from = today.year();
         Stmt s(db, "SELECT MIN(played_at) FROM (SELECT played_at FROM plays UNION ALL SELECT played_at FROM station_plays)");
@@ -286,18 +313,9 @@ QVariantMap computeOverview(const QString &period, int offset)
     m.insert(QStringLiteral("topTracks"), top(db, r, Top::Tracks, 10, t.plays));
     m.insert(QStringLiteral("topAlbums"), top(db, r, Top::Albums, 10, t.plays));
     m.insert(QStringLiteral("topGenres"), top(db, r, Top::Genres, 8, t.plays));
-    QVariantList stations;
-    {
-        Stmt s = ranged(db, QStringLiteral("SELECT name, SUM(listened_ms) ms FROM station_plays WHERE %1 GROUP BY station_id "
-                                           "ORDER BY ms DESC LIMIT 5").arg(QLatin1String(InRange)), r);
-        while (s.step())
-            stations << QVariantMap{{QStringLiteral("name"), s.str(0)}, {QStringLiteral("ms"), s.i64(1)}};
-    }
-    m.insert(QStringLiteral("topStations"), stations);
-    if (period != QLatin1String("all")) { // compared with the one before
-        const Totals before = totals(db, Stats::rangeOf(period, offset - 1));
-        m.insert(QStringLiteral("previousMs"), before.musicMs + before.radioMs);
-    }
+    m.insert(QStringLiteral("topStations"), topStations(db, r, 5));
+    if (period != QLatin1String("all")) // compared with the one before
+        m.insert(QStringLiteral("previousMs"), listenedBefore(db, r, Stats::rangeOf(period, offset - 1)));
     m.insert(QStringLiteral("current"), r.to > QDateTime::currentSecsSinceEpoch());
     return m;
 }
@@ -307,8 +325,8 @@ QVariantMap computeLibrary()
     DbConnection db = openDb();
     QVariantMap m;
     Stmt s(db, "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(size), 0), COUNT(*) FILTER (WHERE rating >= 5), "
-               "COUNT(*) FILTER (WHERE play_count = 0), COALESCE(SUM(play_count), 0), COUNT(*) FILTER (WHERE bits >= 24), "
-               "COUNT(*) FILTER (WHERE source_id > 1), COUNT(DISTINCT aa COLLATE NOCASE), COUNT(DISTINCT genre COLLATE NOCASE), "
+               "COUNT(*) FILTER (WHERE play_count = 0), COUNT(*) FILTER (WHERE bits >= 24), "
+               "COUNT(*) FILTER (WHERE source_id > 1), COUNT(DISTINCT NULLIF(aa, '') COLLATE NOCASE), COUNT(DISTINCT NULLIF(genre, '') COLLATE NOCASE), "
                "MIN(NULLIF(year, 0)), MAX(year) FROM tracks WHERE dup = 0");
     if (s.step()) {
         m.insert(QStringLiteral("tracks"), s.i64(0));
@@ -316,13 +334,12 @@ QVariantMap computeLibrary()
         m.insert(QStringLiteral("bytes"), s.i64(2));
         m.insert(QStringLiteral("favorites"), s.i64(3));
         m.insert(QStringLiteral("neverPlayed"), s.i64(4));
-        m.insert(QStringLiteral("playCount"), s.i64(5));
-        m.insert(QStringLiteral("hires"), s.i64(6));
-        m.insert(QStringLiteral("remote"), s.i64(7));
-        m.insert(QStringLiteral("artists"), s.i64(8));
-        m.insert(QStringLiteral("genres"), s.i64(9));
-        m.insert(QStringLiteral("oldestYear"), s.isNull(10) ? 0 : s.i64(10));
-        m.insert(QStringLiteral("newestYear"), s.i64(11));
+        m.insert(QStringLiteral("hires"), s.i64(5));
+        m.insert(QStringLiteral("remote"), s.i64(6));
+        m.insert(QStringLiteral("artists"), s.i64(7));
+        m.insert(QStringLiteral("genres"), s.i64(8));
+        m.insert(QStringLiteral("oldestYear"), s.isNull(9) ? 0 : s.i64(9));
+        m.insert(QStringLiteral("newestYear"), s.i64(10));
     }
     Stmt a(db, "SELECT COUNT(*) FROM (SELECT 1 FROM tracks WHERE dup = 0 AND album <> '' GROUP BY aa COLLATE NOCASE, album COLLATE NOCASE)");
     if (a.step())
@@ -400,16 +417,11 @@ QVariantMap computeReview(int year)
     m.insert(QStringLiteral("playlistIds"), ids);
 
     // when: months, weekdays, hours
-    QStringList keys, labels;
-    for (int i = 1; i <= 12; ++i) {
-        keys << QStringLiteral("%1-%2").arg(year).arg(i, 2, 10, QLatin1Char('0'));
-        labels << german().standaloneMonthName(i, QLocale::ShortFormat);
-    }
-    const QVariantList months = series(db, r, "%Y-%m", keys, labels);
-    m.insert(QStringLiteral("months"), months);
+    const QVariantList byMonth = months(db, r, year);
+    m.insert(QStringLiteral("months"), byMonth);
     int topMonth = 0;
-    for (int i = 1; i < months.size(); ++i)
-        if (months[i].toMap().value(QStringLiteral("ms")).toLongLong() > months[topMonth].toMap().value(QStringLiteral("ms")).toLongLong())
+    for (int i = 1; i < byMonth.size(); ++i)
+        if (byMonth[i].toMap().value(QStringLiteral("ms")).toLongLong() > byMonth[topMonth].toMap().value(QStringLiteral("ms")).toLongLong())
             topMonth = i;
     m.insert(QStringLiteral("topMonth"), topMonth);
     m.insert(QStringLiteral("topMonthName"), german().standaloneMonthName(topMonth + 1));
@@ -436,7 +448,9 @@ QVariantMap computeReview(int year)
 
     m.insert(QStringLiteral("streak"), streak(db, r));
     {
-        Stmt s = ranged(db, QStringLiteral("SELECT %1 d, SUM(listened_ms) ms, COUNT(*) FILTER (WHERE completed = 1) FROM plays WHERE %2 "
+        // music and radio, like the days in a row
+        Stmt s = ranged(db, QStringLiteral("SELECT %1 d, SUM(listened_ms) ms, SUM(completed) FROM (SELECT played_at, listened_ms, completed "
+                                           "FROM plays WHERE %2 UNION ALL SELECT played_at, listened_ms, 0 FROM station_plays WHERE %2) "
                                            "GROUP BY d ORDER BY ms DESC LIMIT 1").arg(QLatin1String(Day), QLatin1String(InRange)), r);
         if (s.step())
             m.insert(QStringLiteral("busiestDay"), QVariantMap{
@@ -452,15 +466,6 @@ QVariantMap computeReview(int year)
             rep.insert(QStringLiteral("count"), s.i64(4));
             rep.insert(QStringLiteral("date"), german().toString(QDate::fromString(s.str(3), Qt::ISODate), QStringLiteral("d. MMMM")));
             m.insert(QStringLiteral("repeat"), rep);
-        }
-    }
-    {   // the first and the latest
-        Stmt s = ranged(db, QStringLiteral("SELECT title, artist, track_id, played_at FROM plays WHERE completed = 1 AND %1 "
-                                           "ORDER BY played_at, id LIMIT 1").arg(QLatin1String(InRange)), r);
-        if (s.step()) {
-            QVariantMap first = trackMap(db, s.str(0), s.str(1), s.i64(2));
-            first.insert(QStringLiteral("date"), german().toString(QDateTime::fromSecsSinceEpoch(s.i64(3)).date(), QStringLiteral("d. MMMM")));
-            m.insert(QStringLiteral("firstTrack"), first);
         }
     }
     {   // new to you: artists first heard this year
@@ -492,8 +497,7 @@ QVariantMap computeReview(int year)
             m.insert(QStringLiteral("newArtists"), count);
             m.insert(QStringLiteral("newTop"), fresh);
         }
-        const Totals prev = totals(db, Stats::Range{localSecs(QDate(year - 1, 1, 1)), r.from});
-        m.insert(QStringLiteral("previousMs"), prev.musicMs + prev.radioMs);
+        m.insert(QStringLiteral("previousMs"), listenedBefore(db, r, Stats::Range{localSecs(QDate(year - 1, 1, 1)), r.from}));
     }
     {   // tempo, key and energy from the analysis
         Stmt s = ranged(db, QStringLiteral("SELECT AVG(a.bpm), AVG(a.energy), COUNT(*) FROM plays p JOIN analysis a ON a.track_id = p.track_id "
@@ -535,14 +539,7 @@ QVariantMap computeReview(int year)
             m.insert(QStringLiteral("oldest"), oldest);
         }
     }
-    {   // radio
-        QVariantList stations;
-        Stmt s = ranged(db, QStringLiteral("SELECT name, SUM(listened_ms) ms FROM station_plays WHERE %1 GROUP BY station_id "
-                                           "ORDER BY ms DESC LIMIT 3").arg(QLatin1String(InRange)), r);
-        while (s.step())
-            stations << QVariantMap{{QStringLiteral("name"), s.str(0)}, {QStringLiteral("ms"), s.i64(1)}};
-        m.insert(QStringLiteral("topStations"), stations);
-    }
+    m.insert(QStringLiteral("topStations"), topStations(db, r, 3));
     return m;
 }
 
@@ -659,17 +656,19 @@ void Stats::loadOverview()
     QPointer<Stats> self(this);
     (void)QtConcurrent::run([self, gen, period = m_period, offset = m_offset] {
         QVariantMap m;
+        bool ok = false;
         try {
             m = computeOverview(period, offset);
+            ok = true;
         } catch (const std::exception &e) {
             qWarning() << "Statistik:" << e.what();
         }
-        QMetaObject::invokeMethod(qApp, [self, gen, m] {
+        QMetaObject::invokeMethod(qApp, [self, gen, m, ok] {
             if (!self)
                 return;
             self->finished();
-            if (gen != self->m_overviewGen.load())
-                return;
+            if (!ok || gen != self->m_overviewGen.load())
+                return; // a failure (database busy) keeps what is shown
             self->m_overview = m;
             emit self->overviewChanged();
         }, Qt::QueuedConnection);
@@ -683,15 +682,21 @@ void Stats::loadLibrary()
     QPointer<Stats> self(this);
     (void)QtConcurrent::run([self] {
         QVariantMap m;
+        bool ok = false;
         try {
             m = computeLibrary();
+            ok = true;
         } catch (const std::exception &e) {
             qWarning() << "Statistik:" << e.what();
         }
-        QMetaObject::invokeMethod(qApp, [self, m] {
+        QMetaObject::invokeMethod(qApp, [self, m, ok] {
             if (!self)
                 return;
             self->finished();
+            if (!ok) {
+                self->m_libraryAt = 0; // again next time
+                return;
+            }
             self->m_library = m;
             emit self->libraryChanged();
         }, Qt::QueuedConnection);
@@ -729,6 +734,7 @@ void Stats::loadReview(int year)
             m = computeReview(year);
         } catch (const std::exception &e) {
             qWarning() << "Jahresrückblick:" << e.what();
+            m = {{QStringLiteral("year"), year}, {QStringLiteral("error"), true}};
         }
         QMetaObject::invokeMethod(qApp, [self, gen, m] {
             if (!self || gen != self->m_reviewGen.load())

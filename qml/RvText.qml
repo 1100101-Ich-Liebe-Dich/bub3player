@@ -29,5 +29,7 @@ Text {
             }
         }
     }
-    Component.onCompleted: show.start()
+    property bool ready: false
+    Component.onCompleted: { ready = true; show.start() }
+    onFullChanged: if (ready) show.restart() // new text (the numbers came in): again
 }

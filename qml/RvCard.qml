@@ -6,17 +6,13 @@ import Halcyon
 // frosted glass (Glas), a soft raised surface (Soft), a dark veil with a glowing
 // rim (Aurora), a paper note with tape (Vintage), a neon HUD panel (Synthwave), a
 // display window behind smoked glass (Hi-Fi tower), a line box (Terminal). Klassik
-// has none: its slides are colour fields. `ink`, `dim` and `hi` are the colours
-// that read well on it.
+// has none: its slides are colour fields.
 Item {
     id: card
     property string title: ""            // the terminal writes it into the frame
     property int padding: 40
     default property alias content: inner.data
     readonly property string kind: window.look.card
-    readonly property color ink: kind === "paper" ? "#2B2118" : Theme.text
-    readonly property color dim: kind === "paper" ? "#6B5A44" : Theme.textDim
-    readonly property color hi: kind === "paper" ? "#B4471C" : Theme.accent
     implicitWidth: inner.childrenRect.width + 2 * padding
     implicitHeight: inner.childrenRect.height + 2 * padding
     rotation: kind === "paper" ? -1.2 : 0
